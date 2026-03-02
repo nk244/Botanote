@@ -175,19 +175,46 @@ class ExportService {
     if (kIsWeb) {
       final bytes = file.bytes;
       if (bytes == null) return null;
-      // Web は JSON のみ
-      return _importFromJson(utf8.decode(bytes));
+      if (_isZipBytes(bytes)) {
+        // Web では一時パスがないため ZIP 展開はサポート外
+        throw const FormatException('WebブラウザではZIPインポートはサポートされていません');
+      }
+      // BOM付きUTF-8も考慮してデコード
+      return _importFromJson(_decodeUtf8(bytes));
     }
 
     final path = file.path;
     if (path == null) return null;
 
-    if (path.toLowerCase().endsWith('.zip')) {
+    // 拡張子ではなくバイナリのマジックバイトでZIP判定（#86）
+    final bytes = await File(path).readAsBytes();
+    if (_isZipBytes(bytes)) {
       return _importFromZip(path);
     } else {
-      final jsonStr = await File(path).readAsString(encoding: utf8);
-      return _importFromJson(jsonStr);
+      // BOM付きUTF-8・通常UTF-8のどちらも対応
+      return _importFromJson(_decodeUtf8(bytes));
     }
+  }
+
+  /// ZIPのマジックバイト（PK\x03\x04）でZIPかどうか判定する
+  bool _isZipBytes(List<int> bytes) {
+    return bytes.length >= 4 &&
+        bytes[0] == 0x50 && // P
+        bytes[1] == 0x4B && // K
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04;
+  }
+
+  /// BOM付きUTF-8も含めてUTF-8デコードする
+  String _decodeUtf8(List<int> bytes) {
+    // UTF-8 BOM (EF BB BF) が付いている場合は除去してデコード
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      return utf8.decode(bytes.sublist(3));
+    }
+    return utf8.decode(bytes);
   }
 
   /// ZIP ファイルからデータを復元する
