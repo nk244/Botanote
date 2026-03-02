@@ -624,11 +624,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: () => _pageController.animateToPage(
-              _pageController.page!.round() - 1,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            ),
+            onPressed: () {
+              if (_isCalendarView) {
+                final prev = AppDateUtils.getDateOnly(
+                    date.subtract(const Duration(days: 1)));
+                setState(() {
+                  _selectedDate = prev;
+                  _focusedDay = prev;
+                  _selectedPlantIds.clear();
+                });
+                _preloadRange(prev, spread: 2);
+              } else {
+                _pageController.animateToPage(
+                  _pageController.page!.round() - 1,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
+            },
           ),
           Expanded(
             child: InkWell(
@@ -649,11 +662,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: () => _pageController.animateToPage(
-              _pageController.page!.round() + 1,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-            ),
+            onPressed: () {
+              if (_isCalendarView) {
+                final next = AppDateUtils.getDateOnly(
+                    date.add(const Duration(days: 1)));
+                setState(() {
+                  _selectedDate = next;
+                  _focusedDay = next;
+                  _selectedPlantIds.clear();
+                });
+                _preloadRange(next, spread: 2);
+              } else {
+                _pageController.animateToPage(
+                  _pageController.page!.round() + 1,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              }
+            },
           ),
         ],
       ),

@@ -23,6 +23,9 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   List<String> _selectedPlantIds = [];
   List<String> _selectedImagePaths = [];
 
+  /// 新規作成時のみ使用する作成日（デフォルト=今日）
+  late DateTime _selectedDate;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +34,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
     _selectedPlantIds = widget.note?.plantIds ??
         (widget.initialPlantId != null ? [widget.initialPlantId!] : []);
     _selectedImagePaths = widget.note?.imagePaths ?? [];
+    // 新規作成時：今日を初期値、編集時：既存のcreatedAt
+    final now = DateTime.now();
+    _selectedDate = widget.note?.createdAt ??
+        DateTime(now.year, now.month, now.day);
   }
 
   @override
@@ -38,6 +45,51 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
     _titleController.dispose();
     _contentController.dispose();
     super.dispose();
+  }
+
+  /// 作成日選択UIウィジェット群（新規作成時のみ利用）
+  List<Widget> _buildDatePicker(BuildContext context) {
+    final locale = Localizations.localeOf(context);
+    final formatted =
+        '${_selectedDate.year}年${_selectedDate.month.toString().padLeft(2, '0')}月${_selectedDate.day.toString().padLeft(2, '0')}日';
+    return [
+      InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () async {
+          final now = DateTime.now();
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: _selectedDate,
+            firstDate: DateTime(now.year - 5),
+            lastDate: now,
+            locale: locale,
+            helpText: '作成日を選択',
+          );
+          if (picked != null) setState(() => _selectedDate = picked);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 18),
+              const SizedBox(width: 8),
+              Text('作成日', style: Theme.of(context).textTheme.bodyMedium),
+              const Spacer(),
+              Text(formatted,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.primary)),
+              const Icon(Icons.arrow_drop_down, size: 20),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+    ];
   }
 
   void _save() async {
@@ -51,6 +103,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         content: _contentController.text.trim(),
         plantIds: _selectedPlantIds,
         imagePaths: _selectedImagePaths,
+        createdAt: _selectedDate,
       );
     } else {
       final updated = widget.note!.copyWith(
@@ -80,6 +133,9 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // 作成日（新規作成時のみ表示）
+            if (widget.note == null) ..._buildDatePicker(context),
+
             // タイトル
             TextFormField(
               controller: _titleController,
@@ -87,7 +143,8 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
                 labelText: 'タイトル',
                 border: OutlineInputBorder(),
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'タイトルを入力してください' : null,
+              validator: (v) =>
+                  (v == null || v.trim().isEmpty) ? 'タイトルを入力してください' : null,
             ),
             const SizedBox(height: 16),
 
@@ -207,7 +264,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
     final tempSelected = List<String>.from(_selectedPlantIds);
 
     await showDialog<void>(
-      context: context,
+      context: context, // ignore: use_build_context_synchronously
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
