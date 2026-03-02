@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 
@@ -21,6 +22,14 @@ class NotificationService {
     if (_initialized) return;
 
     tz.initializeTimeZones();
+    // デバイスのタイムゾーンを取得してtzに設定（未設定だとUTCになる）
+    try {
+      final tzInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
+      debugPrint('NotificationService: timezone set to ${tzInfo.identifier}');
+    } catch (e) {
+      debugPrint('NotificationService: failed to get timezone, using UTC: $e');
+    }
 
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
