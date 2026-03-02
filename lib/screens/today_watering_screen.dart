@@ -21,27 +21,46 @@ class TodayWateringScreen extends StatefulWidget {
 }
 
 class _TodayWateringScreenState extends State<TodayWateringScreen> {
-  DateTime _selectedDate = DateTime.now();
+  // 現在選択中の日付
+  DateTime _selectedDate = AppDateUtils.getDateOnly(DateTime.now());
   DateTime _focusedDay = DateTime.now();
   bool _isCalendarView = false;
-  DailyLogStatus _logStatus = DailyLogStatus.empty();
-  Map<String, DateTime?> _nextWateringDateCache = {};
+
+  // PageView用コントローラー。中央値を初期ページとして対応日数小を計算する。
+  static const int _initialPage = 10000;
+  late final PageController _pageController;
+
+  // 日付ごとのログステータスキャッシュ。キーは日付の数値表現（millisecondsSinceEpoch）。
+  final Map<int, DailyLogStatus> _logStatusCache = {};
+  final Map<int, Map<String, DateTime?>> _nextWateringCache = {};
+
+  // 現在選択日のデータ（現在ページ対応）
+  DailyLogStatus get _logStatus =>
+      _logStatusCache[_dateKey(_selectedDate)] ?? DailyLogStatus.empty();
+  Map<String, DateTime?> get _nextWateringDateCache =>
+      _nextWateringCache[_dateKey(_selectedDate)] ?? {};
+
   final Set<String> _selectedPlantIds = {};
   final Set<LogType> _selectedBulkLogTypes = {LogType.watering};
   final ScrollController _listScrollController = ScrollController();
-  // スワイプ方向：1=右スワイプ（前日）、-1=左スワイプ（翌日）、0=初期
-  int _swipeDirection = 0;
+
+  // 日付をキャッシュキー化するための小数値
+  int _dateKey(DateTime date) => AppDateUtils.getDateOnly(date).millisecondsSinceEpoch;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _refreshData();
+    _pageController = PageController(initialPage: _initialPage);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<PlantProvider>().loadPlants();
+      // 初期起動時に中心日と前後2日分計5日をプリロード
+      await _preloadRange(_selectedDate, spread: 2);
     });
   }
 
   @override
   void dispose() {
+    _pageController.dispose();
     _listScrollController.dispose();
     super.dispose();
   }
@@ -49,15 +68,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   @override
   void didUpdateWidget(TodayWateringScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _refreshData();
+    _preloadRange(_selectedDate, spread: 2);
   }
 
-  Future<void> _refreshData() async {
-    await context.read<PlantProvider>().loadPlants();
-    await _loadTodayLogs();
+  /// 指定日を中心にspread日分前後のログステータスをプリロードする
+  Future<void> _preloadRange(DateTime center, {int spread = 1}) async {
+    final dates = List.generate(
+      spread * 2 + 1,
+      (i) => AppDateUtils.getDateOnly(center.add(Duration(days: i - spread))),
+    );
+    await Future.wait(dates.map((d) => _loadLogsForDate(d)));
   }
 
-  Future<void> _loadTodayLogs() async {
+  /// 指定日のログステータスをロードしてキャッシュに保存する
+  Future<void> _loadLogsForDate(DateTime date) async {
+    final key = _dateKey(date);
+    // キャッシュ済みならスキップ
+    if (_logStatusCache.containsKey(key)) return;
+
     final plantProvider = context.read<PlantProvider>();
     final plants = plantProvider.plants;
     final wateredMap = <String, bool>{};
@@ -66,84 +94,89 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final nextWateringDateCache = <String, DateTime?>{};
 
     for (var plant in plants) {
-      // Calculate next watering date dynamically
-      nextWateringDateCache[plant.id] = 
+      nextWateringDateCache[plant.id] =
           await plantProvider.calculateNextWateringDate(plant.id);
-
-      // Check log status for each type
-      wateredMap[plant.id] = 
-          await plantProvider.hasLogOnDate(plant.id, LogType.watering, _selectedDate);
-      fertilizedMap[plant.id] = 
-          await plantProvider.hasLogOnDate(plant.id, LogType.fertilizer, _selectedDate);
-      vitalizedMap[plant.id] = 
-          await plantProvider.hasLogOnDate(plant.id, LogType.vitalizer, _selectedDate);
+      wateredMap[plant.id] =
+          await plantProvider.hasLogOnDate(plant.id, LogType.watering, date);
+      fertilizedMap[plant.id] =
+          await plantProvider.hasLogOnDate(plant.id, LogType.fertilizer, date);
+      vitalizedMap[plant.id] =
+          await plantProvider.hasLogOnDate(plant.id, LogType.vitalizer, date);
     }
 
     if (mounted) {
       setState(() {
-        _logStatus = DailyLogStatus(
+        _logStatusCache[key] = DailyLogStatus(
           watered: wateredMap,
           fertilized: fertilizedMap,
           vitalized: vitalizedMap,
         );
-        _nextWateringDateCache = nextWateringDateCache;
+        _nextWateringCache[key] = nextWateringDateCache;
       });
     }
   }
 
-  List<Plant> _getPlantsForDate(List<Plant> plants) {
-    final selectedDay = AppDateUtils.getDateOnly(_selectedDate);
+  /// ログ変更後に選択日のキャッシュをリセットして再ロードする
+  Future<void> _invalidateAndReload(DateTime date) async {
+    final key = _dateKey(date);
+    setState(() {
+      _logStatusCache.remove(key);
+      _nextWateringCache.remove(key);
+    });
+    await _loadLogsForDate(date);
+  }
+
+  /// 指定日に表示すべき植物リストを決定する
+  List<Plant> _getPlantsForDate(
+    List<Plant> plants,
+    DateTime date,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+  ) {
+    final selectedDay = AppDateUtils.getDateOnly(date);
     final todayDay = AppDateUtils.getDateOnly(DateTime.now());
-    
-    // Get plants that have any records on the selected date
+
+    // 記録がある植物
     final plantsWithRecords = plants
-        .where((plant) => _logStatus.hasAnyLog(plant.id))
+        .where((plant) => logStatus.hasAnyLog(plant.id))
         .toSet();
-    
-    // Also show plants that need watering
+
+    // 水やりが必要な植物
     final plantsNeedingAction = plants.where((plant) {
-      final nextWateringDate = _nextWateringDateCache[plant.id];
+      final nextWateringDate = nextWateringDateCache[plant.id];
       if (nextWateringDate == null) return false;
-      
       final nextDay = AppDateUtils.getDateOnly(nextWateringDate);
-      
-      // 今日：当日予定 + 今日時点で超過分（nextDay <= today）
+
+      // 今日：当日予定 + 今日時点で超過分
       if (AppDateUtils.isSameDay(selectedDay, todayDay)) {
         return !nextDay.isAfter(selectedDay);
       }
-
-      // 過去の日付：その日の実績把握
-      // → その日が予定日だった植物（ちょうどその日）+ その日時点で超過していた植物（予定日がその日以前）
-      // ※ 記録がある植物は plantsWithRecords で別途カバーされる
+      // 過去の日付：その日の実績把握（その日予定 + その日時点で超過分）
       if (selectedDay.isBefore(todayDay)) {
         return !nextDay.isAfter(selectedDay);
       }
-
-      // 未来の日付（#91）：その日に予定が来る植物 + 今日時点ですでに超過している植物
-      // 超過の起算日はあくまで今日（アプリ操作日）とする
-      final isScheduledForDate = nextDay.isAtSameMomentAs(selectedDay);
-      final isAlreadyOverdueToday = nextDay.isBefore(todayDay);
-      return isScheduledForDate || isAlreadyOverdueToday;
+      // 未来の日付（#91）：その日予定 + 今日時点ですでに超過している植物
+      return nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
     }).toSet();
-    
-    // Combine both sets and convert to list
+
     final allPlants = {...plantsWithRecords, ...plantsNeedingAction}.toList();
-    
-    // Sort by completion status and watering date
-    allPlants.sort((a, b) => _comparePlants(a, b));
-    
+    allPlants.sort((a, b) => _comparePlantsFor(a, b, logStatus, nextWateringDateCache));
     return allPlants;
   }
 
-  int _comparePlants(Plant a, Plant b) {
-    final aCompleted = _logStatus.isWatered(a.id);
-    final bCompleted = _logStatus.isWatered(b.id);
-    
-    // Show completed items at the bottom
+  int _comparePlantsFor(
+    Plant a,
+    Plant b,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+  ) {
+    final aCompleted = logStatus.isWatered(a.id);
+    final bCompleted = logStatus.isWatered(b.id);
+
+    // 完了済みは下に並ぶ
     if (aCompleted && !bCompleted) return 1;
     if (!aCompleted && bCompleted) return -1;
-    
-    // For plants with same completion status, use settings sort order
+
     final settings = context.read<SettingsProvider>();
     final sortOrder = settings.plantSortOrder;
     
@@ -177,8 +210,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           return aIndex.compareTo(bIndex);
         }
         // Fallback to watering date
-        final aNextDate = _nextWateringDateCache[a.id];
-        final bNextDate = _nextWateringDateCache[b.id];
+        final aNextDate = nextWateringDateCache[a.id];
+        final bNextDate = nextWateringDateCache[b.id];
         if (aNextDate == null && bNextDate == null) return 0;
         if (aNextDate == null) return 1;
         if (bNextDate == null) return -1;
@@ -234,12 +267,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         ? _listScrollController.offset
         : 0.0;
     await context.read<PlantProvider>().loadPlants();
-    await _loadTodayLogs();
+    // 選択日のキャッシュを無効化して再ロード
+    await _invalidateAndReload(_selectedDate);
     if (mounted) {
       setState(() {
         _selectedPlantIds.clear();
       });
-      // スクロール位置を復元（リストが再描画された後に適用）
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_listScrollController.hasClients) {
           final maxScroll = _listScrollController.position.maxScrollExtent;
@@ -321,11 +354,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final isToday = _selectedDate.year == today.year &&
-        _selectedDate.month == today.month &&
-        _selectedDate.day == today.day;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('水やりログ'),
@@ -348,20 +376,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           ),
         ],
       ),
-      body: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          // 左スワイプ → 翌日、右スワイプ → 前日
-          if (details.primaryVelocity == null) return;
-          if (details.primaryVelocity! < -300) {
-            setState(() => _swipeDirection = -1);
-            _changeDate(1);
-          } else if (details.primaryVelocity! > 300) {
-            setState(() => _swipeDirection = 1);
-            _changeDate(-1);
-          }
-        },
-        child: _isCalendarView ? _buildCalendarView() : _buildLogList(isToday),
-      ),
+      body: _isCalendarView ? _buildCalendarView() : _buildPagedLogList(),
       floatingActionButton: _selectedPlantIds.isNotEmpty
           ? Column(
               mainAxisSize: MainAxisSize.min,
@@ -495,11 +510,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
               selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
               onDaySelected: (selectedDay, focusedDay) {
                 setState(() {
-                  _selectedDate = selectedDay;
+                  _selectedDate = AppDateUtils.getDateOnly(selectedDay);
                   _focusedDay = focusedDay;
                   _selectedPlantIds.clear();
                 });
-                _loadTodayLogs();
+                _preloadRange(selectedDay, spread: 2);
               },
               onPageChanged: (focusedDay) {
                 setState(() {
@@ -532,7 +547,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: _buildLogListBody(),
+              child: _buildDatePage(_selectedDate),
             ),
           ],
         );
@@ -540,68 +555,57 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
   }
 
-  Widget _buildLogList(bool isToday) {
-    return Consumer<PlantProvider>(
-      builder: (context, plantProvider, _) {
-        if (plantProvider.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final plantsForDate = _getPlantsForDate(plantProvider.plants);
-
-        return Column(
-          children: [
-            _buildDateSelector(isToday),
-            if (_logStatus.hasAnyRecords) _buildSummary(),
-            Expanded(
-              // スワイプ方向に応じたスライドアニメーションでリストを切り替える
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                transitionBuilder: (child, animation) {
-                  // スワイプ方向に応じてスライド方向を切り替える
-                  final offsetX = _swipeDirection < 0 ? 1.0 : -1.0;
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: Offset(offsetX, 0),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOut,
-                    )),
-                    child: child,
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey(_selectedDate),
-                  child: _buildPlantList(plantsForDate, isToday),
-                ),
-              ),
-            ),
-          ],
+  /// PageViewによるページめくり式日付切替リスト表示
+  Widget _buildPagedLogList() {
+    return PageView.builder(
+      controller: _pageController,
+      onPageChanged: (index) {
+        final diff = index - _initialPage;
+        final newDate = AppDateUtils.getDateOnly(
+          DateTime.now().add(Duration(days: diff)),
         );
+        setState(() {
+          _selectedDate = newDate;
+          _selectedPlantIds.clear();
+        });
+        // 隔難ページをバックグラウンドでプリロード
+        _preloadRange(newDate, spread: 2);
+      },
+      itemBuilder: (context, index) {
+        final diff = index - _initialPage;
+        final date = AppDateUtils.getDateOnly(
+          DateTime.now().add(Duration(days: diff)),
+        );
+        return _buildDatePage(date);
       },
     );
   }
 
-  Widget _buildLogListBody() {
-    final today = DateTime.now();
-    final isToday = _selectedDate.year == today.year &&
-        _selectedDate.month == today.month &&
-        _selectedDate.day == today.day;
+  /// 1日分のページを構築する
+  Widget _buildDatePage(DateTime date) {
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    final isToday = AppDateUtils.isSameDay(date, today);
+    final key = _dateKey(date);
+    final logStatus = _logStatusCache[key] ?? DailyLogStatus.empty();
+    final nextWateringDateCache = _nextWateringCache[key] ?? {};
+    final isLoaded = _logStatusCache.containsKey(key);
 
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
-        if (plantProvider.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final plantsForDate = _getPlantsForDate(plantProvider.plants);
+        final plantsForDate = isLoaded
+            ? _getPlantsForDate(
+                plantProvider.plants, date, logStatus, nextWateringDateCache)
+            : <Plant>[];
 
         return Column(
           children: [
-            if (_logStatus.hasAnyRecords) _buildSummary(),
+            _buildDateHeader(date, isToday),
+            if (logStatus.hasAnyRecords) _buildSummaryFor(logStatus),
             Expanded(
-              child: _buildPlantList(plantsForDate, isToday),
+              child: isLoaded
+                  ? _buildPlantList(plantsForDate, isToday, logStatus,
+                      nextWateringDateCache, date)
+                  : const Center(child: CircularProgressIndicator()),
             ),
           ],
         );
@@ -609,7 +613,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
   }
 
-  Widget _buildDateSelector(bool isToday) {
+
+
+  Widget _buildDateHeader(DateTime date, bool isToday) {
     return Container(
       padding: const EdgeInsets.all(16),
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -618,68 +624,40 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: () => _changeDate(-1),
+            onPressed: () => _pageController.animateToPage(
+              _pageController.page!.round() - 1,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            ),
           ),
           Expanded(
             child: InkWell(
               onTap: _selectDate,
-              // 日付テキストもスワイプと同期してアニメーション切り替え
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                transitionBuilder: (child, animation) {
-                  final offsetX = _swipeDirection < 0 ? 1.0 : -1.0;
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: Offset(offsetX, 0),
-                      end: Offset.zero,
-                    ).animate(CurvedAnimation(
-                      parent: animation,
-                      curve: Curves.easeOut,
-                    )),
-                    child: child,
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey(_selectedDate),
-                  child: Column(
-                    children: [
-                      Text(
-                        isToday ? '今日' : AppDateUtils.formatRelativeDate(_selectedDate),
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      Text(
-                        DateFormat('yyyy年M月d日').format(_selectedDate),
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+              child: Column(
+                children: [
+                  Text(
+                    isToday ? '今日' : AppDateUtils.formatRelativeDate(date),
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                ),
+                  Text(
+                    DateFormat('yyyy年M月d日').format(date),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            onPressed: () => _changeDate(1),
+            onPressed: () => _pageController.animateToPage(
+              _pageController.page!.round() + 1,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+            ),
           ),
         ],
       ),
     );
-  }
-
-  void _changeDate(int days) {
-    setState(() {
-      // _swipeDirectionがまだ設定されていない場合（矢印ボタン押下時）はここで設定する
-      if (_swipeDirection == 0) {
-        _swipeDirection = days > 0 ? -1 : 1;
-      }
-      _selectedDate = _selectedDate.add(Duration(days: days));
-      _selectedPlantIds.clear();
-    });
-    // アニメーション終了後にスワイプ方向をリセット
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) setState(() => _swipeDirection = 0);
-    });
-    _loadTodayLogs();
   }
 
   Future<void> _selectDate() async {
@@ -689,16 +667,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       firstDate: DateTime(2000),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (date != null) {
-      setState(() {
-        _selectedDate = date;
-        _selectedPlantIds.clear();
-      });
-      _loadTodayLogs();
+    if (date != null && mounted) {
+      final today = AppDateUtils.getDateOnly(DateTime.now());
+      final diff = AppDateUtils.getDateOnly(date).difference(today).inDays;
+      _pageController.animateToPage(
+        _initialPage + diff,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
-  Widget _buildSummary() {
+  Widget _buildSummaryFor(DailyLogStatus logStatus) {
     return Container(
       padding: const EdgeInsets.all(16),
       color: Theme.of(context).colorScheme.primaryContainer,
@@ -707,20 +687,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         runSpacing: 8,
         alignment: WrapAlignment.center,
         children: [
-          if (_logStatus.wateredCount > 0)
+          if (logStatus.wateredCount > 0)
             _buildSummaryItem(
               Icons.water_drop,
-              '${_logStatus.wateredCount}件の水やり',
+              '${logStatus.wateredCount}件の水やり',
             ),
-          if (_logStatus.fertilizedCount > 0)
+          if (logStatus.fertilizedCount > 0)
             _buildSummaryItem(
               Icons.grass,
-              '${_logStatus.fertilizedCount}件の肥料',
+              '${logStatus.fertilizedCount}件の肘料',
             ),
-          if (_logStatus.vitalizedCount > 0)
+          if (logStatus.vitalizedCount > 0)
             _buildSummaryItem(
               Icons.favorite,
-              '${_logStatus.vitalizedCount}件の活力剤',
+              '${logStatus.vitalizedCount}件の活力剤',
             ),
         ],
       ),
@@ -743,43 +723,51 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
   }
 
-  Widget _buildPlantList(List<Plant> plantsForDate, bool isToday) {
+  Widget _buildPlantList(
+    List<Plant> plantsForDate,
+    bool isToday,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+    DateTime date,
+  ) {
     if (plantsForDate.isEmpty) {
       return _buildEmptyState(isToday);
     }
 
-    // Separate into completed and incomplete
+    // 未完了と完了に分割
     final incompletePlants = plantsForDate
-        .where((plant) => !_logStatus.isWatered(plant.id))
+        .where((plant) => !logStatus.isWatered(plant.id))
         .toList();
     final completedPlants = plantsForDate
-        .where((plant) => _logStatus.isWatered(plant.id))
+        .where((plant) => logStatus.isWatered(plant.id))
         .toList();
 
     return Column(
       children: [
-        if (incompletePlants.isNotEmpty) _buildBulkSelectionHeader(incompletePlants),
+        if (incompletePlants.isNotEmpty)
+          _buildBulkSelectionHeader(incompletePlants),
         Expanded(
           child: ListView.builder(
             controller: _listScrollController,
-            padding: const EdgeInsets.only(left: 8, right: 8, top: 8, bottom: 80),
-            itemCount: incompletePlants.length + 
-                       (completedPlants.isNotEmpty ? 1 : 0) + 
-                       completedPlants.length,
+            padding: const EdgeInsets.only(
+                left: 8, right: 8, top: 8, bottom: 80),
+            itemCount: incompletePlants.length +
+                (completedPlants.isNotEmpty ? 1 : 0) +
+                completedPlants.length,
             itemBuilder: (context, index) {
-              // Incomplete plants section
               if (index < incompletePlants.length) {
-                return _buildPlantCard(incompletePlants[index]);
+                return _buildPlantCard(
+                    incompletePlants[index], logStatus, nextWateringDateCache, date);
               }
-              
-              // Divider between incomplete and complete
-              if (index == incompletePlants.length && completedPlants.isNotEmpty) {
+              if (index == incompletePlants.length &&
+                  completedPlants.isNotEmpty) {
                 return _buildDivider();
               }
-              
-              // Completed plants section
-              final completedIndex = index - incompletePlants.length - (completedPlants.isNotEmpty ? 1 : 0);
-              return _buildPlantCard(completedPlants[completedIndex]);
+              final completedIndex = index -
+                  incompletePlants.length -
+                  (completedPlants.isNotEmpty ? 1 : 0);
+              return _buildPlantCard(
+                  completedPlants[completedIndex], logStatus, nextWateringDateCache, date);
             },
           ),
         ),
@@ -943,7 +931,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   Future<void> _showUnscheduledWateringDialog() async {
     final plantProvider = context.read<PlantProvider>();
     final allPlants = plantProvider.plants;
-    final plantsForDate = _getPlantsForDate(allPlants).toSet();
+    final plantsForDate = _getPlantsForDate(
+      allPlants, _selectedDate, _logStatus, _nextWateringDateCache).toSet();
     
     // Get plants not in today's list
     final unscheduledPlants = allPlants
@@ -988,14 +977,19 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     }
   }
 
-  Widget _buildPlantCard(Plant plant) {
-    final isWatered = _logStatus.isWatered(plant.id);
-    final isFertilized = _logStatus.isFertilized(plant.id);
-    final isVitalized = _logStatus.isVitalized(plant.id);
-    final hasAnyLog = _logStatus.hasAnyLog(plant.id);
+  Widget _buildPlantCard(
+    Plant plant,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+    DateTime date,
+  ) {
+    final isWatered = logStatus.isWatered(plant.id);
+    final isFertilized = logStatus.isFertilized(plant.id);
+    final isVitalized = logStatus.isVitalized(plant.id);
+    final hasAnyLog = logStatus.hasAnyLog(plant.id);
     final isSelected = _selectedPlantIds.contains(plant.id);
-    final selectedDay = AppDateUtils.getDateOnly(_selectedDate);
-    final nextWateringDate = _nextWateringDateCache[plant.id];
+    final selectedDay = AppDateUtils.getDateOnly(date);
+    final nextWateringDate = nextWateringDateCache[plant.id];
     final nextDay = nextWateringDate != null
         ? AppDateUtils.getDateOnly(nextWateringDate)
         : null;
@@ -1005,7 +999,10 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       elevation: isSelected ? 4 : 1,
       color: isSelected
-          ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+          ? Theme.of(context)
+              .colorScheme
+              .primaryContainer
+              .withValues(alpha: 0.3)
           : null,
       child: ListTile(
         leading: Row(
@@ -1164,7 +1161,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
     if (mounted) {
       await context.read<PlantProvider>().loadPlants();
-      await _loadTodayLogs();
+      await _invalidateAndReload(_selectedDate);
     }
   }
 
