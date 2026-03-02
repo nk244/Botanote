@@ -1319,6 +1319,7 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
       title: const Text('水やり記録をつける'),
       content: SizedBox(
         width: double.maxFinite,
+        height: 400, // ダイアログの最大高さを制限してRenderFlexオーバーフロー回避
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1335,7 +1336,7 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
               },
             ),
             const SizedBox(height: 16),
-            Flexible(
+            Expanded(
               child: filteredPlants.isEmpty
                   ? const Center(child: Text('植物が見つかりません'))
                   : ListView.builder(
