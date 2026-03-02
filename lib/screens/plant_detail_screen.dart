@@ -556,13 +556,26 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             Expanded(
               child: Wrap(
                 spacing: 8,
+                runSpacing: 4,
                 children: logs.map((log) {
                   return Tooltip(
                     message: log.note ?? _getLogTypeName(log.type),
-                    child: Icon(
-                      _getIconForLogType(log.type),
-                      size: 20,
-                      color: Theme.of(context).colorScheme.primary,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _getIconForLogType(log.type),
+                          size: 16,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          _getLogTypeName(log.type),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }).toList(),

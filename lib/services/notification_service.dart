@@ -48,7 +48,10 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     if (androidImpl != null) {
+      // 通知権限（Android 13+）
       final granted = await androidImpl.requestNotificationsPermission();
+      // Exact alarm権限（Android 12+で正確な時刻指定に必要）
+      await androidImpl.requestExactAlarmsPermission();
       return granted ?? false;
     }
 
@@ -111,18 +114,30 @@ class NotificationService {
       macOS: darwinDetails,
     );
 
+    // exact alarm権限がある場合はexactAllowWhileIdle、ない場合はinexactにフォールバック
+    AndroidScheduleMode scheduleMode = AndroidScheduleMode.inexact;
+    final androidImpl = _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      final hasExact = await androidImpl.canScheduleExactNotifications();
+      if (hasExact ?? false) {
+        scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+      }
+    }
+
     await _plugin.zonedSchedule(
       id: _dailyWateringNotificationId,
       title: '💧 水やりの時間です',
       body: '水やりが必要な植物を確認しましょう',
       scheduledDate: scheduledDate,
       notificationDetails: details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: scheduleMode,
       matchDateTimeComponents: DateTimeComponents.time, // 毎日繰り返し
     );
 
     debugPrint(
-        'NotificationService: scheduled daily at $hour:${minute.toString().padLeft(2, '0')}');
+        'NotificationService: scheduled daily at $hour:${minute.toString().padLeft(2, '0')} (mode: $scheduleMode)');
   }
 
   /// 水やり通知をキャンセルする。

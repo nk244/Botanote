@@ -7,6 +7,7 @@ import '../providers/note_provider.dart';
 import '../providers/plant_provider.dart';
 import 'add_edit_note_screen.dart';
 import 'note_detail_screen.dart';
+import 'settings_screen.dart';
 
 class NotesListScreen extends StatefulWidget {
   const NotesListScreen({super.key});
@@ -164,6 +165,17 @@ class _NotesListScreenState extends State<NotesListScreen> {
               });
             },
           ),
+          // 設定画面へ遷移 (#104)
+          if (!_isSearching)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: '設定',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(),
+                ),
+              ),
+            ),
           // 植物フィルタ
           Consumer<PlantProvider>(
             builder: (context, plantProvider, _) {
