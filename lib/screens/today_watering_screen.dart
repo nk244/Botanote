@@ -33,12 +33,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   // 日付ごとのログステータスキャッシュ。キーは日付の数値表現（millisecondsSinceEpoch）。
   final Map<int, DailyLogStatus> _logStatusCache = {};
   final Map<int, Map<String, DateTime?>> _nextWateringCache = {};
+  final Map<int, Map<String, DateTime?>> _nextFertilizerCache = {};
+  final Map<int, Map<String, DateTime?>> _nextVitalizerCache = {};
 
   // 現在選択日のデータ（現在ページ対応）
   DailyLogStatus get _logStatus =>
       _logStatusCache[_dateKey(_selectedDate)] ?? DailyLogStatus.empty();
   Map<String, DateTime?> get _nextWateringDateCache =>
       _nextWateringCache[_dateKey(_selectedDate)] ?? {};
+  Map<String, DateTime?> get _nextFertilizerDateCache =>
+      _nextFertilizerCache[_dateKey(_selectedDate)] ?? {};
+  Map<String, DateTime?> get _nextVitalizerDateCache =>
+      _nextVitalizerCache[_dateKey(_selectedDate)] ?? {};
 
   final Set<String> _selectedPlantIds = {};
   final Set<LogType> _selectedBulkLogTypes = {LogType.watering};
@@ -92,10 +98,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final fertilizedMap = <String, bool>{};
     final vitalizedMap = <String, bool>{};
     final nextWateringDateCache = <String, DateTime?>{};
+    final nextFertilizerDateCache = <String, DateTime?>{};
+    final nextVitalizerDateCache = <String, DateTime?>{};
 
     for (var plant in plants) {
       nextWateringDateCache[plant.id] =
           await plantProvider.calculateNextWateringDate(plant.id);
+      nextFertilizerDateCache[plant.id] =
+          await plantProvider.calculateNextFertilizerDate(plant.id);
+      nextVitalizerDateCache[plant.id] =
+          await plantProvider.calculateNextVitalizerDate(plant.id);
       wateredMap[plant.id] =
           await plantProvider.hasLogOnDate(plant.id, LogType.watering, date);
       fertilizedMap[plant.id] =
@@ -112,6 +124,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           vitalized: vitalizedMap,
         );
         _nextWateringCache[key] = nextWateringDateCache;
+        _nextFertilizerCache[key] = nextFertilizerDateCache;
+        _nextVitalizerCache[key] = nextVitalizerDateCache;
       });
     }
   }
@@ -122,6 +136,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     setState(() {
       _logStatusCache.remove(key);
       _nextWateringCache.remove(key);
+      _nextFertilizerCache.remove(key);
+      _nextVitalizerCache.remove(key);
     });
     await _loadLogsForDate(date);
   }
@@ -141,22 +157,60 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         .where((plant) => logStatus.hasAnyLog(plant.id))
         .toSet();
 
-    // 水やりが必要な植物
+    // 水やり、肥料、活力剤が必要な植物
     final plantsNeedingAction = plants.where((plant) {
+      // 水やり予定をチェック
       final nextWateringDate = nextWateringDateCache[plant.id];
-      if (nextWateringDate == null) return false;
-      final nextDay = AppDateUtils.getDateOnly(nextWateringDate);
+      bool hasWateringSchedule = false;
+      if (nextWateringDate != null) {
+        final nextDay = AppDateUtils.getDateOnly(nextWateringDate);
+        // 今日：当日予定 + 今日時点で超過分
+        if (AppDateUtils.isSameDay(selectedDay, todayDay)) {
+          hasWateringSchedule = !nextDay.isAfter(selectedDay);
+        }
+        // 過去の日付：その日の実績把握（その日予定 + その日時点で超過分）
+        else if (selectedDay.isBefore(todayDay)) {
+          hasWateringSchedule = !nextDay.isAfter(selectedDay);
+        }
+        // 未来の日付（#91）：その日予定 + 今日時点ですでに超過している植物
+        else {
+          hasWateringSchedule = nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
+        }
+      }
 
-      // 今日：当日予定 + 今日時点で超過分
-      if (AppDateUtils.isSameDay(selectedDay, todayDay)) {
-        return !nextDay.isAfter(selectedDay);
+      if (hasWateringSchedule) return true;
+
+      // 肥料予定をチェック
+      final nextFertilizerDate = _nextFertilizerDateCache[plant.id];
+      bool hasFertilizerSchedule = false;
+      if (nextFertilizerDate != null) {
+        final nextDay = AppDateUtils.getDateOnly(nextFertilizerDate);
+        if (AppDateUtils.isSameDay(selectedDay, todayDay)) {
+          hasFertilizerSchedule = !nextDay.isAfter(selectedDay);
+        } else if (selectedDay.isBefore(todayDay)) {
+          hasFertilizerSchedule = !nextDay.isAfter(selectedDay);
+        } else {
+          hasFertilizerSchedule = nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
+        }
       }
-      // 過去の日付：その日の実績把握（その日予定 + その日時点で超過分）
-      if (selectedDay.isBefore(todayDay)) {
-        return !nextDay.isAfter(selectedDay);
+
+      if (hasFertilizerSchedule) return true;
+
+      // 活力剤予定をチェック
+      final nextVitalizerDate = _nextVitalizerDateCache[plant.id];
+      bool hasVitalizerSchedule = false;
+      if (nextVitalizerDate != null) {
+        final nextDay = AppDateUtils.getDateOnly(nextVitalizerDate);
+        if (AppDateUtils.isSameDay(selectedDay, todayDay)) {
+          hasVitalizerSchedule = !nextDay.isAfter(selectedDay);
+        } else if (selectedDay.isBefore(todayDay)) {
+          hasVitalizerSchedule = !nextDay.isAfter(selectedDay);
+        } else {
+          hasVitalizerSchedule = nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
+        }
       }
-      // 未来の日付（#91）：その日予定 + 今日時点ですでに超過している植物
-      return nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
+
+      return hasVitalizerSchedule;
     }).toSet();
 
     final allPlants = {...plantsWithRecords, ...plantsNeedingAction}.toList();
