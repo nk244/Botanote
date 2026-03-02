@@ -20,9 +20,18 @@ class SettingsProvider with ChangeNotifier {
   List<String> get customSortOrder => _settings.customSortOrder;
 
   /// 保存済み設定を読み込む。
+  /// 通知が有効な場合はアプリ起動時に再スケジュールする。
   Future<void> loadSettings() async {
     _settings = await _settingsService.loadSettings();
     notifyListeners();
+    // アプリ起動時に通知設定が有効なら再スケジュール
+    // （OSが再起動するとスケジュール済み通知が消えるため）
+    if (_settings.notificationEnabled && !kIsWeb) {
+      await NotificationService().scheduleDailyWateringReminder(
+        hour: _settings.notificationHour,
+        minute: _settings.notificationMinute,
+      );
+    }
   }
 
   /// 表示モードを変更する。

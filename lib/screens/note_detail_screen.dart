@@ -58,7 +58,23 @@ class _FullScreenImageViewerState extends State<_FullScreenImageViewer> {
           final heroTag = 'note_image_${widget.noteId}_$index';
           final img = kIsWeb
               ? Image.network(p, fit: BoxFit.contain)
-              : Image.file(File(p), fit: BoxFit.contain);
+              : Image.file(
+                  File(p),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.broken_image_outlined,
+                                color: Colors.white54, size: 64),
+                            SizedBox(height: 8),
+                            Text('画像を読み込めませんでした',
+                                style: TextStyle(color: Colors.white54)),
+                          ],
+                        ),
+                      ),
+                );
           return InteractiveViewer(
             minScale: 0.5,
             maxScale: 5.0,
@@ -163,8 +179,28 @@ class NoteDetailScreen extends StatelessWidget {
                   final p = entry.value;
                   final heroTag = 'note_image_${note.id}_$index';
                   final img = kIsWeb
-                      ? Image.network(p, width: 120, height: 120, fit: BoxFit.cover)
-                      : Image.file(File(p), width: 120, height: 120, fit: BoxFit.cover);
+                      ? Image.network(p,
+                          width: 120, height: 120, fit: BoxFit.cover)
+                      : Image.file(
+                          File(p),
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                width: 120,
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 40),
+                              ),
+                        );
                   return GestureDetector(
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
