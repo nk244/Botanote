@@ -41,11 +41,14 @@ class NoteProvider with ChangeNotifier {
   }
 
   /// 新しいノートを追加する。
+  ///
+  /// [createdAt] を省略すると現在日時が使われる。
   Future<void> addNote({
     required String title,
     String? content,
     List<String>? plantIds,
     List<String>? imagePaths,
+    DateTime? createdAt,
   }) async {
     final now = DateTime.now();
     final note = Note(
@@ -54,7 +57,7 @@ class NoteProvider with ChangeNotifier {
       content: content,
       plantIds: plantIds ?? [],
       imagePaths: imagePaths ?? [],
-      createdAt: now,
+      createdAt: createdAt ?? now,
       updatedAt: now,
     );
 
