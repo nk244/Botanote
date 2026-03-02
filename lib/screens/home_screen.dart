@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/plant_provider.dart';
+import '../providers/settings_provider.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
 import 'notes_list_screen.dart';
@@ -20,6 +21,17 @@ class _HomeScreenState extends State<HomeScreen> {
     const PlantListScreen(),
     const NotesListScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // NotificationService のコールバックを設定（水やり予定チェック用）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final plantProvider = context.read<PlantProvider>();
+      final settingsProvider = context.read<SettingsProvider>();
+      settingsProvider.setupNotificationCallback(plantProvider);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

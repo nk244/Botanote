@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/app_settings.dart';
 import '../services/settings_service.dart';
 import '../services/notification_service.dart';
+import 'plant_provider.dart';
 
 /// アプリ設定を管理する Provider。
 ///
@@ -32,6 +33,14 @@ class SettingsProvider with ChangeNotifier {
         minute: _settings.notificationMinute,
       );
     }
+  }
+
+  /// NotificationService に水やり予定チェック用のコールバックを設定する
+  /// PlantProvider から呼ぶ必要がある（PlantProviderの状態を参照するため）
+  void setupNotificationCallback(PlantProvider plantProvider) {
+    NotificationService().setWateringScheduleCallback(() async {
+      return await plantProvider.hasAnyWateringScheduledForToday();
+    });
   }
 
   /// 表示モードを変更する。

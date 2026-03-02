@@ -4,6 +4,9 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 
+/// 水やり予定をチェックするためのコールバック型
+typedef HasWateringScheduleCallback = Future<bool> Function();
+
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -15,6 +18,8 @@ class NotificationService {
   static const int _dailyWateringNotificationId = 1;
 
   bool _initialized = false;
+  /// 水やり予定チェック用のコールバック
+  HasWateringScheduleCallback? _hasWateringScheduleCallback;
 
   /// 初期化。main() で await して呼ぶ。
   Future<void> initialize() async {
@@ -46,6 +51,12 @@ class NotificationService {
 
     await _plugin.initialize(settings: initSettings);
     _initialized = true;
+  }
+
+  /// 水やり予定チェック用のコールバックを設定する
+  /// SettingsProvider から呼ぶ
+  void setWateringScheduleCallback(HasWateringScheduleCallback callback) {
+    _hasWateringScheduleCallback = callback;
   }
 
   /// 通知パーミッションをリクエストする。
@@ -81,6 +92,7 @@ class NotificationService {
   }
 
   /// 毎日 [hour]:[minute] に水やり通知をスケジュールする。
+  /// 通知時に水やり予定があるかをチェックして、ある場合のみ表示する。
   Future<void> scheduleDailyWateringReminder({
     required int hour,
     required int minute,
@@ -147,6 +159,19 @@ class NotificationService {
 
     debugPrint(
         'NotificationService: scheduled daily at $hour:${minute.toString().padLeft(2, '0')} (mode: $scheduleMode)');
+  }
+
+  /// 水やり予定があるかをチェックする
+  /// SettingsProviderから通知有効化時に呼ばれ、予定がない場合は通知をキャンセル
+  Future<bool> checkHasWateringScheduled() async {
+    if (_hasWateringScheduleCallback == null) {
+      // コールバックが設定されていないなら、予定があると仮定して通知を続行
+      debugPrint('NotificationService: No callback set, assuming watering scheduled');
+      return true;
+    }
+    final hasSchedule = await _hasWateringScheduleCallback!();
+    debugPrint('NotificationService: watering scheduled today = $hasSchedule');
+    return hasSchedule;
   }
 
   /// 水やり通知をキャンセルする。
