@@ -100,57 +100,6 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     }
   }
 
-  Future<void> _recordLog(LogType type) async {
-    final result = await _showLogDialog(type);
-    if (result == null) return;
-
-    final provider = context.read<PlantProvider>();
-    switch (type) {
-      case LogType.watering:
-        await provider.recordWatering(
-          widget.plant.id,
-          result['date'] as DateTime,
-          result['note'] as String?,
-        );
-        break;
-      case LogType.fertilizer:
-        await provider.recordFertilizer(
-          widget.plant.id,
-          result['date'] as DateTime,
-          result['note'] as String?,
-        );
-        break;
-      case LogType.vitalizer:
-        await provider.recordVitalizer(
-          widget.plant.id,
-          result['date'] as DateTime,
-          result['note'] as String?,
-        );
-        break;
-    }
-
-    await _loadData();
-    _showSuccessMessage(_getLogTypeName(type));
-  }
-
-  Future<Map<String, dynamic>?> _showLogDialog(LogType type) {
-    return showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => _LogDialog(
-        title: '${_getLogTypeName(type)}を記録',
-        icon: _getIconForLogType(type),
-      ),
-    );
-  }
-
-  void _showSuccessMessage(String logTypeName) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$logTypeNameを記録しました')),
-      );
-    }
-  }
-
   String _getLogTypeName(LogType type) {
     switch (type) {
       case LogType.watering:
@@ -234,14 +183,6 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             floating: false,
             forceElevated: innerBoxIsScrolled,
             actions: [
-              if (widget.plant.imagePath != null)
-                _buildImageOverlayAction(Icons.add, _showLogTypeBottomSheet)
-              else
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  tooltip: '記録',
-                  onPressed: _showLogTypeBottomSheet,
-                ),
               if (widget.plant.imagePath != null)
                 _buildImageOverlayAction(Icons.edit, _navigateToEdit)
               else
@@ -382,49 +323,6 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
   }
 
-  void _showLogTypeBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('記録の種類を選んでください',
-                  style: Theme.of(context).textTheme.titleMedium),
-            ),
-            ListTile(
-              leading: const Icon(Icons.water_drop),
-              title: const Text('水やり'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _recordLog(LogType.watering);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.grass),
-              title: const Text('肝料'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _recordLog(LogType.fertilizer);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.favorite),
-              title: const Text('活力剤'),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                _recordLog(LogType.vitalizer);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _navigateToEdit() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -556,12 +454,22 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       );
     }
 
+    // 同日のログをグループ化（日付降順）
+    final groupedByDate = <DateTime, List<LogEntry>>{};
+    for (final log in allLogs) {
+      final day = DateTime(log.date.year, log.date.month, log.date.day);
+      groupedByDate.putIfAbsent(day, () => []).add(log);
+    }
+    final sortedDays = groupedByDate.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
     return ListView.builder(
       padding: const EdgeInsets.all(8),
-      itemCount: allLogs.length,
+      itemCount: sortedDays.length,
       itemBuilder: (context, index) {
-        final log = allLogs[index];
-        return _buildLogCard(log, log.type);
+        final day = sortedDays[index];
+        final logs = groupedByDate[day]!;
+        return _buildGroupedLogRow(day, logs);
       },
     );
   }
@@ -633,23 +541,74 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
   }
 
-  Widget _buildLogCard(LogEntry log, LogType type) {    return Card(
+  Widget _buildGroupedLogRow(DateTime day, List<LogEntry> logs) {
+    return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: ListTile(
-        leading: Icon(_getIconForLogType(type)),
-        title: Text(DateFormat('yyyy年MM月dd日').format(log.date)),
-        subtitle: log.note != null ? Text(log.note!) : null,
-        trailing: IconButton(
-          icon: const Icon(Icons.delete),
-          onPressed: () => _deleteLog(log.id),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Text(
+              DateFormat('yyyy年MM月dd日').format(day),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                children: logs.map((log) {
+                  return Tooltip(
+                    message: log.note ?? _getLogTypeName(log.type),
+                    child: Icon(
+                      _getIconForLogType(log.type),
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              tooltip: '${DateFormat('M月d日').format(day)}の記録を削除',
+              onPressed: () => _deleteLogsForDay(day, logs),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Future<void> _deleteLog(String logId) async {
-    await context.read<PlantProvider>().deleteLog(logId);
-    await _loadData();
+  Future<void> _deleteLogsForDay(DateTime day, List<LogEntry> logs) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('記録を削除'),
+        content: Text(
+            '${DateFormat('yyyy年MM月dd日').format(day)}の記録（${logs.length}件）を削除しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      for (final log in logs) {
+        await context.read<PlantProvider>().deleteLog(log.id); // ignore: use_build_context_synchronously
+      }
+      await _loadData();
+    }
   }
 
   IconData _getIconForLogType(LogType type) {
@@ -738,86 +697,3 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _LogDialog extends StatefulWidget {
-  final String title;
-  final IconData icon;
-
-  const _LogDialog({required this.title, required this.icon});
-
-  @override
-  State<_LogDialog> createState() => _LogDialogState();
-}
-
-class _LogDialogState extends State<_LogDialog> {
-  DateTime _date = DateTime.now();
-  final _noteController = TextEditingController();
-
-  @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(widget.icon),
-          const SizedBox(width: 8),
-          Text(widget.title),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.calendar_today),
-            title: const Text('日付'),
-            subtitle: Text(DateFormat('yyyy年MM月dd日').format(_date)),
-            onTap: () async {
-              final date = await showDatePicker(
-                context: context,
-                initialDate: _date,
-                firstDate: DateTime(2000),
-                lastDate: DateTime.now(),
-              );
-              if (date != null) {
-                setState(() {
-                  _date = date;
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _noteController,
-            decoration: const InputDecoration(
-              labelText: '備考（任意）',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('キャンセル'),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.of(context).pop({
-              'date': _date,
-              'note': _noteController.text.trim().isEmpty
-                  ? null
-                  : _noteController.text.trim(),
-            });
-          },
-          child: const Text('記録'),
-        ),
-      ],
-    );
-  }
-}
