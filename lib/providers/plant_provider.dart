@@ -418,12 +418,12 @@ class PlantProvider with ChangeNotifier {
                 .toList()
               ..sort((a, b) => a.date.compareTo(b.date)));
 
-      // 既にN回以上水やりしていれば今日が予定
-      if (wateringsAfter.length >= n) {
-        return wateringsAfter[n - 1].date;
-      }
-      // 不足回数分を水やり間隔で推定
-      final remaining = n - wateringsAfter.length;
+      // 現在のグループ内の残り回数を計算（N回ごとの次の区切りを求める）
+      // 例: N=3, 水やり7回の場合 → 7%3=1 → 残り2回（次の区切りは9回目）
+      final completedInCurrentGroup = wateringsAfter.length % n;
+      final remaining = completedInCurrentGroup == 0
+          ? n // ちょうど区切り済み → 次のN回目
+          : n - completedInCurrentGroup;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
           : (lastFertDate ?? (await calculateNextWateringDate(plantId) ?? DateTime.now()));
@@ -515,10 +515,12 @@ class PlantProvider with ChangeNotifier {
                 .toList()
               ..sort((a, b) => a.date.compareTo(b.date)));
 
-      if (wateringsAfter.length >= n) {
-        return wateringsAfter[n - 1].date;
-      }
-      final remaining = n - wateringsAfter.length;
+      // 現在のグループ内の残り回数を計算（N回ごとの次の区切りを求める）
+      // 例: N=3, 水やり7回の場合 → 7%3=1 → 残り2回（次の区切りは9回目）
+      final completedInCurrentGroup = wateringsAfter.length % n;
+      final remaining = completedInCurrentGroup == 0
+          ? n // ちょうど区切り済み → 次のN回目
+          : n - completedInCurrentGroup;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
           : (lastVitDate ?? (await calculateNextWateringDate(plantId) ?? DateTime.now()));
