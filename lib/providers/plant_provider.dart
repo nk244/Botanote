@@ -335,7 +335,12 @@ class PlantProvider with ChangeNotifier {
   }
 
   /// 最終肥料ログから次回肥料予定日を動的に計算する。
-  /// - [fertilizerIntervalDays] が設定されている場合: 最終肥料日 + 日数
+  ///
+  /// 起算日の優先順位（日数指定モード）:
+  /// 1. 最後に肥料を与えた日
+  /// 2. 肥料ログがなければ最後に水やりをした日
+  /// 3. 水やりログもなければ次回水やり予定日
+  ///
   /// - [fertilizerEveryNWaterings] が設定されている場合: 最終肥料日以降の
   ///   水やり回数が N 回に達する日（水やり間隔から推定）
   /// どちらも未設定の場合は null を返す。
@@ -357,13 +362,32 @@ class PlantProvider with ChangeNotifier {
 
     // 日数指定の場合
     if (plant.fertilizerIntervalDays != null) {
-      if (fertLogs.isEmpty) {
-        final base = plant.purchaseDate ?? plant.createdAt;
-        return base.add(Duration(days: plant.fertilizerIntervalDays!));
+      if (fertLogs.isNotEmpty) {
+        // 起算日1: 最後に肥料を与えた日
+        fertLogs.sort((a, b) => b.date.compareTo(a.date));
+        return fertLogs.first.date
+            .add(Duration(days: plant.fertilizerIntervalDays!));
       }
-      fertLogs.sort((a, b) => b.date.compareTo(a.date));
-      return fertLogs.first.date
-          .add(Duration(days: plant.fertilizerIntervalDays!));
+      // 起算日2: 最後に水やりをした日
+      List<LogEntry> wateringLogs;
+      if (kIsWeb) {
+        wateringLogs =
+            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
+      } else {
+        wateringLogs =
+            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
+      }
+      if (wateringLogs.isNotEmpty) {
+        wateringLogs.sort((a, b) => b.date.compareTo(a.date));
+        return wateringLogs.first.date
+            .add(Duration(days: plant.fertilizerIntervalDays!));
+      }
+      // 起算日3: 次回水やり予定日
+      final nextWatering = await calculateNextWateringDate(plantId);
+      if (nextWatering != null) {
+        return nextWatering.add(Duration(days: plant.fertilizerIntervalDays!));
+      }
+      return null;
     }
 
     // 水やりN回に1回の場合
@@ -372,7 +396,7 @@ class PlantProvider with ChangeNotifier {
       final n = plant.fertilizerEveryNWaterings!;
       // 最終肥料日以降の水やりログを数える
       final lastFertDate =
-          fertLogs.isEmpty ? (plant.purchaseDate ?? plant.createdAt) : () {
+          fertLogs.isEmpty ? null : () {
             fertLogs.sort((a, b) => b.date.compareTo(a.date));
             return fertLogs.first.date;
           }();
@@ -385,10 +409,14 @@ class PlantProvider with ChangeNotifier {
         wateringLogs =
             await _db!.getLogsByPlantAndType(plantId, LogType.watering);
       }
-      final wateringsAfter = wateringLogs
-          .where((l) => l.date.isAfter(lastFertDate))
-          .toList()
-        ..sort((a, b) => a.date.compareTo(b.date));
+
+      // 起算日が未定（肥料ログなし）の場合は全水やりログを対象にする
+      final wateringsAfter = lastFertDate == null
+          ? (wateringLogs..sort((a, b) => a.date.compareTo(b.date)))
+          : (wateringLogs
+                .where((l) => l.date.isAfter(lastFertDate))
+                .toList()
+              ..sort((a, b) => a.date.compareTo(b.date)));
 
       // 既にN回以上水やりしていれば今日が予定
       if (wateringsAfter.length >= n) {
@@ -398,7 +426,7 @@ class PlantProvider with ChangeNotifier {
       final remaining = n - wateringsAfter.length;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
-          : lastFertDate;
+          : (lastFertDate ?? (await calculateNextWateringDate(plantId) ?? DateTime.now()));
       return baseDate
           .add(Duration(days: plant.wateringIntervalDays! * remaining));
     }
@@ -407,6 +435,12 @@ class PlantProvider with ChangeNotifier {
   }
 
   /// 最終活力剤ログから次回活力剤予定日を動的に計算する。
+  ///
+  /// 起算日の優先順位（日数指定モード）:
+  /// 1. 最後に活力剤を与えた日
+  /// 2. 活力剤ログがなければ最後に水やりをした日
+  /// 3. 水やりログもなければ次回水やり予定日
+  ///
   /// ロジックは [calculateNextFertilizerDate] と同様。
   Future<DateTime?> calculateNextVitalizerDate(String plantId) async {
     Plant? plant;
@@ -426,13 +460,32 @@ class PlantProvider with ChangeNotifier {
 
     // 日数指定の場合
     if (plant.vitalizerIntervalDays != null) {
-      if (vitLogs.isEmpty) {
-        final base = plant.purchaseDate ?? plant.createdAt;
-        return base.add(Duration(days: plant.vitalizerIntervalDays!));
+      if (vitLogs.isNotEmpty) {
+        // 起算日1: 最後に活力剤を与えた日
+        vitLogs.sort((a, b) => b.date.compareTo(a.date));
+        return vitLogs.first.date
+            .add(Duration(days: plant.vitalizerIntervalDays!));
       }
-      vitLogs.sort((a, b) => b.date.compareTo(a.date));
-      return vitLogs.first.date
-          .add(Duration(days: plant.vitalizerIntervalDays!));
+      // 起算日2: 最後に水やりをした日
+      List<LogEntry> wateringLogs;
+      if (kIsWeb) {
+        wateringLogs =
+            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
+      } else {
+        wateringLogs =
+            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
+      }
+      if (wateringLogs.isNotEmpty) {
+        wateringLogs.sort((a, b) => b.date.compareTo(a.date));
+        return wateringLogs.first.date
+            .add(Duration(days: plant.vitalizerIntervalDays!));
+      }
+      // 起算日3: 次回水やり予定日
+      final nextWatering = await calculateNextWateringDate(plantId);
+      if (nextWatering != null) {
+        return nextWatering.add(Duration(days: plant.vitalizerIntervalDays!));
+      }
+      return null;
     }
 
     // 水やりN回に1回の場合
@@ -440,7 +493,7 @@ class PlantProvider with ChangeNotifier {
         plant.wateringIntervalDays != null) {
       final n = plant.vitalizerEveryNWaterings!;
       final lastVitDate =
-          vitLogs.isEmpty ? (plant.purchaseDate ?? plant.createdAt) : () {
+          vitLogs.isEmpty ? null : () {
             vitLogs.sort((a, b) => b.date.compareTo(a.date));
             return vitLogs.first.date;
           }();
@@ -453,10 +506,14 @@ class PlantProvider with ChangeNotifier {
         wateringLogs =
             await _db!.getLogsByPlantAndType(plantId, LogType.watering);
       }
-      final wateringsAfter = wateringLogs
-          .where((l) => l.date.isAfter(lastVitDate))
-          .toList()
-        ..sort((a, b) => a.date.compareTo(b.date));
+
+      // 起算日が未定（活力剤ログなし）の場合は全水やりログを対象にする
+      final wateringsAfter = lastVitDate == null
+          ? (wateringLogs..sort((a, b) => a.date.compareTo(b.date)))
+          : (wateringLogs
+                .where((l) => l.date.isAfter(lastVitDate))
+                .toList()
+              ..sort((a, b) => a.date.compareTo(b.date)));
 
       if (wateringsAfter.length >= n) {
         return wateringsAfter[n - 1].date;
@@ -464,7 +521,7 @@ class PlantProvider with ChangeNotifier {
       final remaining = n - wateringsAfter.length;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
-          : lastVitDate;
+          : (lastVitDate ?? (await calculateNextWateringDate(plantId) ?? DateTime.now()));
       return baseDate
           .add(Duration(days: plant.wateringIntervalDays! * remaining));
     }
