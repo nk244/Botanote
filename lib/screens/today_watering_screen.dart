@@ -141,7 +141,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     });
     await _loadLogsForDate(date);
   }
-  }
 
   /// 指定日に表示すべき植物リストを決定する
   List<Plant> _getPlantsForDate(
@@ -239,7 +238,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         if (bNextDate == null) return -1;
         return aNextDate.compareTo(bNextDate);
     }
-    return 0;
   }
 
 
