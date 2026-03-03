@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
@@ -478,6 +478,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── データ移行（暫定: water_me.db → bota_note.db） ─────────────
   // TODO: リリース前に削除すること
 
+  /// DBディレクトリ内の .db ファイルを列挙して返す（デバッグ用）
+  Future<List<String>> _listDbFiles(String dbDir) async {
+    try {
+      final dir = Directory(dbDir);
+      if (!await dir.exists()) return [];
+      return await dir
+          .list()
+          .where((e) => e is File && e.path.endsWith('.db'))
+          .map((e) => p.basename(e.path))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// water_me.db を共有シートで保存・共有する（バックアップ）
   Future<void> _handleLegacyDbBackup(BuildContext context) async {
     setState(() => _isBackingUp = true);
@@ -486,10 +501,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final legacyPath = p.join(dbDir, 'water_me.db');
       final legacyFile = File(legacyPath);
 
+      debugPrint('[LegacyBackup] dbDir: $dbDir');
+      debugPrint('[LegacyBackup] legacyPath: $legacyPath');
+      debugPrint('[LegacyBackup] exists: ${await legacyFile.exists()}');
+
       if (!await legacyFile.exists()) {
+        final dbFiles = await _listDbFiles(dbDir);
+        debugPrint('[LegacyBackup] .db files in dir: $dbFiles');
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('water_me.db が見つかりません')),
+          SnackBar(
+            content: Text(
+              'water_me.db が見つかりません\n'
+              'パス: $dbDir\n'
+              '検出された .db: ${dbFiles.isEmpty ? "なし" : dbFiles.join(", ")}',
+            ),
+            duration: const Duration(seconds: 6),
+          ),
         );
         return;
       }
@@ -500,7 +528,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         [xFile],
         subject: 'water_me.db バックアップ',
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[LegacyBackup] error: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('バックアップに失敗しました: $e')),
@@ -518,11 +547,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final legacyFile = File(legacyPath);
     final newFile = File(newPath);
 
+    debugPrint('[LegacyMigrate] dbDir: $dbDir');
+    debugPrint('[LegacyMigrate] legacyPath: $legacyPath');
+    debugPrint('[LegacyMigrate] exists: ${await legacyFile.exists()}');
+
     // 旧DBの存在確認
     if (!await legacyFile.exists()) {
+      final dbFiles = await _listDbFiles(dbDir);
+      debugPrint('[LegacyMigrate] .db files in dir: $dbFiles');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('water_me.db が見つかりません')),
+        SnackBar(
+          content: Text(
+            'water_me.db が見つかりません\n'
+            'パス: $dbDir\n'
+            '検出された .db: ${dbFiles.isEmpty ? "なし" : dbFiles.join(", ")}',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
       );
       return;
     }
@@ -555,6 +597,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isMigrating = true);
     try {
       await legacyFile.copy(newPath);
+      debugPrint('[LegacyMigrate] copy done: $newPath');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -562,7 +605,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           duration: Duration(seconds: 4),
         ),
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[LegacyMigrate] error: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('移行に失敗しました: $e')),
