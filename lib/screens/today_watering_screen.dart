@@ -33,12 +33,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   // 日付ごとのログステータスキャッシュ。キーは日付の数値表現（millisecondsSinceEpoch）。
   final Map<int, DailyLogStatus> _logStatusCache = {};
   final Map<int, Map<String, DateTime?>> _nextWateringCache = {};
+  final Map<int, Map<String, DateTime?>> _nextFertilizerCache = {};
+  final Map<int, Map<String, DateTime?>> _nextVitalizerCache = {};
 
   // 現在選択日のデータ（現在ページ対応）
   DailyLogStatus get _logStatus =>
       _logStatusCache[_dateKey(_selectedDate)] ?? DailyLogStatus.empty();
   Map<String, DateTime?> get _nextWateringDateCache =>
       _nextWateringCache[_dateKey(_selectedDate)] ?? {};
+  Map<String, DateTime?> get _nextFertilizerDateCache =>
+      _nextFertilizerCache[_dateKey(_selectedDate)] ?? {};
+  Map<String, DateTime?> get _nextVitalizerDateCache =>
+      _nextVitalizerCache[_dateKey(_selectedDate)] ?? {};
 
   final Set<String> _selectedPlantIds = {};
   final Set<LogType> _selectedBulkLogTypes = {LogType.watering};
@@ -92,10 +98,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final fertilizedMap = <String, bool>{};
     final vitalizedMap = <String, bool>{};
     final nextWateringDateCache = <String, DateTime?>{};
+    final nextFertilizerDateCache = <String, DateTime?>{};
+    final nextVitalizerDateCache = <String, DateTime?>{};
 
     for (var plant in plants) {
       nextWateringDateCache[plant.id] =
           await plantProvider.calculateNextWateringDate(plant.id);
+      nextFertilizerDateCache[plant.id] =
+          await plantProvider.calculateNextFertilizerDate(plant.id);
+      nextVitalizerDateCache[plant.id] =
+          await plantProvider.calculateNextVitalizerDate(plant.id);
       wateredMap[plant.id] =
           await plantProvider.hasLogOnDate(plant.id, LogType.watering, date);
       fertilizedMap[plant.id] =
@@ -112,6 +124,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           vitalized: vitalizedMap,
         );
         _nextWateringCache[key] = nextWateringDateCache;
+        _nextFertilizerCache[key] = nextFertilizerDateCache;
+        _nextVitalizerCache[key] = nextVitalizerDateCache;
       });
     }
   }
@@ -122,8 +136,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     setState(() {
       _logStatusCache.remove(key);
       _nextWateringCache.remove(key);
+      _nextFertilizerCache.remove(key);
+      _nextVitalizerCache.remove(key);
     });
     await _loadLogsForDate(date);
+  }
   }
 
   /// 指定日に表示すべき植物リストを決定する
@@ -132,6 +149,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     DateTime date,
     DailyLogStatus logStatus,
     Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
   ) {
     final selectedDay = AppDateUtils.getDateOnly(date);
     final todayDay = AppDateUtils.getDateOnly(DateTime.now());
@@ -141,22 +160,25 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         .where((plant) => logStatus.hasAnyLog(plant.id))
         .toSet();
 
-    // 水やりが必要な植物
-    final plantsNeedingAction = plants.where((plant) {
-      final nextWateringDate = nextWateringDateCache[plant.id];
-      if (nextWateringDate == null) return false;
-      final nextDay = AppDateUtils.getDateOnly(nextWateringDate);
-
-      // 今日：当日予定 + 今日時点で超過分
+    // 予定日が来ている植物か判定するヘルパー
+    bool isActionNeeded(DateTime? nextDate) {
+      if (nextDate == null) return false;
+      final nextDay = AppDateUtils.getDateOnly(nextDate);
       if (AppDateUtils.isSameDay(selectedDay, todayDay)) {
         return !nextDay.isAfter(selectedDay);
       }
-      // 過去の日付：その日の実績把握（その日予定 + その日時点で超過分）
       if (selectedDay.isBefore(todayDay)) {
         return !nextDay.isAfter(selectedDay);
       }
-      // 未来の日付（#91）：その日予定 + 今日時点ですでに超過している植物
+      // 未来の日付
       return nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
+    }
+
+    // 水やり・肥料・活力剤のいずれかが必要な植物
+    final plantsNeedingAction = plants.where((plant) {
+      return isActionNeeded(nextWateringDateCache[plant.id]) ||
+          isActionNeeded(nextFertilizerDateCache[plant.id]) ||
+          isActionNeeded(nextVitalizerDateCache[plant.id]);
     }).toSet();
 
     final allPlants = {...plantsWithRecords, ...plantsNeedingAction}.toList();
@@ -588,13 +610,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final key = _dateKey(date);
     final logStatus = _logStatusCache[key] ?? DailyLogStatus.empty();
     final nextWateringDateCache = _nextWateringCache[key] ?? {};
+    final nextFertilizerDateCache = _nextFertilizerCache[key] ?? {};
+    final nextVitalizerDateCache = _nextVitalizerCache[key] ?? {};
     final isLoaded = _logStatusCache.containsKey(key);
 
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
         final plantsForDate = isLoaded
             ? _getPlantsForDate(
-                plantProvider.plants, date, logStatus, nextWateringDateCache)
+                plantProvider.plants, date, logStatus,
+                nextWateringDateCache, nextFertilizerDateCache, nextVitalizerDateCache)
             : <Plant>[];
 
         return Column(
@@ -604,7 +629,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
             Expanded(
               child: isLoaded
                   ? _buildPlantList(plantsForDate, isToday, logStatus,
-                      nextWateringDateCache, date)
+                      nextWateringDateCache, nextFertilizerDateCache,
+                      nextVitalizerDateCache, date)
                   : const Center(child: CircularProgressIndicator()),
             ),
           ],
@@ -754,6 +780,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     bool isToday,
     DailyLogStatus logStatus,
     Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
     DateTime date,
   ) {
     if (plantsForDate.isEmpty) {
@@ -783,7 +811,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
             itemBuilder: (context, index) {
               if (index < incompletePlants.length) {
                 return _buildPlantCard(
-                    incompletePlants[index], logStatus, nextWateringDateCache, date);
+                    incompletePlants[index], logStatus,
+                    nextWateringDateCache, nextFertilizerDateCache,
+                    nextVitalizerDateCache, date);
               }
               if (index == incompletePlants.length &&
                   completedPlants.isNotEmpty) {
@@ -793,7 +823,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   incompletePlants.length -
                   (completedPlants.isNotEmpty ? 1 : 0);
               return _buildPlantCard(
-                  completedPlants[completedIndex], logStatus, nextWateringDateCache, date);
+                  completedPlants[completedIndex], logStatus,
+                  nextWateringDateCache, nextFertilizerDateCache,
+                  nextVitalizerDateCache, date);
             },
           ),
         ),
@@ -958,7 +990,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final plantProvider = context.read<PlantProvider>();
     final allPlants = plantProvider.plants;
     final plantsForDate = _getPlantsForDate(
-      allPlants, _selectedDate, _logStatus, _nextWateringDateCache).toSet();
+      allPlants, _selectedDate, _logStatus,
+      _nextWateringDateCache, _nextFertilizerDateCache, _nextVitalizerDateCache,
+    ).toSet();
     
     // Get plants not in today's list
     final unscheduledPlants = allPlants
@@ -1007,6 +1041,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     Plant plant,
     DailyLogStatus logStatus,
     Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
     DateTime date,
   ) {
     final isWatered = logStatus.isWatered(plant.id);
@@ -1016,6 +1052,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final isSelected = _selectedPlantIds.contains(plant.id);
     final selectedDay = AppDateUtils.getDateOnly(date);
     final nextWateringDate = nextWateringDateCache[plant.id];
+    final nextFertilizerDate = nextFertilizerDateCache[plant.id];
+    final nextVitalizerDate = nextVitalizerDateCache[plant.id];
     final nextDay = nextWateringDate != null
         ? AppDateUtils.getDateOnly(nextWateringDate)
         : null;
@@ -1046,6 +1084,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         subtitle: _buildPlantSubtitle(
           plant,
           nextWateringDate,
+          nextFertilizerDate,
+          nextVitalizerDate,
+          selectedDay,
           isOverdue,
           hasAnyLog,
           isWatered,
@@ -1070,12 +1111,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   Widget _buildPlantSubtitle(
     Plant plant,
     DateTime? nextWateringDate,
+    DateTime? nextFertilizerDate,
+    DateTime? nextVitalizerDate,
+    DateTime selectedDay,
     bool isOverdue,
     bool hasAnyLog,
     bool isWatered,
     bool isFertilized,
     bool isVitalized,
   ) {
+    bool isDateDue(DateTime? d) =>
+        d != null && !AppDateUtils.getDateOnly(d).isAfter(selectedDay);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1095,6 +1142,48 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                 AppDateUtils.formatDateDifference(nextWateringDate),
                 style: TextStyle(
                   color: isOverdue ? Theme.of(context).colorScheme.error : null,
+                ),
+              ),
+            ],
+          ),
+        if (nextFertilizerDate != null)
+          Row(
+            children: [
+              Icon(
+                Icons.grass,
+                size: 14,
+                color: isDateDue(nextFertilizerDate)
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.secondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                AppDateUtils.formatDateDifference(nextFertilizerDate),
+                style: TextStyle(
+                  color: isDateDue(nextFertilizerDate)
+                      ? Theme.of(context).colorScheme.error
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        if (nextVitalizerDate != null)
+          Row(
+            children: [
+              Icon(
+                Icons.favorite,
+                size: 14,
+                color: isDateDue(nextVitalizerDate)
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.tertiary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                AppDateUtils.formatDateDifference(nextVitalizerDate),
+                style: TextStyle(
+                  color: isDateDue(nextVitalizerDate)
+                      ? Theme.of(context).colorScheme.error
+                      : null,
                 ),
               ),
             ],

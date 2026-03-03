@@ -334,6 +334,144 @@ class PlantProvider with ChangeNotifier {
     return lastWatering.date.add(Duration(days: plant.wateringIntervalDays!));
   }
 
+  /// 最終肥料ログから次回肥料予定日を動的に計算する。
+  /// - [fertilizerIntervalDays] が設定されている場合: 最終肥料日 + 日数
+  /// - [fertilizerEveryNWaterings] が設定されている場合: 最終肥料日以降の
+  ///   水やり回数が N 回に達する日（水やり間隔から推定）
+  /// どちらも未設定の場合は null を返す。
+  Future<DateTime?> calculateNextFertilizerDate(String plantId) async {
+    Plant? plant;
+    if (kIsWeb) {
+      plant = await _web!.getPlant(plantId);
+    } else {
+      plant = await _db!.getPlant(plantId);
+    }
+    if (plant == null) return null;
+
+    List<LogEntry> fertLogs;
+    if (kIsWeb) {
+      fertLogs = await _web!.getLogsByPlantAndType(plantId, LogType.fertilizer);
+    } else {
+      fertLogs = await _db!.getLogsByPlantAndType(plantId, LogType.fertilizer);
+    }
+
+    // 日数指定の場合
+    if (plant.fertilizerIntervalDays != null) {
+      if (fertLogs.isEmpty) {
+        final base = plant.purchaseDate ?? plant.createdAt;
+        return base.add(Duration(days: plant.fertilizerIntervalDays!));
+      }
+      fertLogs.sort((a, b) => b.date.compareTo(a.date));
+      return fertLogs.first.date
+          .add(Duration(days: plant.fertilizerIntervalDays!));
+    }
+
+    // 水やりN回に1回の場合
+    if (plant.fertilizerEveryNWaterings != null &&
+        plant.wateringIntervalDays != null) {
+      final n = plant.fertilizerEveryNWaterings!;
+      // 最終肥料日以降の水やりログを数える
+      final lastFertDate =
+          fertLogs.isEmpty ? (plant.purchaseDate ?? plant.createdAt) : () {
+            fertLogs.sort((a, b) => b.date.compareTo(a.date));
+            return fertLogs.first.date;
+          }();
+
+      List<LogEntry> wateringLogs;
+      if (kIsWeb) {
+        wateringLogs =
+            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
+      } else {
+        wateringLogs =
+            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
+      }
+      final wateringsAfter = wateringLogs
+          .where((l) => l.date.isAfter(lastFertDate))
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+      // 既にN回以上水やりしていれば今日が予定
+      if (wateringsAfter.length >= n) {
+        return wateringsAfter[n - 1].date;
+      }
+      // 不足回数分を水やり間隔で推定
+      final remaining = n - wateringsAfter.length;
+      final baseDate = wateringsAfter.isNotEmpty
+          ? wateringsAfter.last.date
+          : lastFertDate;
+      return baseDate
+          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+    }
+
+    return null;
+  }
+
+  /// 最終活力剤ログから次回活力剤予定日を動的に計算する。
+  /// ロジックは [calculateNextFertilizerDate] と同様。
+  Future<DateTime?> calculateNextVitalizerDate(String plantId) async {
+    Plant? plant;
+    if (kIsWeb) {
+      plant = await _web!.getPlant(plantId);
+    } else {
+      plant = await _db!.getPlant(plantId);
+    }
+    if (plant == null) return null;
+
+    List<LogEntry> vitLogs;
+    if (kIsWeb) {
+      vitLogs = await _web!.getLogsByPlantAndType(plantId, LogType.vitalizer);
+    } else {
+      vitLogs = await _db!.getLogsByPlantAndType(plantId, LogType.vitalizer);
+    }
+
+    // 日数指定の場合
+    if (plant.vitalizerIntervalDays != null) {
+      if (vitLogs.isEmpty) {
+        final base = plant.purchaseDate ?? plant.createdAt;
+        return base.add(Duration(days: plant.vitalizerIntervalDays!));
+      }
+      vitLogs.sort((a, b) => b.date.compareTo(a.date));
+      return vitLogs.first.date
+          .add(Duration(days: plant.vitalizerIntervalDays!));
+    }
+
+    // 水やりN回に1回の場合
+    if (plant.vitalizerEveryNWaterings != null &&
+        plant.wateringIntervalDays != null) {
+      final n = plant.vitalizerEveryNWaterings!;
+      final lastVitDate =
+          vitLogs.isEmpty ? (plant.purchaseDate ?? plant.createdAt) : () {
+            vitLogs.sort((a, b) => b.date.compareTo(a.date));
+            return vitLogs.first.date;
+          }();
+
+      List<LogEntry> wateringLogs;
+      if (kIsWeb) {
+        wateringLogs =
+            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
+      } else {
+        wateringLogs =
+            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
+      }
+      final wateringsAfter = wateringLogs
+          .where((l) => l.date.isAfter(lastVitDate))
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+      if (wateringsAfter.length >= n) {
+        return wateringsAfter[n - 1].date;
+      }
+      final remaining = n - wateringsAfter.length;
+      final baseDate = wateringsAfter.isNotEmpty
+          ? wateringsAfter.last.date
+          : lastVitDate;
+      return baseDate
+          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+    }
+
+    return null;
+  }
+
   /// 指定植物・種別・日付のログ一覧を取得する。
   Future<List<LogEntry>> getLogsForDate(
     String plantId,
