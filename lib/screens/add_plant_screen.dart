@@ -425,6 +425,13 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                       onPressed: () {
                         setState(() {
                           _wateringInterval = null;
+                          // 水やり間隔削除時は「N回に1回」設定も連動して削除
+                          if (_fertilizerEveryNWaterings != null) {
+                            _fertilizerEveryNWaterings = null;
+                          }
+                          if (_vitalizerEveryNWaterings != null) {
+                            _vitalizerEveryNWaterings = null;
+                          }
                         });
                       },
                     )
@@ -630,15 +637,25 @@ class _LogIntervalDialogState extends State<_LogIntervalDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // モード切り替え
-          SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('日数指定')),
-              ButtonSegment(value: 1, label: Text('水やりN回に1回')),
-            ],
-            selected: {_modeIndex},
-            onSelectionChanged: (s) => setState(() => _modeIndex = s.first),
-          ),
+          // モード切り替え（水やり間隔未設定の場合はN回モードを非表示）
+          if (widget.wateringIntervalDays != null)
+            SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(value: 0, label: Text('日数指定')),
+                ButtonSegment(value: 1, label: Text('水やりN回に1回')),
+              ],
+              selected: {_modeIndex},
+              onSelectionChanged: (s) => setState(() => _modeIndex = s.first),
+            )
+          else
+            // 水やり間隔未設定時は日数指定のみ利用可能
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '日数指定',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
           const SizedBox(height: 16),
           if (_modeIndex == 0) ...[
             Text('$_days日ごと',
