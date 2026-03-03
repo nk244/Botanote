@@ -619,7 +619,7 @@ class _LogIntervalDialogState extends State<_LogIntervalDialog> {
     } else {
       _modeIndex = 0;
       _days = widget.initialDays ?? 7;
-      _everyN = widget.initialEveryN ?? 2;
+      _everyN = widget.initialEveryN ?? 1;
     }
   }
 
@@ -656,9 +656,9 @@ class _LogIntervalDialogState extends State<_LogIntervalDialog> {
                 style: Theme.of(context).textTheme.headlineSmall),
             Slider(
               value: _everyN.toDouble(),
-              min: 2,
+              min: 1,
               max: 10,
-              divisions: 8,
+              divisions: 9,
               label: '$_everyN回に1回',
               onChanged: (v) => setState(() => _everyN = v.toInt()),
             ),
