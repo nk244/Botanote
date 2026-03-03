@@ -286,6 +286,21 @@ class PlantProvider with ChangeNotifier {
     await loadPlants();
   }
 
+  /// 今日水やり予定の植物が1つ以上あるか返す。
+  /// 通知コールバック用。
+  Future<bool> hasAnyWateringScheduledForToday() async {
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    for (final plant in _plants) {
+      final next = _nextWateringCache[plant.id];
+      if (next != null) {
+        final nextDate = DateTime(next.year, next.month, next.day);
+        if (!nextDate.isAfter(todayDate)) return true;
+      }
+    }
+    return false;
+  }
+
   /// 最終水やりログから次回水やり日を動的に計算する。
   /// 水やり間隔が未設定の場合は null を返す。
   // 動的に次回水やり日を計算（ログから算出）
