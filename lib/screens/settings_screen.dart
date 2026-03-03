@@ -1,6 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as p;
+import 'package:share_plus/share_plus.dart';
 import '../providers/settings_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
@@ -17,6 +21,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
+  // ── データ移行（暫定: water_me.db → bota_note.db）
+  bool _isBackingUp = false;
+  bool _isMigrating = false;
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +168,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
 
+          // ── データ移行（暫定: water_me.db → bota_note.db） ──────────
+          // TODO: リリース前に削除すること
+          _buildSectionHeader(context, 'データ移行（暫定）'),
+          ListTile(
+            leading: _isBackingUp
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.backup),
+            title: const Text('旧DBバックアップ'),
+            subtitle: const Text('water_me.db を共有／保存します'),
+            onTap: _isBackingUp ? null : () => _handleLegacyDbBackup(context),
+          ),
+          ListTile(
+            leading: _isMigrating
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.drive_file_move),
+            title: const Text('bota_note.db に移行'),
+            subtitle: const Text('water_me.db を bota_note.db としてコピーします（旧DBは残します）'),
+            onTap: _isMigrating ? null : () => _handleLegacyDbMigrate(context),
+          ),
+          const Divider(),
+
           // About
           _buildSectionHeader(context, 'アプリについて'),
           const ListTile(
@@ -175,7 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () {
               showAboutDialog(
                 context: context,
-                applicationName: 'WaterMe',
+                applicationName: 'Botanote',
                 applicationVersion: '1.0.0',
                 applicationIcon: const Icon(Icons.eco, size: 48),
                 children: const [
@@ -436,6 +472,103 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _isImporting = false);
+    }
+  }
+
+  // ── データ移行（暫定: water_me.db → bota_note.db） ─────────────
+  // TODO: リリース前に削除すること
+
+  /// water_me.db を共有シートで保存・共有する（バックアップ）
+  Future<void> _handleLegacyDbBackup(BuildContext context) async {
+    setState(() => _isBackingUp = true);
+    try {
+      final dbDir = await getDatabasesPath();
+      final legacyPath = p.join(dbDir, 'water_me.db');
+      final legacyFile = File(legacyPath);
+
+      if (!await legacyFile.exists()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('water_me.db が見つかりません')),
+        );
+        return;
+      }
+
+      // 共有シートで保存先を選択させる
+      final xFile = XFile(legacyPath, mimeType: 'application/octet-stream');
+      await Share.shareXFiles(
+        [xFile],
+        subject: 'water_me.db バックアップ',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('バックアップに失敗しました: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isBackingUp = false);
+    }
+  }
+
+  /// water_me.db → bota_note.db にコピーする（旧DBは削除しない）
+  Future<void> _handleLegacyDbMigrate(BuildContext context) async {
+    final dbDir = await getDatabasesPath();
+    final legacyPath = p.join(dbDir, 'water_me.db');
+    final newPath = p.join(dbDir, 'bota_note.db');
+    final legacyFile = File(legacyPath);
+    final newFile = File(newPath);
+
+    // 旧DBの存在確認
+    if (!await legacyFile.exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('water_me.db が見つかりません')),
+      );
+      return;
+    }
+
+    // 新DBが既に存在する場合は上書き確認
+    if (await newFile.exists()) {
+      if (!mounted) return;
+      final overwrite = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('確認'),
+          content: const Text(
+            'bota_note.db が既に存在します。\n上書きしますか？\n（アプリを再起動すると移行後のデータが有効になります）',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('上書き'),
+            ),
+          ],
+        ),
+      );
+      if (overwrite != true) return;
+    }
+
+    setState(() => _isMigrating = true);
+    try {
+      await legacyFile.copy(newPath);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('移行完了。アプリを再起動してください。'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('移行に失敗しました: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isMigrating = false);
     }
   }
 

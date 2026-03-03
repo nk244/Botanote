@@ -34,9 +34,11 @@ class DatabaseService {
         'Please use Android or iOS for full functionality.',
       );
     }
-    String path = join(await getDatabasesPath(), 'water_me.db');
+    final dbDir = await getDatabasesPath();
+    final newPath = join(dbDir, 'bota_note.db');
+
     return await openDatabase(
-      path,
+      newPath,
       version: 4,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {

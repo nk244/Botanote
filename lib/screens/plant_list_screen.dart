@@ -32,7 +32,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('WaterMe'),
+        title: const Text('Botanote'),
         actions: [
           // グリッド/リスト表示切り替えボタン
           IconButton(
