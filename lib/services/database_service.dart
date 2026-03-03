@@ -1,9 +1,10 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 
 /// SQLite データベースへのアクセスを担うサービス。
 ///
@@ -34,9 +35,17 @@ class DatabaseService {
         'Please use Android or iOS for full functionality.',
       );
     }
-    String path = join(await getDatabasesPath(), 'bota_note.db');
+    final dbDir = await getDatabasesPath();
+    final newPath = join(dbDir, 'bota_note.db');
+
+    // ── リネーム移行: water_me.db → bota_note.db ──────────────────
+    // アプリ名変更前（water_me.db）のデータが残っていれば新DBにコピーする。
+    // 新DBがまだ存在しない場合のみ実行し、コピー後に旧ファイルを削除する。
+    await _migrateFromLegacyDb(dbDir: dbDir, newPath: newPath);
+    // ───────────────────────────────────────────────────────────────
+
     return await openDatabase(
-      path,
+      newPath,
       version: 4,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -80,6 +89,39 @@ class DatabaseService {
         }
       },
     );
+  }
+
+  /// water_me.db（旧アプリ名）が存在する場合、bota_note.db にコピーして削除する。
+  /// 新DBが既に存在する場合は何もしない（二重移行防止）。
+  Future<void> _migrateFromLegacyDb({
+    required String dbDir,
+    required String newPath,
+  }) async {
+    final legacyPath = join(dbDir, 'water_me.db');
+    final legacyFile = File(legacyPath);
+    final newFile = File(newPath);
+
+    if (!await legacyFile.exists()) return;   // 旧DBなし → 何もしない
+    if (await newFile.exists()) {             // 新DBが既にある → スキップ
+      debugPrint('DatabaseService: bota_note.db already exists, skipping legacy migration.');
+      return;
+    }
+
+    try {
+      await legacyFile.copy(newPath);
+      await legacyFile.delete();
+      debugPrint('DatabaseService: migrated water_me.db → bota_note.db');
+
+      // WAL/SHMファイルが残っている場合も削除
+      for (final suffix in ['-wal', '-shm']) {
+        final extra = File('$legacyPath$suffix');
+        if (await extra.exists()) await extra.delete();
+      }
+    } catch (e) {
+      debugPrint('DatabaseService: migration failed: $e');
+      // コピー失敗時は新DBを消して旧DBで再試行させる
+      if (await newFile.exists()) await newFile.delete();
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
