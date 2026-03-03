@@ -175,7 +175,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () {
               showAboutDialog(
                 context: context,
-                applicationName: 'WaterMe',
+                applicationName: 'Botanote',
                 applicationVersion: '1.0.0',
                 applicationIcon: const Icon(Icons.eco, size: 48),
                 children: const [

@@ -34,7 +34,7 @@ class DatabaseService {
         'Please use Android or iOS for full functionality.',
       );
     }
-    String path = join(await getDatabasesPath(), 'water_me.db');
+    String path = join(await getDatabasesPath(), 'bota_note.db');
     return await openDatabase(
       path,
       version: 4,
