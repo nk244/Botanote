@@ -34,7 +34,7 @@ void main() {
     final createdAt = purchaseDate;
     final updatedAt = today;
 
-    buffer.writeln("INSERT OR REPLACE INTO plants (id,name,variety,purchaseDate,purchaseLocation,imagePath,wateringIntervalDays,createdAt,updatedAt) VALUES ('${id.replaceAll("'", "''")}', '${name.replaceAll("'", "''")}', '${variety.replaceAll("'", "''")}', ${purchaseDate != null ? "'${iso(purchaseDate)}'" : 'NULL'}, '${location.replaceAll("'", "''")}', ${imagePath != null ? "'${imagePath.replaceAll("'", "''")}'" : 'NULL'}, ${interval}, '${iso(createdAt)}', '${iso(updatedAt)}');");
+    buffer.writeln("INSERT OR REPLACE INTO plants (id,name,variety,purchaseDate,purchaseLocation,imagePath,wateringIntervalDays,createdAt,updatedAt) VALUES ('${id.replaceAll("'", "''")}', '${name.replaceAll("'", "''")}', '${variety.replaceAll("'", "''")}', ${"'${iso(purchaseDate)}'"}, '${location.replaceAll("'", "''")}', ${imagePath != null ? "'${imagePath.replaceAll("'", "''")}'" : 'NULL'}, $interval, '${iso(createdAt)}', '${iso(updatedAt)}');");
 
     // Generate watering logs from purchaseDate up to today following interval, with occasional exceptions
     DateTime logDate = purchaseDate;
@@ -49,14 +49,14 @@ void main() {
 
       final logId = 'log_${id}_water_${logDate.millisecondsSinceEpoch}';
       final note = (['Watered generously', 'Light mist', 'Bottom watering', 'Quick water']..shuffle(rand)).first;
-      buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('${logId}', '${id}', 'watering', '${iso(logDate)}', '${note.replaceAll("'", "''")}', '${iso(logDate)}', '${iso(logDate)}');");
+      buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('$logId', '$id', 'watering', '${iso(logDate)}', '${note.replaceAll("'", "''")}', '${iso(logDate)}', '${iso(logDate)}');");
 
       // occasional extra off-schedule
       if (i % 6 == 0 && rand.nextBool()) {
         final extraDate = logDate.add(Duration(days: 3));
         if (!extraDate.isAfter(today)) {
           final extraId = 'log_${id}_water_extra_${extraDate.millisecondsSinceEpoch}';
-          buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('${extraId}', '${id}', 'watering', '${iso(extraDate)}', 'Extra watering', '${iso(extraDate)}', '${iso(extraDate)}');");
+          buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('$extraId', '$id', 'watering', '${iso(extraDate)}', 'Extra watering', '${iso(extraDate)}', '${iso(extraDate)}');");
         }
       }
 
@@ -67,14 +67,14 @@ void main() {
     if (i % 3 == 0) {
       final fertDate = today.subtract(Duration(days: 14 + i));
       final fertId = 'log_${id}_fert_${fertDate.millisecondsSinceEpoch}';
-      buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('${fertId}', '${id}', 'fertilizer', '${iso(fertDate)}', 'Fertilized', '${iso(fertDate)}', '${iso(fertDate)}');");
+      buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('$fertId', '$id', 'fertilizer', '${iso(fertDate)}', 'Fertilized', '${iso(fertDate)}', '${iso(fertDate)}');");
     }
 
     // vitalizer logs for some plants
     if (i % 4 == 0) {
       final vitDate = today.subtract(Duration(days: 10 + i));
       final vitId = 'log_${id}_vit_${vitDate.millisecondsSinceEpoch}';
-      buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('${vitId}', '${id}', 'vitalizer', '${iso(vitDate)}', 'Applied vitalizer', '${iso(vitDate)}', '${iso(vitDate)}');");
+      buffer.writeln("INSERT OR REPLACE INTO logs (id,plantId,type,date,note,createdAt,updatedAt) VALUES ('$vitId', '$id', 'vitalizer', '${iso(vitDate)}', 'Applied vitalizer', '${iso(vitDate)}', '${iso(vitDate)}');");
     }
   }
 
@@ -92,7 +92,7 @@ void main() {
     final createdAt = today.subtract(Duration(days: rand.nextInt(40)));
     final updatedAt = today;
 
-    buffer.writeln("INSERT OR REPLACE INTO notes (id,title,content,imagePaths,plantIds,createdAt,updatedAt) VALUES ('${noteId}', '${title.replaceAll("'", "''")}', '${content.replaceAll("'", "''")}', '${imagePaths.join('|').replaceAll("'", "''")}', '${linkedPlants.join('|')}', '${iso(createdAt)}', '${iso(updatedAt)}');");
+    buffer.writeln("INSERT OR REPLACE INTO notes (id,title,content,imagePaths,plantIds,createdAt,updatedAt) VALUES ('$noteId', '${title.replaceAll("'", "''")}', '${content.replaceAll("'", "''")}', '${imagePaths.join('|').replaceAll("'", "''")}', '${linkedPlants.join('|')}', '${iso(createdAt)}', '${iso(updatedAt)}');");
   }
 
   buffer.writeln('COMMIT;');
