@@ -239,6 +239,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         if (bNextDate == null) return -1;
         return aNextDate.compareTo(bNextDate);
     }
+    return 0;
   }
 
 
