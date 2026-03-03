@@ -493,15 +493,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// 旧パッケージ (com.example.water_me) の databases ディレクトリパスを返す。
+  /// getDatabasesPath() は現パッケージのパスを返すため、パス文字列を置換して導出する。
+  Future<String> _legacyDbDir() async {
+    final currentDir = await getDatabasesPath();
+    // Android: /data/user/0/<package>/databases
+    final legacy = currentDir.replaceFirst(
+      'com.example.bota_note',
+      'com.example.water_me',
+    );
+    debugPrint('[Legacy] currentDir: $currentDir');
+    debugPrint('[Legacy] legacyDir : $legacy');
+    return legacy;
+  }
+
   /// water_me.db を共有シートで保存・共有する（バックアップ）
   Future<void> _handleLegacyDbBackup(BuildContext context) async {
     setState(() => _isBackingUp = true);
     try {
-      final dbDir = await getDatabasesPath();
+      final dbDir = await _legacyDbDir();
       final legacyPath = p.join(dbDir, 'water_me.db');
       final legacyFile = File(legacyPath);
 
-      debugPrint('[LegacyBackup] dbDir: $dbDir');
       debugPrint('[LegacyBackup] legacyPath: $legacyPath');
       debugPrint('[LegacyBackup] exists: ${await legacyFile.exists()}');
 
@@ -541,26 +554,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// water_me.db → bota_note.db にコピーする（旧DBは削除しない）
   Future<void> _handleLegacyDbMigrate(BuildContext context) async {
-    final dbDir = await getDatabasesPath();
-    final legacyPath = p.join(dbDir, 'water_me.db');
-    final newPath = p.join(dbDir, 'bota_note.db');
+    final legacyDbDir = await _legacyDbDir();
+    final currentDbDir = await getDatabasesPath();
+    final legacyPath = p.join(legacyDbDir, 'water_me.db');
+    final newPath = p.join(currentDbDir, 'bota_note.db');
     final legacyFile = File(legacyPath);
     final newFile = File(newPath);
 
-    debugPrint('[LegacyMigrate] dbDir: $dbDir');
     debugPrint('[LegacyMigrate] legacyPath: $legacyPath');
+    debugPrint('[LegacyMigrate] newPath   : $newPath');
     debugPrint('[LegacyMigrate] exists: ${await legacyFile.exists()}');
 
     // 旧DBの存在確認
     if (!await legacyFile.exists()) {
-      final dbFiles = await _listDbFiles(dbDir);
-      debugPrint('[LegacyMigrate] .db files in dir: $dbFiles');
+      final dbFiles = await _listDbFiles(legacyDbDir);
+      debugPrint('[LegacyMigrate] .db files in legacyDir: $dbFiles');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'water_me.db が見つかりません\n'
-            'パス: $dbDir\n'
+            'パス: $legacyDbDir\n'
             '検出された .db: ${dbFiles.isEmpty ? "なし" : dbFiles.join(", ")}',
           ),
           duration: const Duration(seconds: 6),
