@@ -25,10 +25,10 @@ class SettingsProvider with ChangeNotifier {
   Future<void> loadSettings() async {
     _settings = await _settingsService.loadSettings();
     notifyListeners();
-    // アプリ起動時に通知設定が有効なら再スケジュール
+    // アプリ起動時に通知設定が有効ならスマートスケジュールを実行する
     // （OSが再起動するとスケジュール済み通知が消えるため）
     if (_settings.notificationEnabled && !kIsWeb) {
-      await NotificationService().scheduleDailyWateringReminder(
+      await NotificationService.scheduleSmartWateringReminder(
         hour: _settings.notificationHour,
         minute: _settings.notificationMinute,
       );
@@ -74,7 +74,7 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     // 通知が有効なら再スケジュール
     if (_settings.notificationEnabled && !kIsWeb) {
-      await NotificationService().scheduleDailyWateringReminder(
+      await NotificationService.scheduleSmartWateringReminder(
         hour: hour,
         minute: minute,
       );
@@ -92,7 +92,7 @@ class SettingsProvider with ChangeNotifier {
         // パーミッション確認してからスケジュール
         final granted = await NotificationService().requestPermission();
         if (granted) {
-          await NotificationService().scheduleDailyWateringReminder(
+          await NotificationService.scheduleSmartWateringReminder(
             hour: _settings.notificationHour,
             minute: _settings.notificationMinute,
           );

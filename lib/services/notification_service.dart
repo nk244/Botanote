@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
+import 'dart:convert';
+import 'database_service.dart';
 
 /// 水やり予定をチェックするためのコールバック型
 typedef HasWateringScheduleCallback = Future<bool> Function();
@@ -124,7 +127,7 @@ class NotificationService {
       channelDescription: '水やりが必要な植物をお知らせします',
       importance: Importance.high,
       priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      icon: '@drawable/ic_notification',
     );
     const darwinDetails = DarwinNotificationDetails(
       categoryIdentifier: 'watering',
@@ -172,6 +175,143 @@ class NotificationService {
     final hasSchedule = await _hasWateringScheduleCallback!();
     debugPrint('NotificationService: watering scheduled today = $hasSchedule');
     return hasSchedule;
+  }
+
+  /// 翌日の水やり予定をDBから直接確認し、予定がある場合のみ通知を1件登録する。
+  ///
+  /// バックグラウンドIsolateとアプリ起動時の両方から呼び出す共通ロジック。
+  /// [hour] と [minute] が null の場合は SharedPreferences から読み込む。
+  static Future<void> scheduleSmartWateringReminder({
+    int? hour,
+    int? minute,
+  }) async {
+    if (kIsWeb) return;
+
+    // 通知時刻が未指定の場合は SharedPreferences から取得
+    int notifHour = hour ?? 9;
+    int notifMinute = minute ?? 0;
+    bool notifEnabled = true;
+    if (hour == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final settingsJson = prefs.getString('app_settings');
+        if (settingsJson != null) {
+          final map = json.decode(settingsJson) as Map<String, dynamic>;
+          notifEnabled = map['notificationEnabled'] as bool? ?? true;
+          notifHour = map['notificationHour'] as int? ?? 9;
+          notifMinute = map['notificationMinute'] as int? ?? 0;
+        }
+      } catch (e) {
+        debugPrint('NotificationService: failed to read prefs: $e');
+      }
+    }
+
+    if (!notifEnabled) {
+      debugPrint('NotificationService: notifications disabled, skipping smart schedule');
+      return;
+    }
+
+    // 翌日の水やり予定をDBから確認
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    bool hasDuePlants = false;
+    try {
+      final db = DatabaseService();
+      final duePlants = await db.getPlantsDueOn(tomorrow);
+      hasDuePlants = duePlants.isNotEmpty;
+      debugPrint(
+          'NotificationService: plants due tomorrow = ${duePlants.length}');
+    } catch (e) {
+      debugPrint('NotificationService: DB check failed, scheduling anyway: $e');
+      // DBエラー時は安全側として通知を登録する
+      hasDuePlants = true;
+    }
+
+    final plugin = FlutterLocalNotificationsPlugin();
+
+    // タイムゾーン初期化
+    tz.initializeTimeZones();
+    try {
+      final tzInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
+    } catch (_) {}
+
+    // 初期化（バックグラウンドIsolate用）
+    const androidSettings =
+        AndroidInitializationSettings('@drawable/ic_notification');
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+      macOS: darwinSettings,
+    );
+    await plugin.initialize(settings: initSettings);
+
+    // 既存の通知をキャンセル
+    await plugin.cancel(id: _dailyWateringNotificationId);
+
+    if (!hasDuePlants) {
+      debugPrint(
+          'NotificationService: no plants due tomorrow, notification cancelled');
+      return;
+    }
+
+    // 翌日の指定時刻に1回限りの通知を登録
+    final location = tz.local;
+    final now = tz.TZDateTime.now(location);
+    var scheduledDate = tz.TZDateTime(
+      location,
+      now.year,
+      now.month,
+      now.day + 1, // 翌日
+      notifHour,
+      notifMinute,
+    );
+
+    const androidDetails = AndroidNotificationDetails(
+      'watering_reminder',
+      '水やりリマインダー',
+      channelDescription: '水やりが必要な植物をお知らせします',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@drawable/ic_notification',
+    );
+    const darwinDetails = DarwinNotificationDetails(
+      categoryIdentifier: 'watering',
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    // exact alarm権限チェック
+    AndroidScheduleMode scheduleMode = AndroidScheduleMode.inexact;
+    final androidImpl = plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      final hasExact = await androidImpl.canScheduleExactNotifications();
+      if (hasExact ?? false) {
+        scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+      }
+    }
+
+    // matchDateTimeComponents を指定しない = 1回限りの通知
+    await plugin.zonedSchedule(
+      id: _dailyWateringNotificationId,
+      title: '💧 水やりの時間です',
+      body: '水やりが必要な植物を確認しましょう',
+      scheduledDate: scheduledDate,
+      notificationDetails: details,
+      androidScheduleMode: scheduleMode,
+    );
+
+    debugPrint(
+        'NotificationService: smart scheduled for tomorrow at $notifHour:${notifMinute.toString().padLeft(2, '0')}');
   }
 
   /// 水やり通知をキャンセルする。

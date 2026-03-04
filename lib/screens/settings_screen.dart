@@ -86,7 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SwitchListTile(
                     secondary: const Icon(Icons.notifications),
                     title: const Text('水やりリマインダー'),
-                    subtitle: const Text('毎日指定した時刻に通知します'),
+                    subtitle: const Text('水やり予定がある日のみ通知します'),
                     value: settings.notificationEnabled,
                     onChanged: (v) => settings.setNotificationEnabled(v),
                   ),
