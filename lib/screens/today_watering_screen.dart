@@ -30,28 +30,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   static const int _initialPage = 10000;
   late final PageController _pageController;
 
-  // 日付ごとのログステータスキャッシュ。キーは日付の数値表現（millisecondsSinceEpoch）。
-  final Map<int, DailyLogStatus> _logStatusCache = {};
-  final Map<int, Map<String, DateTime?>> _nextWateringCache = {};
-  final Map<int, Map<String, DateTime?>> _nextFertilizerCache = {};
-  final Map<int, Map<String, DateTime?>> _nextVitalizerCache = {};
-
-  // 現在選択日のデータ（現在ページ対応）
-  DailyLogStatus get _logStatus =>
-      _logStatusCache[_dateKey(_selectedDate)] ?? DailyLogStatus.empty();
-  Map<String, DateTime?> get _nextWateringDateCache =>
-      _nextWateringCache[_dateKey(_selectedDate)] ?? {};
-  Map<String, DateTime?> get _nextFertilizerDateCache =>
-      _nextFertilizerCache[_dateKey(_selectedDate)] ?? {};
-  Map<String, DateTime?> get _nextVitalizerDateCache =>
-      _nextVitalizerCache[_dateKey(_selectedDate)] ?? {};
+  // FutureBuilderの再実行トリガー用カウンタ
+  int _refreshKey = 0;
 
   final Set<String> _selectedPlantIds = {};
   final Set<LogType> _selectedBulkLogTypes = {LogType.watering};
   final ScrollController _listScrollController = ScrollController();
-
-  // 日付をキャッシュキー化するための小数値
-  int _dateKey(DateTime date) => AppDateUtils.getDateOnly(date).millisecondsSinceEpoch;
 
   @override
   void initState() {
@@ -59,8 +43,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     _pageController = PageController(initialPage: _initialPage);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<PlantProvider>().loadPlants();
-      // 初期起動時に中心日と前後2日分計5日をプリロード
-      await _preloadRange(_selectedDate, spread: 2);
     });
   }
 
@@ -74,72 +56,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   @override
   void didUpdateWidget(TodayWateringScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _preloadRange(_selectedDate, spread: 2);
-  }
-
-  /// 指定日を中心にspread日分前後のログステータスをプリロードする
-  Future<void> _preloadRange(DateTime center, {int spread = 1}) async {
-    final dates = List.generate(
-      spread * 2 + 1,
-      (i) => AppDateUtils.getDateOnly(center.add(Duration(days: i - spread))),
-    );
-    await Future.wait(dates.map((d) => _loadLogsForDate(d)));
-  }
-
-  /// 指定日のログステータスをロードしてキャッシュに保存する
-  Future<void> _loadLogsForDate(DateTime date) async {
-    final key = _dateKey(date);
-    // キャッシュ済みならスキップ
-    if (_logStatusCache.containsKey(key)) return;
-
-    final plantProvider = context.read<PlantProvider>();
-    final plants = plantProvider.plants;
-    final wateredMap = <String, bool>{};
-    final fertilizedMap = <String, bool>{};
-    final vitalizedMap = <String, bool>{};
-    final nextWateringDateCache = <String, DateTime?>{};
-    final nextFertilizerDateCache = <String, DateTime?>{};
-    final nextVitalizerDateCache = <String, DateTime?>{};
-
-    for (var plant in plants) {
-      nextWateringDateCache[plant.id] =
-          await plantProvider.calculateNextWateringDate(plant.id);
-      nextFertilizerDateCache[plant.id] =
-          await plantProvider.calculateNextFertilizerDate(plant.id);
-      nextVitalizerDateCache[plant.id] =
-          await plantProvider.calculateNextVitalizerDate(plant.id);
-      wateredMap[plant.id] =
-          await plantProvider.hasLogOnDate(plant.id, LogType.watering, date);
-      fertilizedMap[plant.id] =
-          await plantProvider.hasLogOnDate(plant.id, LogType.fertilizer, date);
-      vitalizedMap[plant.id] =
-          await plantProvider.hasLogOnDate(plant.id, LogType.vitalizer, date);
-    }
-
-    if (mounted) {
-      setState(() {
-        _logStatusCache[key] = DailyLogStatus(
-          watered: wateredMap,
-          fertilized: fertilizedMap,
-          vitalized: vitalizedMap,
-        );
-        _nextWateringCache[key] = nextWateringDateCache;
-        _nextFertilizerCache[key] = nextFertilizerDateCache;
-        _nextVitalizerCache[key] = nextVitalizerDateCache;
-      });
-    }
-  }
-
-  /// ログ変更後に選択日のキャッシュをリセットして再ロードする
-  Future<void> _invalidateAndReload(DateTime date) async {
-    final key = _dateKey(date);
-    setState(() {
-      _logStatusCache.remove(key);
-      _nextWateringCache.remove(key);
-      _nextFertilizerCache.remove(key);
-      _nextVitalizerCache.remove(key);
-    });
-    await _loadLogsForDate(date);
   }
 
   /// 指定日に表示すべき植物リストを決定する
@@ -300,11 +216,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         ? _listScrollController.offset
         : 0.0;
     await context.read<PlantProvider>().loadPlants();
-    // 選択日のキャッシュを無効化して再ロード
-    await _invalidateAndReload(_selectedDate);
     if (mounted) {
       setState(() {
         _selectedPlantIds.clear();
+        // FutureBuilderを再実行させるためにキーをインクリメント
+        _refreshKey++;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_listScrollController.hasClients) {
@@ -326,13 +242,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     }
   }
 
-  Future<void> _deleteLog(String plantId, LogType logType) async {
-    // Check if this is watering and there are other logs
+  Future<void> _deleteLog(
+    String plantId,
+    LogType logType,
+    DailyLogStatus logStatus,
+  ) async {
+    // 水やりの場合、仙6記録があるか確認
     final hasOtherLogs = (logType == LogType.watering) &&
-        _logStatus.hasOtherLogs(plantId, LogType.watering);
+        logStatus.hasOtherLogs(plantId, LogType.watering);
     
-    final logTypesToDelete = await _confirmDeletion(hasOtherLogs, plantId, logType);
-    if (logTypesToDelete == null) return; // Cancelled
+    final logTypesToDelete = await _confirmDeletion(hasOtherLogs, plantId, logType, logStatus);
+    if (logTypesToDelete == null) return;
 
     final plantProvider = context.read<PlantProvider>();
     await plantProvider.deleteMultipleLogsForDate(
@@ -349,12 +269,13 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     bool hasOtherLogs,
     String plantId,
     LogType logType,
+    DailyLogStatus logStatus,
   ) async {
     if (!hasOtherLogs) {
-      return [logType]; // No confirmation needed
+      return [logType];
     }
 
-    // Show confirmation dialog
+    // 削除確認ダイアログを表示
     final deleteAll = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -373,9 +294,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       ),
     );
     
-    if (deleteAll == null) return null; // Cancelled
+    if (deleteAll == null) return null;
     
-    return deleteAll ? _logStatus.getActiveLogTypes(plantId) : [logType];
+    return deleteAll ? logStatus.getActiveLogTypes(plantId) : [logType];
   }
 
   String _buildDeleteMessage(List<LogType> deletedTypes, LogType primaryType) {
@@ -547,7 +468,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = focusedDay;
                   _selectedPlantIds.clear();
                 });
-                _preloadRange(selectedDay, spread: 2);
               },
               onPageChanged: (focusedDay) {
                 setState(() {
@@ -601,8 +521,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           _selectedDate = newDate;
           _selectedPlantIds.clear();
         });
-        // 隔難ページをバックグラウンドでプリロード
-        _preloadRange(newDate, spread: 2);
       },
       itemBuilder: (context, index) {
         final diff = index - _initialPage;
@@ -614,37 +532,91 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
   }
 
+  /// 指定日のログデータをDBから取得するFuture
+  Future<_DatePageData> _loadDatePageData(DateTime date) async {
+    final plantProvider = context.read<PlantProvider>();
+    final plants = plantProvider.plants;
+    final wateredMap = <String, bool>{};
+    final fertilizedMap = <String, bool>{};
+    final vitalizedMap = <String, bool>{};
+    final nextWateringDateCache = <String, DateTime?>{};
+    final nextFertilizerDateCache = <String, DateTime?>{};
+    final nextVitalizerDateCache = <String, DateTime?>{};
+
+    for (final plant in plants) {
+      nextWateringDateCache[plant.id] =
+          await plantProvider.calculateNextWateringDate(plant.id);
+      nextFertilizerDateCache[plant.id] =
+          await plantProvider.calculateNextFertilizerDate(plant.id);
+      nextVitalizerDateCache[plant.id] =
+          await plantProvider.calculateNextVitalizerDate(plant.id);
+      wateredMap[plant.id] =
+          await plantProvider.hasLogOnDate(plant.id, LogType.watering, date);
+      fertilizedMap[plant.id] =
+          await plantProvider.hasLogOnDate(plant.id, LogType.fertilizer, date);
+      vitalizedMap[plant.id] =
+          await plantProvider.hasLogOnDate(plant.id, LogType.vitalizer, date);
+    }
+
+    return _DatePageData(
+      logStatus: DailyLogStatus(
+        watered: wateredMap,
+        fertilized: fertilizedMap,
+        vitalized: vitalizedMap,
+      ),
+      nextWateringDateCache: nextWateringDateCache,
+      nextFertilizerDateCache: nextFertilizerDateCache,
+      nextVitalizerDateCache: nextVitalizerDateCache,
+    );
+  }
+
   /// 1日分のページを構築する
   Widget _buildDatePage(DateTime date) {
     final today = AppDateUtils.getDateOnly(DateTime.now());
     final isToday = AppDateUtils.isSameDay(date, today);
-    final key = _dateKey(date);
-    final logStatus = _logStatusCache[key] ?? DailyLogStatus.empty();
-    final nextWateringDateCache = _nextWateringCache[key] ?? {};
-    final nextFertilizerDateCache = _nextFertilizerCache[key] ?? {};
-    final nextVitalizerDateCache = _nextVitalizerCache[key] ?? {};
-    final isLoaded = _logStatusCache.containsKey(key);
 
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
-        final plantsForDate = isLoaded
-            ? _getPlantsForDate(
-                plantProvider.plants, date, logStatus,
-                nextWateringDateCache, nextFertilizerDateCache, nextVitalizerDateCache)
-            : <Plant>[];
+        return FutureBuilder<_DatePageData>(
+          // _refreshKeyが変化するたびにFutureが再実行される
+          key: ValueKey('${date.millisecondsSinceEpoch}_$_refreshKey'),
+          future: _loadDatePageData(date),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return Column(
+                children: [
+                  _buildDateHeader(date, isToday),
+                  const Expanded(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ],
+              );
+            }
 
-        return Column(
-          children: [
-            _buildDateHeader(date, isToday),
-            if (logStatus.hasAnyRecords) _buildSummaryFor(logStatus),
-            Expanded(
-              child: isLoaded
-                  ? _buildPlantList(plantsForDate, isToday, logStatus,
-                      nextWateringDateCache, nextFertilizerDateCache,
-                      nextVitalizerDateCache, date)
-                  : const Center(child: CircularProgressIndicator()),
-            ),
-          ],
+            final data = snapshot.data!;
+            final logStatus = data.logStatus;
+            final nextWateringDateCache = data.nextWateringDateCache;
+            final nextFertilizerDateCache = data.nextFertilizerDateCache;
+            final nextVitalizerDateCache = data.nextVitalizerDateCache;
+            final plantsForDate = _getPlantsForDate(
+              plantProvider.plants, date, logStatus,
+              nextWateringDateCache, nextFertilizerDateCache, nextVitalizerDateCache,
+            );
+
+            return Column(
+              children: [
+                _buildDateHeader(date, isToday),
+                if (logStatus.hasAnyRecords) _buildSummaryFor(logStatus),
+                Expanded(
+                  child: _buildPlantList(
+                    plantsForDate, isToday, logStatus,
+                    nextWateringDateCache, nextFertilizerDateCache,
+                    nextVitalizerDateCache, date,
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -670,7 +642,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = prev;
                   _selectedPlantIds.clear();
                 });
-                _preloadRange(prev, spread: 2);
               } else {
                 _pageController.animateToPage(
                   _pageController.page!.round() - 1,
@@ -708,7 +679,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = next;
                   _selectedPlantIds.clear();
                 });
-                _preloadRange(next, spread: 2);
               } else {
                 _pageController.animateToPage(
                   _pageController.page!.round() + 1,
@@ -758,7 +728,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           if (logStatus.fertilizedCount > 0)
             _buildSummaryItem(
               Icons.grass,
-              '${logStatus.fertilizedCount}件の肘料',
+              '${logStatus.fertilizedCount}件の肥料',
             ),
           if (logStatus.vitalizedCount > 0)
             _buildSummaryItem(
@@ -1000,9 +970,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   Future<void> _showUnscheduledWateringDialog() async {
     final plantProvider = context.read<PlantProvider>();
     final allPlants = plantProvider.plants;
+    // 現在の日付データを直接DBから取得して未予定植物を判定する
+    final data = await _loadDatePageData(_selectedDate);
     final plantsForDate = _getPlantsForDate(
-      allPlants, _selectedDate, _logStatus,
-      _nextWateringDateCache, _nextFertilizerDateCache, _nextVitalizerDateCache,
+      allPlants, _selectedDate, data.logStatus,
+      data.nextWateringDateCache, data.nextFertilizerDateCache, data.nextVitalizerDateCache,
     ).toSet();
     
     // Get plants not in today's list
@@ -1106,6 +1078,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           isWatered,
           isFertilized,
           isVitalized,
+          logStatus,
         ),
         onTap: () => _navigateToPlantDetail(plant),
       ),
@@ -1133,6 +1106,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     bool isWatered,
     bool isFertilized,
     bool isVitalized,
+    DailyLogStatus logStatus,
   ) {
     // 肥料・活力剤の超過判定も今日基準で統一する (#124)
     final today = AppDateUtils.getDateOnly(DateTime.now());
@@ -1182,9 +1156,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
               spacing: 4,
               runSpacing: 4,
               children: [
-                if (isWatered) _buildLogChip(plant.id, LogType.watering),
-                if (isFertilized) _buildLogChip(plant.id, LogType.fertilizer),
-                if (isVitalized) _buildLogChip(plant.id, LogType.vitalizer),
+                if (isWatered) _buildLogChip(plant.id, LogType.watering, logStatus),
+                if (isFertilized) _buildLogChip(plant.id, LogType.fertilizer, logStatus),
+                if (isVitalized) _buildLogChip(plant.id, LogType.vitalizer, logStatus),
               ],
             ),
           ),
@@ -1210,7 +1184,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
   }
 
-  Widget _buildLogChip(String plantId, LogType logType) {
+  Widget _buildLogChip(String plantId, LogType logType, DailyLogStatus logStatus) {
     final config = _getLogChipConfig(logType);
     return ActionChip(
       label: Row(
@@ -1241,7 +1215,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       padding: EdgeInsets.zero,
       backgroundColor: config.backgroundColor(context),
-      onPressed: () => _deleteLog(plantId, logType),
+      onPressed: () => _deleteLog(plantId, logType, logStatus),
     );
   }
 
@@ -1280,9 +1254,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         builder: (context) => PlantDetailScreen(plant: plant, initialTabIndex: 1),
       ),
     );
+    // 詳細画面から戻った後にFutureBuilderを再実行して最新データを反映する
     if (mounted) {
       await context.read<PlantProvider>().loadPlants();
-      await _invalidateAndReload(_selectedDate);
+      setState(() {
+        _refreshKey++;
+      });
     }
   }
 
@@ -1298,7 +1275,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   }
 }
 
-/// Configuration for log type chips
+/// ログチップの設定
 class _LogChipConfig {
   final String label;
   final IconData icon;
@@ -1313,7 +1290,22 @@ class _LogChipConfig {
   });
 }
 
-/// Dialog for selecting log types to record
+/// _buildDatePage で使用する1日分のデータ集約クラス
+class _DatePageData {
+  final DailyLogStatus logStatus;
+  final Map<String, DateTime?> nextWateringDateCache;
+  final Map<String, DateTime?> nextFertilizerDateCache;
+  final Map<String, DateTime?> nextVitalizerDateCache;
+
+  const _DatePageData({
+    required this.logStatus,
+    required this.nextWateringDateCache,
+    required this.nextFertilizerDateCache,
+    required this.nextVitalizerDateCache,
+  });
+}
+
+/// ログ種別選択ダイアログ
 class _LogTypeSelectionDialog extends StatefulWidget {
   const _LogTypeSelectionDialog();
 

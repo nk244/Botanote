@@ -40,7 +40,7 @@ class NotificationService {
     }
 
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@drawable/ic_notification');
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,

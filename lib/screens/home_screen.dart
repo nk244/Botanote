@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/plant_provider.dart';
+import '../providers/note_provider.dart';
 import '../providers/settings_provider.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
@@ -46,8 +47,12 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _selectedIndex = index;
           });
-          // Reload data when switching tabs
+          // タブ切替時にデータを再読み込みする
           await context.read<PlantProvider>().loadPlants();
+          // ノートタブ（index=2）切替時はノートも再読み込みする
+          if (index == 2) {
+            await context.read<NoteProvider>().loadNotes();
+          }
         },
         destinations: const [
           NavigationDestination(
