@@ -50,6 +50,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     _pageController = PageController(initialPage: _initialPage);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<PlantProvider>().loadPlants();
+      if (!mounted) return;
+      // loadPlants() 完了後にキャッシュをリセットして FutureBuilder を再実行させる。
+      // loadPlants() 中に空の植物リストでキャッシュが作られることを防ぐ。
+      setState(() {
+        _refreshKey++;
+      });
       // 初期表示時に今日を中心に±2日分をプリロード
       _preloadRange(_selectedDate);
     });
@@ -583,6 +589,21 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
 
     final plantProvider = context.read<PlantProvider>();
     final plants = plantProvider.plants;
+
+    // 植物リストがロード中の場合はキャッシュせずに空データを返す。
+    // loadPlants() 完了前にキャッシュされると空データが表示され続けるため。
+    if (plantProvider.isLoading) {
+      return _DatePageData(
+        logStatus: DailyLogStatus(
+          watered: {},
+          fertilized: {},
+          vitalized: {},
+        ),
+        nextWateringDateCache: {},
+        nextFertilizerDateCache: {},
+        nextVitalizerDateCache: {},
+      );
+    }
     final wateredMap = <String, bool>{};
     final fertilizedMap = <String, bool>{};
     final vitalizedMap = <String, bool>{};
