@@ -230,13 +230,25 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           if (bIndex == -1) return -1;
           return aIndex.compareTo(bIndex);
         }
-        // Fallback to watering date
+        // フォールバック：水やり予定日順
         final aNextDate = nextWateringDateCache[a.id];
         final bNextDate = nextWateringDateCache[b.id];
         if (aNextDate == null && bNextDate == null) return 0;
         if (aNextDate == null) return 1;
         if (bNextDate == null) return -1;
         return aNextDate.compareTo(bNextDate);
+      case PlantSortOrder.varietyAsc:
+        // 品種名昇順（品種なしは末尾）
+        if (a.variety == null && b.variety == null) return 0;
+        if (a.variety == null) return 1;
+        if (b.variety == null) return -1;
+        return a.variety!.compareTo(b.variety!);
+      case PlantSortOrder.varietyDesc:
+        // 品種名降順（品種なしは末尾）
+        if (a.variety == null && b.variety == null) return 0;
+        if (a.variety == null) return 1;
+        if (b.variety == null) return -1;
+        return b.variety!.compareTo(a.variety!);
     }
   }
 
@@ -1050,13 +1062,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final hasAnyLog = logStatus.hasAnyLog(plant.id);
     final isSelected = _selectedPlantIds.contains(plant.id);
     final selectedDay = AppDateUtils.getDateOnly(date);
+    // 赤字判定は選択日に関わらず「今日」を基準にする (#124)
+    final today = AppDateUtils.getDateOnly(DateTime.now());
     final nextWateringDate = nextWateringDateCache[plant.id];
     final nextFertilizerDate = nextFertilizerDateCache[plant.id];
     final nextVitalizerDate = nextVitalizerDateCache[plant.id];
     final nextDay = nextWateringDate != null
         ? AppDateUtils.getDateOnly(nextWateringDate)
         : null;
-    final isOverdue = nextDay != null && nextDay.isBefore(selectedDay);
+    // 水やり超過: 予定日 ≦ 今日
+    final isOverdue = nextDay != null && !nextDay.isAfter(today);
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -1119,72 +1134,45 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     bool isFertilized,
     bool isVitalized,
   ) {
+    // 肥料・活力剤の超過判定も今日基準で統一する (#124)
+    final today = AppDateUtils.getDateOnly(DateTime.now());
     bool isDateDue(DateTime? d) =>
-        d != null && !AppDateUtils.getDateOnly(d).isAfter(selectedDay);
+        d != null && !AppDateUtils.getDateOnly(d).isAfter(today);
 
+    // 水やり・肥料・活力剤の予定を横並び1行でまとめて表示する (#125)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (plant.variety != null) Text(plant.variety!),
-        if (nextWateringDate != null)
-          Row(
+        // 予定がある項目を Wrap で横並びにまとめる
+        if (nextWateringDate != null ||
+            nextFertilizerDate != null ||
+            nextVitalizerDate != null)
+          Wrap(
+            spacing: 8,
+            runSpacing: 2,
             children: [
-              Icon(
-                Icons.water_drop,
-                size: 14,
-                color: isOverdue
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                AppDateUtils.formatDateDifference(nextWateringDate),
-                style: TextStyle(
-                  color: isOverdue ? Theme.of(context).colorScheme.error : null,
+              if (nextWateringDate != null)
+                _buildScheduleChip(
+                  icon: Icons.water_drop,
+                  label: AppDateUtils.formatDateDifference(nextWateringDate),
+                  isOverdue: isOverdue,
+                  normalColor: Theme.of(context).colorScheme.primary,
                 ),
-              ),
-            ],
-          ),
-        if (nextFertilizerDate != null)
-          Row(
-            children: [
-              Icon(
-                Icons.grass,
-                size: 14,
-                color: isDateDue(nextFertilizerDate)
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.secondary,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                AppDateUtils.formatDateDifference(nextFertilizerDate),
-                style: TextStyle(
-                  color: isDateDue(nextFertilizerDate)
-                      ? Theme.of(context).colorScheme.error
-                      : null,
+              if (nextFertilizerDate != null)
+                _buildScheduleChip(
+                  icon: Icons.grass,
+                  label: AppDateUtils.formatDateDifference(nextFertilizerDate),
+                  isOverdue: isDateDue(nextFertilizerDate),
+                  normalColor: Theme.of(context).colorScheme.secondary,
                 ),
-              ),
-            ],
-          ),
-        if (nextVitalizerDate != null)
-          Row(
-            children: [
-              Icon(
-                Icons.favorite,
-                size: 14,
-                color: isDateDue(nextVitalizerDate)
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.tertiary,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                AppDateUtils.formatDateDifference(nextVitalizerDate),
-                style: TextStyle(
-                  color: isDateDue(nextVitalizerDate)
-                      ? Theme.of(context).colorScheme.error
-                      : null,
+              if (nextVitalizerDate != null)
+                _buildScheduleChip(
+                  icon: Icons.favorite,
+                  label: AppDateUtils.formatDateDifference(nextVitalizerDate),
+                  isOverdue: isDateDue(nextVitalizerDate),
+                  normalColor: Theme.of(context).colorScheme.tertiary,
                 ),
-              ),
             ],
           ),
         if (hasAnyLog)
@@ -1200,6 +1188,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
               ],
             ),
           ),
+      ],
+    );
+  }
+
+  /// 予定日チップ（アイコン＋テキスト）を構築する (#125)
+  Widget _buildScheduleChip({
+    required IconData icon,
+    required String label,
+    required bool isOverdue,
+    required Color normalColor,
+  }) {
+    final color = isOverdue ? Theme.of(context).colorScheme.error : normalColor;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(color: isOverdue ? color : null, fontSize: 12)),
       ],
     );
   }
@@ -1270,7 +1276,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   Future<void> _navigateToPlantDetail(Plant plant) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => PlantDetailScreen(plant: plant),
+        // 水やりログ画面からの遷移はログタブ（index=1）を直接開く (#127)
+        builder: (context) => PlantDetailScreen(plant: plant, initialTabIndex: 1),
       ),
     );
     if (mounted) {

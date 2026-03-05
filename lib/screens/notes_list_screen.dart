@@ -5,6 +5,7 @@ import '../models/note.dart';
 import '../models/plant.dart';
 import '../providers/note_provider.dart';
 import '../providers/plant_provider.dart';
+import '../providers/settings_provider.dart';
 import 'add_edit_note_screen.dart';
 import 'note_detail_screen.dart';
 import 'settings_screen.dart';
@@ -165,6 +166,27 @@ class _NotesListScreenState extends State<NotesListScreen> {
               });
             },
           ),
+          // 植物フィルタ
+          Consumer2<PlantProvider, SettingsProvider>(
+            builder: (context, plantProvider, settingsProvider, _) {
+              final hasFilter = _filterPlantId != null;
+              // ソート設定に従ったソート済みリストをフィルタシートに渡す
+              final sortedPlants = plantProvider.getSortedPlants(
+                settingsProvider.plantSortOrder,
+                settingsProvider.customSortOrder,
+              );
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: hasFilter,
+                  child: const Icon(Icons.filter_list),
+                ),
+                tooltip: '植物で絞り込む',
+                onPressed: plantProvider.plants.isEmpty
+                    ? null
+                    : () => _showPlantFilterSheet(context, sortedPlants),
+              );
+            },
+          ),
           // 設定画面へ遷移 (#104)
           if (!_isSearching)
             IconButton(
@@ -176,22 +198,6 @@ class _NotesListScreenState extends State<NotesListScreen> {
                 ),
               ),
             ),
-          // 植物フィルタ
-          Consumer<PlantProvider>(
-            builder: (context, plantProvider, _) {
-              final hasFilter = _filterPlantId != null;
-              return IconButton(
-                icon: Badge(
-                  isLabelVisible: hasFilter,
-                  child: const Icon(Icons.filter_list),
-                ),
-                tooltip: '植物で絞り込む',
-                onPressed: plantProvider.plants.isEmpty
-                    ? null
-                    : () => _showPlantFilterSheet(context, plantProvider.plants),
-              );
-            },
-          ),
         ],
       ),
       body: Consumer2<NoteProvider, PlantProvider>(

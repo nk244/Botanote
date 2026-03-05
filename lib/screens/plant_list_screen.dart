@@ -289,6 +289,10 @@ class _PlantListScreenState extends State<PlantListScreen> {
         return '登録日が新しい順';
       case PlantSortOrder.custom:
         return 'カスタム（ドラッグで並び替え）';
+      case PlantSortOrder.varietyAsc:
+        return '品種名（あ→ん）';
+      case PlantSortOrder.varietyDesc:
+        return '品種名（ん→あ）';
     }
   }
 
@@ -305,6 +309,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
         return Icons.access_time;
       case PlantSortOrder.custom:
         return Icons.reorder;
+      case PlantSortOrder.varietyAsc:
+      case PlantSortOrder.varietyDesc:
+        return Icons.local_florist;
     }
   }
 }
