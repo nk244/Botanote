@@ -40,8 +40,14 @@ class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
 
 class PlantDetailScreen extends StatefulWidget {
   final Plant plant;
+  /// 初期表示タブインデックス（0:詳細, 1:ログ, 2:ノート）
+  final int initialTabIndex;
 
-  const PlantDetailScreen({super.key, required this.plant});
+  const PlantDetailScreen({
+    super.key,
+    required this.plant,
+    this.initialTabIndex = 0,
+  });
 
   @override
   State<PlantDetailScreen> createState() => _PlantDetailScreenState();
@@ -58,7 +64,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTabIndex,
+    );
     _loadData();
   }
 

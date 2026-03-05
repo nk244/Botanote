@@ -104,6 +104,24 @@ class PlantProvider with ChangeNotifier {
           });
         }
         break;
+      case PlantSortOrder.varietyAsc:
+        // 品種名昇順（品種なしは末尾）
+        plantsCopy.sort((a, b) {
+          if (a.variety == null && b.variety == null) return 0;
+          if (a.variety == null) return 1;
+          if (b.variety == null) return -1;
+          return a.variety!.compareTo(b.variety!);
+        });
+        break;
+      case PlantSortOrder.varietyDesc:
+        // 品種名降順（品種なしは末尾）
+        plantsCopy.sort((a, b) {
+          if (a.variety == null && b.variety == null) return 0;
+          if (a.variety == null) return 1;
+          if (b.variety == null) return -1;
+          return b.variety!.compareTo(a.variety!);
+        });
+        break;
     }
     
     return plantsCopy;

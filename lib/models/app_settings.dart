@@ -24,6 +24,8 @@ enum PlantSortOrder {
   createdAtDesc,     // 登録日が新しい順
   createdAtAsc,      // 登録日が古い順
   custom,            // ユーザー指定
+  varietyAsc,        // 品種名昇順
+  varietyDesc,       // 品種名降順
 }
 
 class LogTypeColors {
