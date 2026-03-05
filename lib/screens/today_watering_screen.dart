@@ -30,8 +30,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   static const int _initialPage = 10000;
   late final PageController _pageController;
 
-  // FutureBuilderの再実行トリガー用カウンタ
+  // FutureBuilderの再実行トリガー用カウンタ（インクリメントで全キャッシュを無効化）
   int _refreshKey = 0;
+
+  // 日付ページデータのキャッシュ。キーは '${date.ms}_$_refreshKey'。
+  // _refreshKey が変わるとキーが変わり、古いエントリは自然に参照されなくなる。
+  final Map<String, _DatePageData> _pageDataCache = {};
+
+  // キャッシュエントリ数の上限（±2日×5日分＋余裕分）
+  static const int _cacheMaxSize = 20;
 
   final Set<String> _selectedPlantIds = {};
   final Set<LogType> _selectedBulkLogTypes = {LogType.watering};
@@ -43,6 +50,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     _pageController = PageController(initialPage: _initialPage);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<PlantProvider>().loadPlants();
+      // 初期表示時に今日を中心に±2日分をプリロード
+      _preloadRange(_selectedDate);
     });
   }
 
@@ -56,6 +65,33 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   @override
   void didUpdateWidget(TodayWateringScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+  }
+
+  /// 指定日を中心に±2日分（計5日）をバックグラウンドでプリロードする。
+  void _preloadRange(DateTime center) {
+    for (int i = -2; i <= 2; i++) {
+      final date = AppDateUtils.getDateOnly(center.add(Duration(days: i)));
+      // awaitしない（バックグラウンド実行）
+      _loadDatePageData(date).ignore();
+    }
+  }
+
+  /// キャッシュサイズが上限を超えた場合に古いエントリを削除する。
+  void _evictOldCacheEntries() {
+    if (_pageDataCache.length <= _cacheMaxSize) return;
+    // 現在の_refreshKeyに属さないエントリを優先的に削除する
+    final currentKeySuffix = '_$_refreshKey';
+    final oldKeys = _pageDataCache.keys
+        .where((k) => !k.endsWith(currentKeySuffix))
+        .toList();
+    for (final key in oldKeys) {
+      _pageDataCache.remove(key);
+      if (_pageDataCache.length <= _cacheMaxSize) return;
+    }
+    // それでも超えている場合は先頭から削除
+    while (_pageDataCache.length > _cacheMaxSize) {
+      _pageDataCache.remove(_pageDataCache.keys.first);
+    }
   }
 
   /// 指定日に表示すべき植物リストを決定する
@@ -468,6 +504,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = focusedDay;
                   _selectedPlantIds.clear();
                 });
+                // 日付選択時に前後2日分をプリロード
+                _preloadRange(_selectedDate);
               },
               onPageChanged: (focusedDay) {
                 setState(() {
@@ -521,6 +559,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           _selectedDate = newDate;
           _selectedPlantIds.clear();
         });
+        // スワイプ時に前後2日分をバックグラウンドでプリロード
+        _preloadRange(newDate);
       },
       itemBuilder: (context, index) {
         final diff = index - _initialPage;
@@ -532,8 +572,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     );
   }
 
-  /// 指定日のログデータをDBから取得するFuture
+  /// 指定日のログデータをDBから取得する。キャッシュヒット時は即座に返す。
   Future<_DatePageData> _loadDatePageData(DateTime date) async {
+    final cacheKey =
+        '${AppDateUtils.getDateOnly(date).millisecondsSinceEpoch}_$_refreshKey';
+    // キャッシュヒット時はDBアクセスをスキップ
+    if (_pageDataCache.containsKey(cacheKey)) {
+      return _pageDataCache[cacheKey]!;
+    }
+
     final plantProvider = context.read<PlantProvider>();
     final plants = plantProvider.plants;
     final wateredMap = <String, bool>{};
@@ -558,7 +605,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           await plantProvider.hasLogOnDate(plant.id, LogType.vitalizer, date);
     }
 
-    return _DatePageData(
+    final data = _DatePageData(
       logStatus: DailyLogStatus(
         watered: wateredMap,
         fertilized: fertilizedMap,
@@ -568,6 +615,10 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       nextFertilizerDateCache: nextFertilizerDateCache,
       nextVitalizerDateCache: nextVitalizerDateCache,
     );
+    // キャッシュに保存し、上限超過時は古いエントリを削除
+    _pageDataCache[cacheKey] = data;
+    _evictOldCacheEntries();
+    return data;
   }
 
   /// 1日分のページを構築する
@@ -642,6 +693,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = prev;
                   _selectedPlantIds.clear();
                 });
+                // 前日移動時にプリロード
+                _preloadRange(prev);
               } else {
                 _pageController.animateToPage(
                   _pageController.page!.round() - 1,
@@ -679,6 +732,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = next;
                   _selectedPlantIds.clear();
                 });
+                // 翻日移動時にプリロード
+                _preloadRange(next);
               } else {
                 _pageController.animateToPage(
                   _pageController.page!.round() + 1,
