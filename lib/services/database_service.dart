@@ -270,6 +270,55 @@ class DatabaseService {
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// 指定日に水やり予定がある植物リストを取得する。
+  ///
+  /// バックグラウンドIsolateから直接呼び出すためのメソッド。
+  /// 各植物の最終水やりログと [wateringIntervalDays] から次回予定日を計算し、
+  /// [targetDate] 以前になっている植物のみを返す。
+  Future<List<Plant>> getPlantsDueOn(DateTime targetDate) async {
+    // 全植物と全水やりログを取得
+    final plants = await getAllPlants();
+    if (plants.isEmpty) return [];
+
+    final targetDay = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+    );
+
+    final duePlants = <Plant>[];
+
+    for (final plant in plants) {
+      // 水やり間隔が未設定の植物はスキップ
+      if (plant.wateringIntervalDays == null) continue;
+
+      final logs = await getLogsByPlantAndType(plant.id, LogType.watering);
+
+      final DateTime baseDate;
+      if (logs.isEmpty) {
+        // ログなし: 購入日または登録日を起算日とする
+        baseDate = plant.purchaseDate ?? plant.createdAt;
+      } else {
+        // 最終水やりログ日を起算日とする
+        logs.sort((a, b) => b.date.compareTo(a.date));
+        baseDate = logs.first.date;
+      }
+
+      final nextDate = DateTime(
+        baseDate.year,
+        baseDate.month,
+        baseDate.day,
+      ).add(Duration(days: plant.wateringIntervalDays!));
+
+      // 次回予定日がtargetDay以前であれば対象
+      if (!nextDate.isAfter(targetDay)) {
+        duePlants.add(plant);
+      }
+    }
+
+    return duePlants;
+  }
+
   Future<void> close() async {
     final db = await database;
     db.close();
