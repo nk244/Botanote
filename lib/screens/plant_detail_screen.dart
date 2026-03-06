@@ -214,32 +214,21 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 bottom: 16,
                 end: 16,
               ),
-              title: Text(
-                widget.plant.name,
-                style: widget.plant.imagePath != null
-                    // 画像あり: 暗いグラデーション背景なので白字＋影で視認性を確保
-                    ? const TextStyle(
-                        shadows: [
-                          Shadow(
-                            offset: Offset(0, 2),
-                            blurRadius: 8,
-                            color: Colors.black87,
-                          ),
-                          Shadow(
-                            offset: Offset(0, 1),
-                            blurRadius: 4,
-                            color: Colors.black54,
-                          ),
-                        ],
-                      )
-                    // 画像なし: 明るいグラデーション背景なのでテーマ色を使う
-                    : TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onPrimaryContainer,
-                        fontWeight: FontWeight.bold,
-                        shadows: null,
-                      ),
+              // 編集・削除ボタンと同じく半透明黒背景を付けて画像に関わらず視認性を確保
+              title: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: Text(
+                    widget.plant.name,
+                    style: const TextStyle(color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
               background: _buildHeaderBackground(context),
               collapseMode: CollapseMode.parallax,
