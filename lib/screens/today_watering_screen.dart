@@ -33,6 +33,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   // FutureBuilderの再実行トリガー用カウンタ（インクリメントで全キャッシュを無効化）
   int _refreshKey = 0;
 
+  // PlantProviderのisLoading前回値。loadPlants()完了検知に使用する。
+  bool _wasLoading = false;
+
   // 日付ページデータのキャッシュ。キーは '${date.ms}_$_refreshKey'。
   // _refreshKey が変わるとキーが変わり、古いエントリは自然に参照されなくなる。
   final Map<String, _DatePageData> _pageDataCache = {};
@@ -71,6 +74,22 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   @override
   void didUpdateWidget(TodayWateringScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // PlantProvider の loadPlants() 完了（isLoading: true → false）を検知して
+    // キャッシュをリセットし、最新の植物データで再プリロードする。
+    // 植物追加・削除・編集が他タブで行われた場合も自動的に反映される。
+    final isLoading = context.read<PlantProvider>().isLoading;
+    if (_wasLoading && !isLoading) {
+      setState(() {
+        _refreshKey++;
+      });
+      _loadSelectedDateFirst(_selectedDate).ignore();
+    }
+    _wasLoading = isLoading;
   }
 
   /// 選択日のデータを優先ロードし、その後±2日分をバックグラウンドでプリロードする。
