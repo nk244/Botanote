@@ -3,12 +3,10 @@ import 'package:path/path.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// SQLite データベースへのアクセスを担うサービス。
 ///
 /// シングルトンパターンで実装されており、DB接続は遅延初期化される。
-/// Web 環境は非対応（[WebStorageService] を利用）。
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   static Database? _database;
@@ -28,12 +26,6 @@ class DatabaseService {
 
   /// DB ファイルを開き、必要に応じてマイグレーションを実行する。
   Future<Database> _initDatabase() async {
-    if (kIsWeb) {
-      throw UnsupportedError(
-        'Database is not supported on the web. '
-        'Please use Android or iOS for full functionality.',
-      );
-    }
     final dbDir = await getDatabasesPath();
     final newPath = join(dbDir, 'bota_note.db');
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -33,26 +32,24 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ja');
 
-  if (!kIsWeb) {
-    // 通知サービスを初期化
-    await NotificationService().initialize();
+  // 通知サービスを初期化
+  await NotificationService().initialize();
 
-    // workmanager を初期化し、毎日バックグラウンドで翌日の予定チェックを行う
-    await Workmanager().initialize(callbackDispatcher);
-    await Workmanager().registerPeriodicTask(
-      _kSmartNotifyTask,
-      _kSmartNotifyTask,
-      // 毎日実行（WorkManagerの最短は15分だが、ユーザーのバッテリー節約を優先しOSが最適化する）
-      frequency: const Duration(hours: 24),
-      // 制約: ネットワーク不要・バッテリー節約モードでも実行
-      constraints: Constraints(
-        networkType: NetworkType.notRequired,
-        requiresBatteryNotLow: false,
-      ),
-      // 既存タスクがあれば上書き
-      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
-    );
-  }
+  // workmanager を初期化し、毎日バックグラウンドで翌日の予定チェックを行う
+  await Workmanager().initialize(callbackDispatcher);
+  await Workmanager().registerPeriodicTask(
+    _kSmartNotifyTask,
+    _kSmartNotifyTask,
+    // 毎日実行（WorkManagerの最短は15分だが、ユーザーのバッテリー節約を優先しOSが最適化する）
+    frequency: const Duration(hours: 24),
+    // 制約: ネットワーク不要・バッテリー節約モードでも実行
+    constraints: Constraints(
+      networkType: NetworkType.notRequired,
+      requiresBatteryNotLow: false,
+    ),
+    // 既存タスクがあれば上書き
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
+  );
 
   runApp(const MyApp());
 }

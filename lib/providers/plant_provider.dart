@@ -1,21 +1,16 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:uuid/uuid.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/app_settings.dart';
 import '../services/database_service.dart';
-import '../services/web_storage_service.dart';
 
 /// 植物データとログを管理する Provider。
 ///
-/// [DatabaseService](モバイル) または [WebStorageService](Web) を介して
-/// 永続化する。ビジネスロジックの集約点として機能する。
+/// [DatabaseService] を介して SQLite に永続化する。
+/// ビジネスロジックの集約点として機能する。
 class PlantProvider with ChangeNotifier {
-  /// モバイル環境用 DBサービス（Web時は null）
-  final DatabaseService? _db = kIsWeb ? null : DatabaseService();
-
-  /// Web 環境用ストレージ（非 Web 時は null）
-  final WebStorageService? _web = kIsWeb ? WebStorageService() : null;
+  final DatabaseService _db = DatabaseService();
 
   List<Plant> _plants = [];
   bool _isLoading = false;
@@ -44,23 +39,17 @@ class PlantProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if (kIsWeb) {
-        _plants = await _web!.getAllPlants();
-      } else {
-        _plants = await _db!.getAllPlants();
-      }
-      
+      _plants = await _db.getAllPlants();
+
       // 次回水やり日キャッシュを更新
       for (var plant in _plants) {
         _nextWateringCache[plant.id] = await calculateNextWateringDate(plant.id);
       }
       // カレンダー表示用のログ日付セットを更新
-      if (!kIsWeb) {
-        final allLogs = await _db!.getAllLogs();
-        _logDatesCache = allLogs
-            .map((l) => DateTime(l.date.year, l.date.month, l.date.day))
-            .toSet();
-      }
+      final allLogs = await _db.getAllLogs();
+      _logDatesCache = allLogs
+          .map((l) => DateTime(l.date.year, l.date.month, l.date.day))
+          .toSet();
     } catch (e) {
       debugPrint('Error loading plants: $e');
     } finally {
@@ -167,29 +156,17 @@ class PlantProvider with ChangeNotifier {
       updatedAt: now,
     );
 
-    if (kIsWeb) {
-      await _web!.insertPlant(plant);
-    } else {
-      await _db!.insertPlant(plant);
-    }
+    await _db.insertPlant(plant);
     await loadPlants();
   }
 
   Future<void> updatePlant(Plant plant) async {
-    if (kIsWeb) {
-      await _web!.updatePlant(plant);
-    } else {
-      await _db!.updatePlant(plant);
-    }
+    await _db.updatePlant(plant);
     await loadPlants();
   }
 
   Future<void> deletePlant(String id) async {
-    if (kIsWeb) {
-      await _web!.deletePlant(id);
-    } else {
-      await _db!.deletePlant(id);
-    }
+    await _db.deletePlant(id);
 
     // Issue #12: 削除した植物IDをノートの plantIds から除去する
     await _removePlantIdFromNotes(id);
@@ -200,19 +177,14 @@ class PlantProvider with ChangeNotifier {
   /// 削除された植物IDを参照しているすべてのノートの plantIds から除去する。
   Future<void> _removePlantIdFromNotes(String plantId) async {
     try {
-      if (kIsWeb) {
-        // Web: WebStorageServiceの専用メソッドで一括処理
-        await _web!.removePlantIdFromNotes(plantId);
-      } else {
-        final notes = await _db!.getAllNotes();
-        for (final note in notes) {
-          if (note.plantIds.contains(plantId)) {
-            final updatedNote = note.copyWith(
-              plantIds: note.plantIds.where((id) => id != plantId).toList(),
-              updatedAt: DateTime.now(),
-            );
-            await _db.updateNote(updatedNote);
-          }
+      final notes = await _db.getAllNotes();
+      for (final note in notes) {
+        if (note.plantIds.contains(plantId)) {
+          final updatedNote = note.copyWith(
+            plantIds: note.plantIds.where((id) => id != plantId).toList(),
+            updatedAt: DateTime.now(),
+          );
+          await _db.updateNote(updatedNote);
         }
       }
     } catch (e) {
@@ -232,14 +204,8 @@ class PlantProvider with ChangeNotifier {
       updatedAt: DateTime.now(),
     );
     
-    if (kIsWeb) {
-      await _web!.insertLog(log);
-    } else {
-      await _db!.insertLog(log);
-    }
-
-  // nextWateringDate はログから動的に計算するため、ログ記録時にはキャッシュ更新不要
-
+    // nextWateringDate はログから動的に計算するため、ログ記録時にはキャッシュ更新不要
+    await _db.insertLog(log);
     await loadPlants();
   }
 
@@ -254,13 +220,7 @@ class PlantProvider with ChangeNotifier {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    
-    if (kIsWeb) {
-      await _web!.insertLog(log);
-    } else {
-      await _db!.insertLog(log);
-    }
-
+    await _db.insertLog(log);
     await loadPlants();
   }
 
@@ -275,13 +235,7 @@ class PlantProvider with ChangeNotifier {
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    
-    if (kIsWeb) {
-      await _web!.insertLog(log);
-    } else {
-      await _db!.insertLog(log);
-    }
-
+    await _db.insertLog(log);
     await loadPlants();
   }
 
@@ -304,11 +258,7 @@ class PlantProvider with ChangeNotifier {
           createdAt: now,
           updatedAt: now,
         );
-        if (kIsWeb) {
-          await _web!.insertLog(log);
-        } else {
-          await _db!.insertLog(log);
-        }
+        await _db.insertLog(log);
       }
     }
     // 全挿入完了後に1回だけ再読み込み
@@ -334,22 +284,11 @@ class PlantProvider with ChangeNotifier {
   /// 水やり間隔が未設定の場合は null を返す。
   // 動的に次回水やり日を計算（ログから算出）
   Future<DateTime?> calculateNextWateringDate(String plantId) async {
-    Plant? plant;
-    if (kIsWeb) {
-      plant = await _web!.getPlant(plantId);
-    } else {
-      plant = await _db!.getPlant(plantId);
-    }
-    
+    final plant = await _db.getPlant(plantId);
     if (plant == null || plant.wateringIntervalDays == null) return null;
 
     // 最新の水やり記録を取得
-    List<LogEntry> wateringLogs;
-    if (kIsWeb) {
-      wateringLogs = await _web!.getLogsByPlantAndType(plantId, LogType.watering);
-    } else {
-      wateringLogs = await _db!.getLogsByPlantAndType(plantId, LogType.watering);
-    }
+    final wateringLogs = await _db.getLogsByPlantAndType(plantId, LogType.watering);
 
     if (wateringLogs.isEmpty) {
       // ログなしの場合は購入日または登録日から計算
@@ -374,20 +313,10 @@ class PlantProvider with ChangeNotifier {
   ///   水やり回数が N 回に達する日（水やり間隔から推定）
   /// どちらも未設定の場合は null を返す。
   Future<DateTime?> calculateNextFertilizerDate(String plantId) async {
-    Plant? plant;
-    if (kIsWeb) {
-      plant = await _web!.getPlant(plantId);
-    } else {
-      plant = await _db!.getPlant(plantId);
-    }
+    final plant = await _db.getPlant(plantId);
     if (plant == null) return null;
 
-    List<LogEntry> fertLogs;
-    if (kIsWeb) {
-      fertLogs = await _web!.getLogsByPlantAndType(plantId, LogType.fertilizer);
-    } else {
-      fertLogs = await _db!.getLogsByPlantAndType(plantId, LogType.fertilizer);
-    }
+    final fertLogs = await _db.getLogsByPlantAndType(plantId, LogType.fertilizer);
 
     // 日数指定の場合
     if (plant.fertilizerIntervalDays != null) {
@@ -398,17 +327,11 @@ class PlantProvider with ChangeNotifier {
             .add(Duration(days: plant.fertilizerIntervalDays!));
       }
       // 起算日2: 最後に水やりをした日
-      List<LogEntry> wateringLogs;
-      if (kIsWeb) {
-        wateringLogs =
-            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
-      } else {
-        wateringLogs =
-            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
-      }
-      if (wateringLogs.isNotEmpty) {
-        wateringLogs.sort((a, b) => b.date.compareTo(a.date));
-        return wateringLogs.first.date
+      final wateringLogs2 =
+          await _db.getLogsByPlantAndType(plantId, LogType.watering);
+      if (wateringLogs2.isNotEmpty) {
+        wateringLogs2.sort((a, b) => b.date.compareTo(a.date));
+        return wateringLogs2.first.date
             .add(Duration(days: plant.fertilizerIntervalDays!));
       }
       // 起算日3: 次回水やり予定日
@@ -430,14 +353,8 @@ class PlantProvider with ChangeNotifier {
             return fertLogs.first.date;
           }();
 
-      List<LogEntry> wateringLogs;
-      if (kIsWeb) {
-        wateringLogs =
-            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
-      } else {
-        wateringLogs =
-            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
-      }
+      final wateringLogs =
+          await _db.getLogsByPlantAndType(plantId, LogType.watering);
 
       // 起算日が未定（肥料ログなし）の場合は全水やりログを対象にする
       final wateringsAfter = lastFertDate == null
@@ -472,20 +389,10 @@ class PlantProvider with ChangeNotifier {
   ///
   /// ロジックは [calculateNextFertilizerDate] と同様。
   Future<DateTime?> calculateNextVitalizerDate(String plantId) async {
-    Plant? plant;
-    if (kIsWeb) {
-      plant = await _web!.getPlant(plantId);
-    } else {
-      plant = await _db!.getPlant(plantId);
-    }
+    final plant = await _db.getPlant(plantId);
     if (plant == null) return null;
 
-    List<LogEntry> vitLogs;
-    if (kIsWeb) {
-      vitLogs = await _web!.getLogsByPlantAndType(plantId, LogType.vitalizer);
-    } else {
-      vitLogs = await _db!.getLogsByPlantAndType(plantId, LogType.vitalizer);
-    }
+    final vitLogs = await _db.getLogsByPlantAndType(plantId, LogType.vitalizer);
 
     // 日数指定の場合
     if (plant.vitalizerIntervalDays != null) {
@@ -496,17 +403,11 @@ class PlantProvider with ChangeNotifier {
             .add(Duration(days: plant.vitalizerIntervalDays!));
       }
       // 起算日2: 最後に水やりをした日
-      List<LogEntry> wateringLogs;
-      if (kIsWeb) {
-        wateringLogs =
-            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
-      } else {
-        wateringLogs =
-            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
-      }
-      if (wateringLogs.isNotEmpty) {
-        wateringLogs.sort((a, b) => b.date.compareTo(a.date));
-        return wateringLogs.first.date
+      final wateringLogs2 =
+          await _db.getLogsByPlantAndType(plantId, LogType.watering);
+      if (wateringLogs2.isNotEmpty) {
+        wateringLogs2.sort((a, b) => b.date.compareTo(a.date));
+        return wateringLogs2.first.date
             .add(Duration(days: plant.vitalizerIntervalDays!));
       }
       // 起算日3: 次回水やり予定日
@@ -527,14 +428,8 @@ class PlantProvider with ChangeNotifier {
             return vitLogs.first.date;
           }();
 
-      List<LogEntry> wateringLogs;
-      if (kIsWeb) {
-        wateringLogs =
-            await _web!.getLogsByPlantAndType(plantId, LogType.watering);
-      } else {
-        wateringLogs =
-            await _db!.getLogsByPlantAndType(plantId, LogType.watering);
-      }
+      final wateringLogs =
+          await _db.getLogsByPlantAndType(plantId, LogType.watering);
 
       // 起算日が未定（活力剤ログなし）の場合は全水やりログを対象にする
       final wateringsAfter = lastVitDate == null
@@ -569,12 +464,7 @@ class PlantProvider with ChangeNotifier {
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
-    List<LogEntry> logs;
-    if (kIsWeb) {
-      logs = await _web!.getLogsByPlantAndType(plantId, logType);
-    } else {
-      logs = await _db!.getLogsByPlantAndType(plantId, logType);
-    }
+    final logs = await _db.getLogsByPlantAndType(plantId, logType);
 
     return logs.where((log) {
       return log.date.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
@@ -600,11 +490,7 @@ class PlantProvider with ChangeNotifier {
   ) async {
     final logs = await getLogsForDate(plantId, logType, date);
     for (final log in logs) {
-      if (kIsWeb) {
-        await _web!.deleteLog(log.id);
-      } else {
-        await _db!.deleteLog(log.id);
-      }
+      await _db.deleteLog(log.id);
     }
   }
 
@@ -624,20 +510,12 @@ class PlantProvider with ChangeNotifier {
     String plantId,
     LogType logType,
   ) async {
-    if (kIsWeb) {
-      return await _web!.getLogsByPlantAndType(plantId, logType);
-    } else {
-      return await _db!.getLogsByPlantAndType(plantId, logType);
-    }
+    return _db.getLogsByPlantAndType(plantId, logType);
   }
 
   /// 指定植物の全種別ログを1クエリで取得する（水やりログ画面の高速化用）。
   Future<List<LogEntry>> getAllLogsForPlant(String plantId) async {
-    if (kIsWeb) {
-      return await _web!.getLogsByPlant(plantId);
-    } else {
-      return await _db!.getLogsByPlant(plantId);
-    }
+    return _db.getLogsByPlant(plantId);
   }
 
   /// ログリストから次回水やり日を計算する（DBアクセスなし・同期的）。
@@ -767,11 +645,7 @@ class PlantProvider with ChangeNotifier {
 
   /// 指定IDのログを削除する。
   Future<void> deleteLog(String logId) async {
-    if (kIsWeb) {
-      await _web!.deleteLog(logId);
-    } else {
-      await _db!.deleteLog(logId);
-    }
+    await _db.deleteLog(logId);
   }
 
   /// すべての植物の水やり間隔を指定日数に一括設定する。
@@ -781,11 +655,7 @@ class PlantProvider with ChangeNotifier {
         wateringIntervalDays: days,
         updatedAt: DateTime.now(),
       );
-      if (kIsWeb) {
-        await _web!.updatePlant(updated);
-      } else {
-        await _db!.updatePlant(updated);
-      }
+      await _db.updatePlant(updated);
     }
     await loadPlants();
   }
@@ -800,11 +670,7 @@ class PlantProvider with ChangeNotifier {
         wateringIntervalDays: newDays,
         updatedAt: DateTime.now(),
       );
-      if (kIsWeb) {
-        await _web!.updatePlant(updated);
-      } else {
-        await _db!.updatePlant(updated);
-      }
+      await _db.updatePlant(updated);
     }
     await loadPlants();
   }
