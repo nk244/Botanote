@@ -19,6 +19,11 @@ class PlantProvider with ChangeNotifier {
 
   List<Plant> _plants = [];
   bool _isLoading = false;
+
+  /// true になると loadPlants() が一度以上完了したことを示す。
+  /// 初回起動時の「空リスト一瞬表示」を防ぐために使用する。
+  bool _isInitialized = false;
+
   final Map<String, DateTime?> _nextWateringCache = {};
 
   /// カレンダー表示用：ログが存在する日付のセット（時刻なし）
@@ -26,6 +31,11 @@ class PlantProvider with ChangeNotifier {
 
   List<Plant> get plants => _plants;
   bool get isLoading => _isLoading;
+
+  /// loadPlants() が一度以上正常完了した場合 true。
+  /// 初回起動ローディング中は false のままになる。
+  bool get isInitialized => _isInitialized;
+
   Set<DateTime> get logDates => _logDatesCache;
 
   /// 植物一覧をストレージから再読み込み、キャッシュを更新する。
@@ -55,6 +65,7 @@ class PlantProvider with ChangeNotifier {
       debugPrint('Error loading plants: $e');
     } finally {
       _isLoading = false;
+      _isInitialized = true;
       notifyListeners();
     }
   }

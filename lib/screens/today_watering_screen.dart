@@ -621,9 +621,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final plantProvider = context.read<PlantProvider>();
     final plants = plantProvider.plants;
 
-    // 植物リストがロード中の場合はキャッシュせずに空データを返す。
+    // 植物リストがロード中、または未初期化の場合はキャッシュせずに空データを返す。
     // loadPlants() 完了前にキャッシュされると空データが表示され続けるため。
-    if (plantProvider.isLoading) {
+    if (plantProvider.isLoading || !plantProvider.isInitialized) {
       return _DatePageData(
         logStatus: DailyLogStatus(
           watered: {},
@@ -704,7 +704,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           key: ValueKey('${date.millisecondsSinceEpoch}_$_refreshKey'),
           future: _loadDatePageData(date),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
+            // 未初期化中（初回loadPlants完了前）またはデータ待ちはスピナー表示
+            if (!snapshot.hasData || !plantProvider.isInitialized) {
               return Column(
                 children: [
                   _buildDateHeader(date, isToday),
