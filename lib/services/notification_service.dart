@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,7 +26,6 @@ class NotificationService {
 
   /// 初期化。main() で await して呼ぶ。
   Future<void> initialize() async {
-    if (kIsWeb) return;
     if (_initialized) return;
 
     tz.initializeTimeZones();
@@ -64,8 +63,6 @@ class NotificationService {
 
   /// 通知パーミッションをリクエストする。
   Future<bool> requestPermission() async {
-    if (kIsWeb) return false;
-
     // Android 13+
     final androidImpl = _plugin
         .resolvePlatformSpecificImplementation<
@@ -100,7 +97,6 @@ class NotificationService {
     required int hour,
     required int minute,
   }) async {
-    if (kIsWeb) return;
     if (!_initialized) await initialize();
 
     await cancelDailyWateringReminder();
@@ -185,8 +181,6 @@ class NotificationService {
     int? hour,
     int? minute,
   }) async {
-    if (kIsWeb) return;
-
     // 通知時刻が未指定の場合は SharedPreferences から取得
     int notifHour = hour ?? 9;
     int notifMinute = minute ?? 0;
@@ -316,7 +310,6 @@ class NotificationService {
 
   /// 水やり通知をキャンセルする。
   Future<void> cancelDailyWateringReminder() async {
-    if (kIsWeb) return;
     await _plugin.cancel(id: _dailyWateringNotificationId);
   }
 }

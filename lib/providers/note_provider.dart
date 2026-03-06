@@ -1,18 +1,13 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:uuid/uuid.dart';
 import '../models/note.dart';
 import '../services/database_service.dart';
-import '../services/web_storage_service.dart';
 
 /// ノートデータを管理する Provider。
 ///
-/// [DatabaseService](モバイル) または [WebStorageService](Web) を介して永続化する。
+/// [DatabaseService] を介して SQLite に永続化する。
 class NoteProvider with ChangeNotifier {
-  /// モバイル環境用 DBサービス（Web時は null）
-  final DatabaseService? _db = kIsWeb ? null : DatabaseService();
-
-  /// Web 環境用ストレージ（非 Web 時は null）
-  final WebStorageService? _web = kIsWeb ? WebStorageService() : null;
+  final DatabaseService _db = DatabaseService();
 
   List<Note> _notes = [];
   bool _isLoading = false;
@@ -26,12 +21,7 @@ class NoteProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      if (kIsWeb) {
-        final maps = await _web!.getAllNotes();
-        _notes = maps.map((m) => Note.fromMap(Map<String, dynamic>.from(m))).toList();
-      } else {
-        _notes = await _db!.getAllNotes();
-      }
+      _notes = await _db.getAllNotes();
     } catch (e) {
       debugPrint('ノート読み込みエラー: $e');
     } finally {
@@ -60,33 +50,19 @@ class NoteProvider with ChangeNotifier {
       createdAt: createdAt ?? now,
       updatedAt: now,
     );
-
-    if (kIsWeb) {
-      await _web!.insertNote(note);
-    } else {
-      await _db!.insertNote(note);
-    }
-
+    await _db.insertNote(note);
     await loadNotes();
   }
 
   /// 既存のノートを更新する。
   Future<void> updateNote(Note note) async {
-    if (kIsWeb) {
-      await _web!.updateNote(note);
-    } else {
-      await _db!.updateNote(note);
-    }
+    await _db.updateNote(note);
     await loadNotes();
   }
 
   /// 指定IDのノートを削除する。
   Future<void> deleteNote(String id) async {
-    if (kIsWeb) {
-      await _web!.deleteNote(id);
-    } else {
-      await _db!.deleteNote(id);
-    }
+    await _db.deleteNote(id);
     await loadNotes();
   }
 }
