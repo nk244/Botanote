@@ -56,8 +56,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       setState(() {
         _refreshKey++;
       });
-      // 初期表示時に今日を中心に±2日分をプリロード
-      _preloadRange(_selectedDate);
+      // 初期表示時：選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+      await _loadSelectedDateFirst(_selectedDate);
     });
   }
 
@@ -73,11 +73,23 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     super.didUpdateWidget(oldWidget);
   }
 
-  /// 指定日を中心に±2日分（計5日）をバックグラウンドでプリロードする。
-  void _preloadRange(DateTime center) {
+  /// 選択日のデータを優先ロードし、その後±2日分をバックグラウンドでプリロードする。
+  ///
+  /// 選択日はキャッシュヒット確認後、ミスなら先にawaitでロードしてからsetStateで
+  /// 画面を更新する。±2日分は後からバックグラウンドで実行する。
+  Future<void> _loadSelectedDateFirst(DateTime center) async {
+    // 選択日がキャッシュにない場合は優先的にロード
+    final centerKey =
+        '${AppDateUtils.getDateOnly(center).millisecondsSinceEpoch}_$_refreshKey';
+    if (!_pageDataCache.containsKey(centerKey)) {
+      await _loadDatePageData(center);
+      // ロード完了後に再描画して即座に反映する
+      if (mounted) setState(() {});
+    }
+    // 前後±2日分（選択日除く）をバックグラウンドでプリロード
     for (int i = -2; i <= 2; i++) {
+      if (i == 0) continue;
       final date = AppDateUtils.getDateOnly(center.add(Duration(days: i)));
-      // awaitしない（バックグラウンド実行）
       _loadDatePageData(date).ignore();
     }
   }
@@ -510,8 +522,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = focusedDay;
                   _selectedPlantIds.clear();
                 });
-                // 日付選択時に前後2日分をプリロード
-                _preloadRange(_selectedDate);
+                // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+                _loadSelectedDateFirst(_selectedDate).ignore();
               },
               onPageChanged: (focusedDay) {
                 setState(() {
@@ -565,8 +577,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           _selectedDate = newDate;
           _selectedPlantIds.clear();
         });
-        // スワイプ時に前後2日分をバックグラウンドでプリロード
-        _preloadRange(newDate);
+        // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+        _loadSelectedDateFirst(newDate).ignore();
       },
       itemBuilder: (context, index) {
         final diff = index - _initialPage;
@@ -611,19 +623,38 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     final nextFertilizerDateCache = <String, DateTime?>{};
     final nextVitalizerDateCache = <String, DateTime?>{};
 
+    // 植物1件あたり1クエリ（全種別ログ一括取得）で計算する
+    final startOfDay = AppDateUtils.getDateOnly(date);
+    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
     for (final plant in plants) {
-      nextWateringDateCache[plant.id] =
-          await plantProvider.calculateNextWateringDate(plant.id);
+      // 全ログを1回のDBクエリで取得し、種別ごとに振り分ける
+      final allLogs = await plantProvider.getAllLogsForPlant(plant.id);
+      final wateringLogs =
+          allLogs.where((l) => l.type == LogType.watering).toList();
+      final fertLogs =
+          allLogs.where((l) => l.type == LogType.fertilizer).toList();
+      final vitLogs =
+          allLogs.where((l) => l.type == LogType.vitalizer).toList();
+
+      // 次回予定日はDBアクセスなしで同期計算
+      final nextWatering =
+          plantProvider.calcNextWateringDateFromLogs(plant, wateringLogs);
+      nextWateringDateCache[plant.id] = nextWatering;
       nextFertilizerDateCache[plant.id] =
-          await plantProvider.calculateNextFertilizerDate(plant.id);
+          plantProvider.calcNextFertilizerDateFromLogs(
+              plant, fertLogs, wateringLogs, nextWatering);
       nextVitalizerDateCache[plant.id] =
-          await plantProvider.calculateNextVitalizerDate(plant.id);
-      wateredMap[plant.id] =
-          await plantProvider.hasLogOnDate(plant.id, LogType.watering, date);
-      fertilizedMap[plant.id] =
-          await plantProvider.hasLogOnDate(plant.id, LogType.fertilizer, date);
-      vitalizedMap[plant.id] =
-          await plantProvider.hasLogOnDate(plant.id, LogType.vitalizer, date);
+          plantProvider.calcNextVitalizerDateFromLogs(
+              plant, vitLogs, wateringLogs, nextWatering);
+
+      // 指定日のログ有無を判定
+      bool hasOnDate(List<LogEntry> logs) => logs.any((l) =>
+          !l.date.isBefore(startOfDay) &&
+          l.date.isBefore(endOfDay.add(const Duration(seconds: 1))));
+      wateredMap[plant.id] = hasOnDate(wateringLogs);
+      fertilizedMap[plant.id] = hasOnDate(fertLogs);
+      vitalizedMap[plant.id] = hasOnDate(vitLogs);
     }
 
     final data = _DatePageData(
@@ -714,8 +745,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = prev;
                   _selectedPlantIds.clear();
                 });
-                // 前日移動時にプリロード
-                _preloadRange(prev);
+                // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+                _loadSelectedDateFirst(prev).ignore();
               } else {
                 _pageController.animateToPage(
                   _pageController.page!.round() - 1,
@@ -753,8 +784,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
                   _focusedDay = next;
                   _selectedPlantIds.clear();
                 });
-                // 翻日移動時にプリロード
-                _preloadRange(next);
+                // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+                _loadSelectedDateFirst(next).ignore();
               } else {
                 _pageController.animateToPage(
                   _pageController.page!.round() + 1,
@@ -1324,14 +1355,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   }
 
   Future<void> _navigateToPlantDetail(Plant plant) async {
-    await Navigator.of(context).push(
+    // データが変更された場合に true が返る
+    final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         // 水やりログ画面からの遷移はログタブ（index=1）を直接開く (#127)
         builder: (context) => PlantDetailScreen(plant: plant, initialTabIndex: 1),
       ),
     );
-    // 詳細画面から戻った後にFutureBuilderを再実行して最新データを反映する
-    if (mounted) {
+    // データ変更があった場合のみ再ロードする（ログを見ただけなら不要）
+    if (mounted && changed == true) {
       await context.read<PlantProvider>().loadPlants();
       setState(() {
         _refreshKey++;

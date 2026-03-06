@@ -339,8 +339,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         builder: (context) => AddPlantScreen(plant: widget.plant),
       ),
     );
+    // 編集後は前の画面にデータ変更があったことを通知する
     if (mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     }
   }
 
@@ -631,6 +632,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         await context.read<PlantProvider>().deleteLog(log.id); // ignore: use_build_context_synchronously
       }
       await _loadData();
+      // ログ削除後は前の画面にデータ変更を通知（pop は行わない）
+      // pop(true) は _navigateToEdit のみ（画面を閉じる操作）で行う
     }
   }
 
