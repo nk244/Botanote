@@ -620,6 +620,140 @@ class PlantProvider with ChangeNotifier {
     }
   }
 
+  /// 指定植物の全種別ログを1クエリで取得する（水やりログ画面の高速化用）。
+  Future<List<LogEntry>> getAllLogsForPlant(String plantId) async {
+    if (kIsWeb) {
+      return await _web!.getLogsByPlant(plantId);
+    } else {
+      return await _db!.getLogsByPlant(plantId);
+    }
+  }
+
+  /// ログリストから次回水やり日を計算する（DBアクセスなし・同期的）。
+  ///
+  /// [plant] の [wateringIntervalDays] が null の場合は null を返す。
+  DateTime? calcNextWateringDateFromLogs(
+    Plant plant,
+    List<LogEntry> wateringLogs,
+  ) {
+    if (plant.wateringIntervalDays == null) return null;
+    if (wateringLogs.isEmpty) {
+      // ログなしの場合は購入日または登録日から計算
+      final baseDate = plant.purchaseDate ?? plant.createdAt;
+      return baseDate.add(Duration(days: plant.wateringIntervalDays!));
+    }
+    final sorted = [...wateringLogs]..sort((a, b) => b.date.compareTo(a.date));
+    return sorted.first.date.add(Duration(days: plant.wateringIntervalDays!));
+  }
+
+  /// ログリストから次回肥料予定日を計算する（DBアクセスなし・同期的）。
+  ///
+  /// [nextWateringDate] は起算日3（水やり予定日）として使用する。
+  DateTime? calcNextFertilizerDateFromLogs(
+    Plant plant,
+    List<LogEntry> fertLogs,
+    List<LogEntry> wateringLogs,
+    DateTime? nextWateringDate,
+  ) {
+    // 日数指定の場合
+    if (plant.fertilizerIntervalDays != null) {
+      if (fertLogs.isNotEmpty) {
+        final sorted = [...fertLogs]..sort((a, b) => b.date.compareTo(a.date));
+        return sorted.first.date
+            .add(Duration(days: plant.fertilizerIntervalDays!));
+      }
+      if (wateringLogs.isNotEmpty) {
+        final sorted = [...wateringLogs]
+          ..sort((a, b) => b.date.compareTo(a.date));
+        return sorted.first.date
+            .add(Duration(days: plant.fertilizerIntervalDays!));
+      }
+      if (nextWateringDate != null) {
+        return nextWateringDate
+            .add(Duration(days: plant.fertilizerIntervalDays!));
+      }
+      return null;
+    }
+    // 水やりN回に1回の場合
+    if (plant.fertilizerEveryNWaterings != null &&
+        plant.wateringIntervalDays != null) {
+      final n = plant.fertilizerEveryNWaterings!;
+      final DateTime? lastFertDate = fertLogs.isEmpty
+          ? null
+          : ([...fertLogs]..sort((a, b) => b.date.compareTo(a.date))).first.date;
+      final wateringsAfter = lastFertDate == null
+          ? ([...wateringLogs]..sort((a, b) => a.date.compareTo(b.date)))
+          : ([...wateringLogs]
+                .where((l) => l.date.isAfter(lastFertDate))
+                .toList()
+              ..sort((a, b) => a.date.compareTo(b.date)));
+      final completedInCurrentGroup = wateringsAfter.length % n;
+      final remaining = completedInCurrentGroup == 0
+          ? n
+          : n - completedInCurrentGroup;
+      final baseDate = wateringsAfter.isNotEmpty
+          ? wateringsAfter.last.date
+          : (lastFertDate ?? (nextWateringDate ?? DateTime.now()));
+      return baseDate
+          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+    }
+    return null;
+  }
+
+  /// ログリストから次回活力剤予定日を計算する（DBアクセスなし・同期的）。
+  ///
+  /// [nextWateringDate] は起算日3（水やり予定日）として使用する。
+  DateTime? calcNextVitalizerDateFromLogs(
+    Plant plant,
+    List<LogEntry> vitLogs,
+    List<LogEntry> wateringLogs,
+    DateTime? nextWateringDate,
+  ) {
+    // 日数指定の場合
+    if (plant.vitalizerIntervalDays != null) {
+      if (vitLogs.isNotEmpty) {
+        final sorted = [...vitLogs]..sort((a, b) => b.date.compareTo(a.date));
+        return sorted.first.date
+            .add(Duration(days: plant.vitalizerIntervalDays!));
+      }
+      if (wateringLogs.isNotEmpty) {
+        final sorted = [...wateringLogs]
+          ..sort((a, b) => b.date.compareTo(a.date));
+        return sorted.first.date
+            .add(Duration(days: plant.vitalizerIntervalDays!));
+      }
+      if (nextWateringDate != null) {
+        return nextWateringDate
+            .add(Duration(days: plant.vitalizerIntervalDays!));
+      }
+      return null;
+    }
+    // 水やりN回に1回の場合
+    if (plant.vitalizerEveryNWaterings != null &&
+        plant.wateringIntervalDays != null) {
+      final n = plant.vitalizerEveryNWaterings!;
+      final DateTime? lastVitDate = vitLogs.isEmpty
+          ? null
+          : ([...vitLogs]..sort((a, b) => b.date.compareTo(a.date))).first.date;
+      final wateringsAfter = lastVitDate == null
+          ? ([...wateringLogs]..sort((a, b) => a.date.compareTo(b.date)))
+          : ([...wateringLogs]
+                .where((l) => l.date.isAfter(lastVitDate))
+                .toList()
+              ..sort((a, b) => a.date.compareTo(b.date)));
+      final completedInCurrentGroup = wateringsAfter.length % n;
+      final remaining = completedInCurrentGroup == 0
+          ? n
+          : n - completedInCurrentGroup;
+      final baseDate = wateringsAfter.isNotEmpty
+          ? wateringsAfter.last.date
+          : (lastVitDate ?? (nextWateringDate ?? DateTime.now()));
+      return baseDate
+          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+    }
+    return null;
+  }
+
   /// 指定IDのログを削除する。
   Future<void> deleteLog(String logId) async {
     if (kIsWeb) {
