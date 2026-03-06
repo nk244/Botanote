@@ -56,11 +56,24 @@ class PlantImageWidget extends StatelessWidget {
       return _buildPlaceholder(context, borderRadius);
     }
 
+    // cacheWidth/cacheHeightで縮小デコードし、frameBuilderでフェードイン表示する。
+    // プレースホルダーを先に出してテキスト表示をブロックしないようにする。
     return Image.file(
       file,
       width: width,
       height: height,
       fit: BoxFit.cover,
+      // リスト表示サイズに合わせて縮小デコードし、メモリ・描画負荷を削減
+      cacheWidth: (width * 3).toInt(),
+      cacheHeight: (height * 3).toInt(),
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) {
+          // キャッシュ済みまたは読み込み完了: そのまま表示
+          return child;
+        }
+        // 読み込み中: プレースホルダーを表示
+        return _buildPlaceholder(context, borderRadius);
+      },
     );
   }
 
