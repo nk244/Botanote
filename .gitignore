@@ -34,6 +34,9 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Flutter IDE メタデータ（環境依存のため管理対象外）
+.metadata
+
 # Symbolication related
 app.*.symbols
 
@@ -45,15 +48,8 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Web build artifacts
-/web/flutter_service_worker.js
-/web/flutter_service_worker.js.map
-/web/version.json
-/web/assets/AssetManifest.json
-/web/assets/FontManifest.json
-/web/assets/NOTICES
-/web/assets/shaders/
-/web/canvaskit/
+# Android ローカル環境設定（SDK パスなど環境依存のため管理対象外）
+android/local.properties
 
 # Generated files
 *.g.dart
@@ -73,6 +69,10 @@ app.*.map.json
 # OS specific files
 Thumbs.db
 desktop.ini
+
+# 一時的な出力・解析結果ファイル
+analyze_result.txt
+*.analyze_result.txt
 
 # GitHub Copilot instructions (プロジェクト固有の設定のためバージョン管理対象外)
 .github/
