@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import '../providers/plant_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
 
@@ -237,13 +237,11 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   }
 
   Widget _buildImageThumb(String path) {
-    final widget = kIsWeb
-        ? Image.network(path, width: 72, height: 72, fit: BoxFit.cover)
-        : Image.file(File(path), width: 72, height: 72, fit: BoxFit.cover);
+    final image = Image.file(File(path), width: 72, height: 72, fit: BoxFit.cover);
 
     return Stack(
       children: [
-        ClipRRect(borderRadius: BorderRadius.circular(8), child: widget),
+        ClipRRect(borderRadius: BorderRadius.circular(8), child: image),
         Positioned(
           right: 0,
           top: 0,
@@ -257,10 +255,15 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   }
 
   Future<void> _selectPlants(BuildContext context, PlantProvider plantProv) async {
-    // Ensure plants are loaded
+    // 植物データが未ロードの場合は先にロードする
     if (plantProv.plants.isEmpty) await plantProv.loadPlants();
 
-    final allPlants = plantProv.plants;
+    // ソート設定に従って並べた植物リストを取得する
+    final settings = context.read<SettingsProvider>(); // ignore: use_build_context_synchronously
+    final allPlants = plantProv.getSortedPlants(
+      settings.plantSortOrder,
+      settings.customSortOrder,
+    );
     final tempSelected = List<String>.from(_selectedPlantIds);
 
     await showDialog<void>(
