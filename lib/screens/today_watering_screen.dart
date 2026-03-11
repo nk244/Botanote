@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -35,6 +36,10 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
 
   // PlantProviderのisLoading前回値。loadPlants()完了検知に使用する。
   bool _wasLoading = false;
+
+  // SettingsProviderのソート設定前回値。ソート変更検知に使用する。
+  PlantSortOrder? _prevSortOrder;
+  List<String> _prevCustomOrder = [];
 
   // 日付ページデータのキャッシュ。キーは '${date.ms}_$_refreshKey'。
   // _refreshKey が変わるとキーが変わり、古いエントリは自然に参照されなくなる。
@@ -90,6 +95,22 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       _loadSelectedDateFirst(_selectedDate).ignore();
     }
     _wasLoading = isLoading;
+
+    // SettingsProvider のソート設定変更（ソート順 or カスタム順の変化）を検知して
+    // キャッシュをリセットし、新しいソート順で再プリロードする。
+    final settings = context.read<SettingsProvider>();
+    final currentSortOrder = settings.plantSortOrder;
+    final currentCustomOrder = settings.customSortOrder;
+    if (_prevSortOrder != null &&
+        (_prevSortOrder != currentSortOrder ||
+            !listEquals(_prevCustomOrder, currentCustomOrder))) {
+      setState(() {
+        _refreshKey++;
+      });
+      _loadSelectedDateFirst(_selectedDate).ignore();
+    }
+    _prevSortOrder = currentSortOrder;
+    _prevCustomOrder = List<String>.from(currentCustomOrder);
   }
 
   /// 選択日のデータを優先ロードし、その後±2日分をバックグラウンドでプリロードする。
@@ -1096,16 +1117,21 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
 
   Future<void> _showUnscheduledWateringDialog() async {
     final plantProvider = context.read<PlantProvider>();
-    final allPlants = plantProvider.plants;
+    final settings = context.read<SettingsProvider>();
+    // ソート設定に従って並べた全植物リストを取得する
+    final sortedPlants = plantProvider.getSortedPlants(
+      settings.plantSortOrder,
+      settings.customSortOrder,
+    );
     // 現在の日付データを直接DBから取得して未予定植物を判定する
     final data = await _loadDatePageData(_selectedDate);
     final plantsForDate = _getPlantsForDate(
-      allPlants, _selectedDate, data.logStatus,
+      sortedPlants, _selectedDate, data.logStatus,
       data.nextWateringDateCache, data.nextFertilizerDateCache, data.nextVitalizerDateCache,
     ).toSet();
-    
-    // Get plants not in today's list
-    final unscheduledPlants = allPlants
+
+    // ソート順を保持したまま未予定植物を抽出する
+    final unscheduledPlants = sortedPlants
         .where((plant) => !plantsForDate.contains(plant))
         .toList();
     
