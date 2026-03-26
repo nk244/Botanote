@@ -63,9 +63,12 @@ class PlantImageWidget extends StatelessWidget {
       width: width,
       height: height,
       fit: BoxFit.cover,
-      // リスト表示サイズに合わせて縮小デコードし、メモリ・描画負荷を削減
-      cacheWidth: (width * 3).toInt(),
-      cacheHeight: (height * 3).toInt(),
+      // リスト表示サイズに合わせて縮小デコードし、メモリ・描画負荷を削減。
+      // double.infinity など有限値以外の場合はキャッシュサイズを省略する。
+      cacheWidth: width.isFinite ? (width * 3).toInt() : null,
+      cacheHeight: height.isFinite ? (height * 3).toInt() : null,
+      errorBuilder: (context, error, stackTrace) =>
+          _buildPlaceholder(context, borderRadius),
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded || frame != null) {
           // キャッシュ済みまたは読み込み完了: そのまま表示
