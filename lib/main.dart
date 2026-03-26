@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -32,8 +33,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ja');
 
-  // 通知サービスを初期化
-  await NotificationService().initialize();
+  // 通知サービスを初期化（初期化失敗時はアプリを継続起動する）
+  try {
+    await NotificationService().initialize();
+  } catch (e) {
+    debugPrint('NotificationService initialization failed: $e');
+  }
 
   // workmanager を初期化し、毎日バックグラウンドで翌日の予定チェックを行う
   await Workmanager().initialize(callbackDispatcher);

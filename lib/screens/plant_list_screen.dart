@@ -367,11 +367,13 @@ class _PlantGridCard extends StatelessWidget {
             // 植物画像（カード上部 3/5 を占める）
             Expanded(
               flex: 3,
-              child: PlantImageWidget(
-                plant: plant,
-                width: double.infinity,
-                height: double.infinity,
-                borderRadius: BorderRadius.zero,
+              child: LayoutBuilder(
+                builder: (context, constraints) => PlantImageWidget(
+                  plant: plant,
+                  width: constraints.maxWidth,
+                  height: constraints.maxHeight,
+                  borderRadius: BorderRadius.zero,
+                ),
               ),
             ),
             // 植物名・品種（カード下部 2/5）
