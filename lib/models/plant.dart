@@ -102,7 +102,7 @@ class Plant {
     DateTime? purchaseDate,
     String? purchaseLocation,
     String? imagePath,
-    int? wateringIntervalDays,
+    Object? wateringIntervalDays = _sentinel,
     Object? fertilizerIntervalDays = _sentinel,
     Object? fertilizerEveryNWaterings = _sentinel,
     Object? vitalizerIntervalDays = _sentinel,
@@ -116,7 +116,9 @@ class Plant {
       purchaseDate: purchaseDate ?? this.purchaseDate,
       purchaseLocation: purchaseLocation ?? this.purchaseLocation,
       imagePath: imagePath ?? this.imagePath,
-      wateringIntervalDays: wateringIntervalDays ?? this.wateringIntervalDays,
+      wateringIntervalDays: wateringIntervalDays == _sentinel
+          ? this.wateringIntervalDays
+          : wateringIntervalDays as int?,
       fertilizerIntervalDays: fertilizerIntervalDays == _sentinel
           ? this.fertilizerIntervalDays
           : fertilizerIntervalDays as int?,

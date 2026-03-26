@@ -726,7 +726,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           future: _loadDatePageData(date),
           builder: (context, snapshot) {
             // 未初期化中（初回loadPlants完了前）またはデータ待ちはスピナー表示
-            if (!snapshot.hasData || !plantProvider.isInitialized) {
+            // isInitialized を先に評価することで、_loadDatePageData が未初期化中に
+            // 空データを即返した場合（snapshot.hasData=true）でもスピナーが表示される。
+            if (!plantProvider.isInitialized || !snapshot.hasData) {
               return Column(
                 children: [
                   _buildDateHeader(date, isToday),
