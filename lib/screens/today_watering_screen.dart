@@ -280,24 +280,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     _showSuccessMessage(_buildLogMessage(count));
   }
 
-  Future<void> _recordLog(
-    PlantProvider provider,
-    String plantId,
-    LogType logType,
-  ) async {
-    switch (logType) {
-      case LogType.watering:
-        await provider.recordWatering(plantId, _selectedDate, null);
-        break;
-      case LogType.fertilizer:
-        await provider.recordFertilizer(plantId, _selectedDate, null);
-        break;
-      case LogType.vitalizer:
-        await provider.recordVitalizer(plantId, _selectedDate, null);
-        break;
-    }
-  }
-
   String _buildLogMessage(int count) {
     final actionNames = _selectedBulkLogTypes
         .map((type) => _getLogTypeName(type))
@@ -1146,31 +1128,33 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       return;
     }
 
-    final selectedPlant = await showDialog<Plant>(
+    final selectedPlants = await showDialog<List<Plant>>(
       context: context,
       builder: (context) => _UnscheduledWateringDialog(
         plants: unscheduledPlants,
       ),
     );
 
-    if (selectedPlant != null && mounted) {
-      // Show log type selection dialog
+    if (selectedPlants != null && selectedPlants.isNotEmpty && mounted) {
+      // ログ種別選択ダイアログを表示
       final selectedLogTypes = await showDialog<Set<LogType>>(
         context: context,
         builder: (context) => _LogTypeSelectionDialog(),
       );
 
       if (selectedLogTypes != null && selectedLogTypes.isNotEmpty && mounted) {
-        // Record selected log types for the plant
-        for (final logType in selectedLogTypes) {
-          await _recordLog(plantProvider, selectedPlant.id, logType);
-        }
+        // 選択した全植物 × 全ログ種別を一括登録する
+        final plantIds = selectedPlants.map((p) => p.id).toList();
+        await plantProvider.bulkRecordLogs(plantIds, selectedLogTypes.toList(), _selectedDate);
         await _refreshAfterLogChange();
-        
+
         final logTypeNames = selectedLogTypes
             .map((type) => _getLogTypeName(type))
             .join('・');
-        _showSuccessMessage('${selectedPlant.name}に$logTypeNamesを記録しました');
+        final plantLabel = selectedPlants.length == 1
+            ? selectedPlants.first.name
+            : '${selectedPlants.length}件の植物';
+        _showSuccessMessage('$plantLabelに$logTypeNamesを記録しました');
       }
     }
   }
@@ -1537,7 +1521,7 @@ class _LogTypeSelectionDialogState extends State<_LogTypeSelectionDialog> {
   }
 }
 
-/// Dialog for selecting unscheduled plants to water
+/// 未予定植物の複数選択ダイアログ
 class _UnscheduledWateringDialog extends StatefulWidget {
   final List<Plant> plants;
 
@@ -1549,6 +1533,7 @@ class _UnscheduledWateringDialog extends StatefulWidget {
 
 class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> {
   String _searchQuery = '';
+  final Set<String> _selectedIds = {};
 
   @override
   Widget build(BuildContext context) {
@@ -1562,7 +1547,7 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
       title: const Text('水やり記録をつける'),
       content: SizedBox(
         width: double.maxFinite,
-        height: 400, // ダイアログの最大高さを制限してRenderFlexオーバーフロー回避
+        height: 400,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1578,7 +1563,21 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
                 });
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            // 選択件数表示
+            if (_selectedIds.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_selectedIds.length}件選択中',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
             Expanded(
               child: filteredPlants.isEmpty
                   ? const Center(child: Text('植物が見つかりません'))
@@ -1587,11 +1586,24 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
                       itemCount: filteredPlants.length,
                       itemBuilder: (context, index) {
                         final plant = filteredPlants[index];
-                        return ListTile(
-                          leading: PlantImageWidget(plant: plant, width: 40, height: 40),
+                        final isChecked = _selectedIds.contains(plant.id);
+                        return CheckboxListTile(
+                          value: isChecked,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedIds.add(plant.id);
+                              } else {
+                                _selectedIds.remove(plant.id);
+                              }
+                            });
+                          },
+                          secondary: PlantImageWidget(
+                              plant: plant, width: 40, height: 40),
                           title: Text(plant.name),
-                          subtitle: plant.variety != null ? Text(plant.variety!) : null,
-                          onTap: () => Navigator.of(context).pop(plant),
+                          subtitle:
+                              plant.variety != null ? Text(plant.variety!) : null,
+                          controlAffinity: ListTileControlAffinity.leading,
                         );
                       },
                     ),
@@ -1603,6 +1615,18 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          // 未選択時は非活性
+          onPressed: _selectedIds.isEmpty
+              ? null
+              : () {
+                  final selected = widget.plants
+                      .where((p) => _selectedIds.contains(p.id))
+                      .toList();
+                  Navigator.of(context).pop(selected);
+                },
+          child: const Text('記録する'),
         ),
       ],
     );
