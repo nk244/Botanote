@@ -159,6 +159,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('ZIP または JSON ファイルからデータを復元'),
             onTap: _isImporting ? null : () => _handleImport(context),
           ),
+          // AI機能設定
+          _buildSectionHeader(context, 'AI機能'),
+          Consumer<SettingsProvider>(
+            builder: (context, settings, _) {
+              return _AiApiKeyTile(
+                initialValue: settings.geminiApiKey,
+                onSaved: (key) => settings.setGeminiApiKey(key),
+              );
+            },
+          ),
           const Divider(),
 
           // About
@@ -476,5 +486,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case AppTheme.orange:
         return Colors.orange;
     }
+  }
+}
+
+/// APIキーの入力・保存を行う独立ウィジェット。
+class _AiApiKeyTile extends StatefulWidget {
+  final String initialValue;
+  final Future<void> Function(String) onSaved;
+
+  const _AiApiKeyTile({required this.initialValue, required this.onSaved});
+
+  @override
+  State<_AiApiKeyTile> createState() => _AiApiKeyTileState();
+}
+
+class _AiApiKeyTileState extends State<_AiApiKeyTile> {
+  late final TextEditingController _controller;
+  bool _obscure = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSaved(_controller.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('APIキーを保存しました')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 説明文
+          Text(
+            'Gemini APIキーを入力すると、植物の自動識別・健康診断・パーソナルコーチ機能が利用できます。',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  obscureText: _obscure,
+                  decoration: InputDecoration(
+                    labelText: 'Gemini APIキー',
+                    hintText: 'AIza...',
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _isSaving
+                  ? const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : FilledButton.tonal(
+                      onPressed: _save,
+                      child: const Text('保存'),
+                    ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Google AI Studioへのヒント
+          Text(
+            'APIキーは Google AI Studio (aistudio.google.com) で取得できます。',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

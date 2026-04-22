@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,8 +7,10 @@ import 'package:image_picker/image_picker.dart';
 import 'image_crop_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../providers/plant_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/plant.dart';
 import '../widgets/plant_image_widget.dart';
+import '../services/ai_service.dart';
 
 class AddPlantScreen extends StatefulWidget {
   final Plant? plant;
@@ -174,6 +177,103 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
+  /// 現在選択中の画像をAIに送り植物名・品種名を識別して入力欄に反映する。
+  Future<void> _identifyWithAi() async {
+    // 画像バイト列を取得する
+    Uint8List? bytes;
+    if (_imageBytes != null) {
+      bytes = _imageBytes;
+    } else if (_imagePath != null && !kIsWeb) {
+      try {
+        bytes = await File(_imagePath!).readAsBytes();
+      } catch (_) {
+        bytes = null;
+      }
+    }
+
+    if (bytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('識別する画像がありません')),
+        );
+      }
+      return;
+    }
+
+    final apiKey = context.read<SettingsProvider>().geminiApiKey;
+    setState(() => _isLoading = true);
+    try {
+      final result = await AiService().identifyPlant(
+        imageBytes: bytes,
+        apiKey: apiKey,
+      );
+      if (!mounted) return;
+      if (result.isSuccessful) {
+        // 識別結果をフォームに反映（上書き確認あり）
+        final apply = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('AI識別結果'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('植物名: ${result.name}'),
+                if (result.variety.isNotEmpty) Text('品種: ${result.variety}'),
+                Text('信頼度: ${result.confidenceLabel}'),
+                if (result.notes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(result.notes,
+                      style: Theme.of(ctx).textTheme.bodySmall),
+                ],
+                const SizedBox(height: 8),
+                const Text('この結果をフォームに反映しますか？'),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('キャンセル'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('反映する'),
+              ),
+            ],
+          ),
+        );
+        if (apply == true && mounted) {
+          setState(() {
+            _nameController.text = result.name;
+            if (result.variety.isNotEmpty) {
+              _varietyController.text = result.variety;
+            }
+          });
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result.notes.isNotEmpty ? result.notes : '植物を識別できませんでした')),
+          );
+        }
+      }
+    } on AiServiceException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('識別中にエラーが発生しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _savePlant() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -332,6 +432,17 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                 ),
               ),
             ),
+            // 画像が設定されている場合はAI識別ボタンを表示する
+            if (_imageBytes != null || _imagePath != null) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _identifyWithAi,
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('AIで植物を識別'),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             
             // Plant name

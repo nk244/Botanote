@@ -96,6 +96,8 @@ class AppSettings {
   final LogTypeColors logTypeColors;
   final PlantSortOrder plantSortOrder;
   final List<String> customSortOrder;
+  /// Gemini API キー（AI機能で使用）
+  final String geminiApiKey;
 
   AppSettings({
     this.viewMode = ViewMode.card,
@@ -107,6 +109,7 @@ class AppSettings {
     LogTypeColors? logTypeColors,
     this.plantSortOrder = PlantSortOrder.createdAtAsc,
     this.customSortOrder = const [],
+    this.geminiApiKey = '',
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -120,6 +123,7 @@ class AppSettings {
       'logTypeColors': logTypeColors.toMap(),
       'plantSortOrder': plantSortOrder.name,
       'customSortOrder': customSortOrder,
+      'geminiApiKey': geminiApiKey,
     };
   }
 
@@ -152,6 +156,7 @@ class AppSettings {
       customSortOrder: map['customSortOrder'] != null
           ? List<String>.from(map['customSortOrder'])
           : [],
+      geminiApiKey: map['geminiApiKey'] ?? '',
     );
   }
 
@@ -165,6 +170,7 @@ class AppSettings {
     LogTypeColors? logTypeColors,
     PlantSortOrder? plantSortOrder,
     List<String>? customSortOrder,
+    String? geminiApiKey,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -176,6 +182,7 @@ class AppSettings {
       logTypeColors: logTypeColors ?? this.logTypeColors,
       plantSortOrder: plantSortOrder ?? this.plantSortOrder,
       customSortOrder: customSortOrder ?? this.customSortOrder,
+      geminiApiKey: geminiApiKey ?? this.geminiApiKey,
     );
   }
 }

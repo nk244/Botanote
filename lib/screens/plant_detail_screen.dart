@@ -6,11 +6,13 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
+import '../providers/settings_provider.dart';
 import '../utils/date_utils.dart';
 import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
 import 'note_detail_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../services/ai_service.dart';
 
 /// SliverPersistentHeaderDelegate: TabBarを固定表示するためのデリゲート
 class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
@@ -358,6 +360,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           const SizedBox(height: 16),
           _buildFertilizerInfoCard(),
         ],
+        const SizedBox(height: 16),
+        // AI健康診断ボタン
+        _AiHealthDiagnosisCard(plant: widget.plant),
       ],
     );
   }
@@ -722,3 +727,130 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+/// AI健康診断カードウィジェット。
+///
+/// 症状をテキストで入力し、Gemini APIで診断結果を取得して表示する。
+class _AiHealthDiagnosisCard extends StatefulWidget {
+  final Plant plant;
+
+  const _AiHealthDiagnosisCard({required this.plant});
+
+  @override
+  State<_AiHealthDiagnosisCard> createState() => _AiHealthDiagnosisCardState();
+}
+
+class _AiHealthDiagnosisCardState extends State<_AiHealthDiagnosisCard> {
+  final _symptomController = TextEditingController();
+  bool _isLoading = false;
+  String? _diagnosisResult;
+
+  @override
+  void dispose() {
+    _symptomController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _diagnose() async {
+    if (_symptomController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('症状を入力してください')),
+      );
+      return;
+    }
+
+    final apiKey = context.read<SettingsProvider>().geminiApiKey;
+    setState(() {
+      _isLoading = true;
+      _diagnosisResult = null;
+    });
+
+    try {
+      final result = await AiService().diagnoseHealth(
+        plantName: widget.plant.name,
+        symptomDescription: _symptomController.text.trim(),
+        apiKey: apiKey,
+      );
+      if (mounted) {
+        setState(() => _diagnosisResult = result);
+      }
+    } on AiServiceException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('診断中にエラーが発生しました: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.auto_awesome,
+                    color: Theme.of(context).colorScheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'AI健康診断',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _symptomController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: '例: 葉が黄色くなってきた、元気がない、葉先が枯れている',
+                labelText: '症状を入力',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _isLoading ? null : _diagnose,
+                icon: _isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.search, size: 18),
+                label: Text(_isLoading ? '診断中...' : '診断する'),
+              ),
+            ),
+            if (_diagnosisResult != null) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              Text(
+                '診断結果',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(_diagnosisResult!),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
