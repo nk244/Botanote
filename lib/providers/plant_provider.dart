@@ -1,4 +1,6 @@
-import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
 import 'package:uuid/uuid.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
@@ -41,6 +43,9 @@ class PlantProvider with ChangeNotifier {
     try {
       _plants = await _db.getAllPlants();
 
+      // モバイル環境でファイルパスのままの画像をBase64に移行する（#158対応）
+      await _migrateImagePathsToBase64();
+
       // 次回水やり日キャッシュを更新
       for (var plant in _plants) {
         _nextWateringCache[plant.id] = await calculateNextWateringDate(plant.id);
@@ -56,6 +61,39 @@ class PlantProvider with ChangeNotifier {
       _isLoading = false;
       _isInitialized = true;
       notifyListeners();
+    }
+  }
+
+  /// モバイル環境で imagePath がファイルパスのままの植物を
+  /// Base64 data URL に変換してDBを更新する（一度だけ実行される移行処理）。
+  Future<void> _migrateImagePathsToBase64() async {
+    // Web環境ではファイルシステムにアクセスできないためスキップする
+    if (kIsWeb) return;
+
+    final needsMigration = _plants.where((p) {
+      final path = p.imagePath;
+      // ファイルパスが設定されており、data URL でない場合は移行対象
+      return path != null && !path.startsWith('data:');
+    }).toList();
+
+    if (needsMigration.isEmpty) return;
+
+    for (final plant in needsMigration) {
+      try {
+        final file = File(plant.imagePath!);
+        if (!file.existsSync()) continue;
+        final bytes = await file.readAsBytes();
+        final base64Str = base64Encode(bytes);
+        final dataUrl = 'data:image/jpeg;base64,$base64Str';
+        final migrated = plant.copyWith(imagePath: dataUrl);
+        await _db.updatePlant(migrated);
+        // インメモリのリストも更新する
+        final idx = _plants.indexWhere((p) => p.id == plant.id);
+        if (idx >= 0) _plants[idx] = migrated;
+        debugPrint('画像をBase64に移行しました: ${plant.name}');
+      } catch (e) {
+        debugPrint('画像移行に失敗しました（${plant.name}）: $e');
+      }
     }
   }
 

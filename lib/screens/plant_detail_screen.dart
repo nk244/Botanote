@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -302,17 +303,37 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
   /// 植物画像をWebとモバイルで出し分けて表示する
   Widget _buildFullImage() {
+    final path = widget.plant.imagePath!;
+
+    // Base64 data URL の場合はWeb・モバイル共通でメモリから表示する
+    if (path.startsWith('data:')) {
+      try {
+        final comma = path.indexOf(',');
+        if (comma >= 0) {
+          final bytes = base64Decode(path.substring(comma + 1));
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _buildBrokenImageIcon(context),
+          );
+        }
+      } catch (_) {
+        return _buildBrokenImageIcon(context);
+      }
+    }
+
     if (kIsWeb) {
       return Image.network(
-        widget.plant.imagePath!,
+        path,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) =>
             _buildBrokenImageIcon(context),
       );
     } else {
-      if (File(widget.plant.imagePath!).existsSync()) {
+      if (File(path).existsSync()) {
         return Image.file(
-          File(widget.plant.imagePath!),
+          File(path),
           fit: BoxFit.cover,
         );
       } else {
