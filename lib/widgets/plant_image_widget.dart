@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
@@ -33,10 +34,38 @@ class PlantImageWidget extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: effectiveBorderRadius,
-      child: kIsWeb
-          ? _buildWebImage(context, effectiveBorderRadius)
-          : _buildMobileImage(context, effectiveBorderRadius),
+      // data URL はWeb・モバイル共通で Image.memory() で表示する
+      child: _isDataUrl(_effectiveImagePath!)
+          ? _buildDataUrlImage(context, effectiveBorderRadius)
+          : kIsWeb
+              ? _buildWebImage(context, effectiveBorderRadius)
+              : _buildMobileImage(context, effectiveBorderRadius),
     );
+  }
+
+  /// imagePath が Base64 data URL かどうか判定する。
+  bool _isDataUrl(String path) => path.startsWith('data:');
+
+  /// Base64 data URL を Image.memory() で表示する。
+  Widget _buildDataUrlImage(BuildContext context, BorderRadius borderRadius) {
+    try {
+      // "data:image/jpeg;base64,xxxxx" からbase64部分を抽出する
+      final comma = _effectiveImagePath!.indexOf(',');
+      if (comma < 0) return _buildPlaceholder(context, borderRadius);
+      final bytes = base64Decode(_effectiveImagePath!.substring(comma + 1));
+      return Image.memory(
+        bytes,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        cacheWidth: width.isFinite ? (width * 3).toInt() : null,
+        cacheHeight: height.isFinite ? (height * 3).toInt() : null,
+        errorBuilder: (context, error, stackTrace) =>
+            _buildPlaceholder(context, borderRadius),
+      );
+    } catch (_) {
+      return _buildPlaceholder(context, borderRadius);
+    }
   }
 
   Widget _buildWebImage(BuildContext context, BorderRadius borderRadius) {

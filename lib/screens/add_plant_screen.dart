@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'image_crop_screen.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import '../providers/plant_provider.dart';
 import '../models/plant.dart';
 import '../widgets/plant_image_widget.dart';
@@ -184,11 +185,23 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     try {
       final plantProvider = context.read<PlantProvider>();
 
-      // Web: トリミング済みバイト列を Base64 data URL に変換して imagePath として保存
+      // 画像を Base64 data URL に変換してDBへ保存する（モバイル・Web共通）。
+      // これによりスマホ変更後のバックアップ復元時も画像が失われない。
       String? effectiveImagePath = _imagePath;
-      if (kIsWeb && _imageBytes != null) {
+      if (_imageBytes != null) {
+        // Web・モバイル共通: トリミング済みバイト列を Base64 data URL に変換
         final base64 = base64Encode(_imageBytes!);
         effectiveImagePath = 'data:image/jpeg;base64,$base64';
+      } else if (!kIsWeb && _imagePath != null && !_imagePath!.startsWith('data:')) {
+        // モバイル: ファイルパスの場合はファイルを読み込んでBase64に変換する
+        try {
+          final bytes = await File(_imagePath!).readAsBytes();
+          final base64 = base64Encode(bytes);
+          effectiveImagePath = 'data:image/jpeg;base64,$base64';
+        } catch (e) {
+          // 変換失敗時はファイルパスのまま保持する（後方互換）
+          debugPrint('画像のBase64変換に失敗しました: $e');
+        }
       }
       
       if (widget.plant == null) {
