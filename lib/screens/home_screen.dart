@@ -6,6 +6,7 @@ import '../providers/settings_provider.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
 import 'notes_list_screen.dart';
+import 'ai_coach_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const TodayWateringScreen(),
     const PlantListScreen(),
     const NotesListScreen(),
+    const AiCoachScreen(),
   ];
 
   @override
@@ -69,6 +71,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.note_outlined),
             selectedIcon: Icon(Icons.note),
             label: 'ノート',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.auto_awesome_outlined),
+            selectedIcon: Icon(Icons.auto_awesome),
+            label: 'AIコーチ',
           ),
         ],
       ),

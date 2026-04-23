@@ -19,6 +19,7 @@ class SettingsProvider with ChangeNotifier {
   LogTypeColors get logTypeColors => _settings.logTypeColors;
   PlantSortOrder get plantSortOrder => _settings.plantSortOrder;
   List<String> get customSortOrder => _settings.customSortOrder;
+  String get geminiApiKey => _settings.geminiApiKey;
 
   /// 保存済み設定を読み込む。
   /// 通知が有効な場合はアプリ起動時に再スケジュールする。
@@ -125,6 +126,13 @@ class SettingsProvider with ChangeNotifier {
   /// カスタム並び順（ユーザー指定）を変更する。
   Future<void> setCustomSortOrder(List<String> order) async {
     _settings = _settings.copyWith(customSortOrder: order);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
+  /// Gemini API キーを変更する。
+  Future<void> setGeminiApiKey(String key) async {
+    _settings = _settings.copyWith(geminiApiKey: key);
     await _settingsService.saveSettings(_settings);
     notifyListeners();
   }
