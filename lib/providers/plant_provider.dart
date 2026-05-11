@@ -360,16 +360,16 @@ class PlantProvider with ChangeNotifier {
     if (plant.fertilizerIntervalDays != null) {
       if (fertLogs.isNotEmpty) {
         // 起算日1: 最後に肥料を与えた日
-        fertLogs.sort((a, b) => b.date.compareTo(a.date));
-        return fertLogs.first.date
+        final sorted = [...fertLogs]..sort((a, b) => b.date.compareTo(a.date));
+        return sorted.first.date
             .add(Duration(days: plant.fertilizerIntervalDays!));
       }
       // 起算日2: 最後に水やりをした日
       final wateringLogs2 =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
       if (wateringLogs2.isNotEmpty) {
-        wateringLogs2.sort((a, b) => b.date.compareTo(a.date));
-        return wateringLogs2.first.date
+        final sorted2 = [...wateringLogs2]..sort((a, b) => b.date.compareTo(a.date));
+        return sorted2.first.date
             .add(Duration(days: plant.fertilizerIntervalDays!));
       }
       // 起算日3: 次回水やり予定日
@@ -385,19 +385,17 @@ class PlantProvider with ChangeNotifier {
         plant.wateringIntervalDays != null) {
       final n = plant.fertilizerEveryNWaterings!;
       // 最終肥料日以降の水やりログを数える
-      final lastFertDate =
-          fertLogs.isEmpty ? null : () {
-            fertLogs.sort((a, b) => b.date.compareTo(a.date));
-            return fertLogs.first.date;
-          }();
+      final DateTime? lastFertDate = fertLogs.isEmpty
+          ? null
+          : ([...fertLogs]..sort((a, b) => b.date.compareTo(a.date))).first.date;
 
       final wateringLogs =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
 
       // 起算日が未定（肥料ログなし）の場合は全水やりログを対象にする
       final wateringsAfter = lastFertDate == null
-          ? (wateringLogs..sort((a, b) => a.date.compareTo(b.date)))
-          : (wateringLogs
+          ? ([...wateringLogs]..sort((a, b) => a.date.compareTo(b.date)))
+          : ([...wateringLogs]
                 .where((l) => l.date.isAfter(lastFertDate))
                 .toList()
               ..sort((a, b) => a.date.compareTo(b.date)));
@@ -436,16 +434,16 @@ class PlantProvider with ChangeNotifier {
     if (plant.vitalizerIntervalDays != null) {
       if (vitLogs.isNotEmpty) {
         // 起算日1: 最後に活力剤を与えた日
-        vitLogs.sort((a, b) => b.date.compareTo(a.date));
-        return vitLogs.first.date
+        final sorted = [...vitLogs]..sort((a, b) => b.date.compareTo(a.date));
+        return sorted.first.date
             .add(Duration(days: plant.vitalizerIntervalDays!));
       }
       // 起算日2: 最後に水やりをした日
       final wateringLogs2 =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
       if (wateringLogs2.isNotEmpty) {
-        wateringLogs2.sort((a, b) => b.date.compareTo(a.date));
-        return wateringLogs2.first.date
+        final sorted2 = [...wateringLogs2]..sort((a, b) => b.date.compareTo(a.date));
+        return sorted2.first.date
             .add(Duration(days: plant.vitalizerIntervalDays!));
       }
       // 起算日3: 次回水やり予定日
@@ -460,19 +458,17 @@ class PlantProvider with ChangeNotifier {
     if (plant.vitalizerEveryNWaterings != null &&
         plant.wateringIntervalDays != null) {
       final n = plant.vitalizerEveryNWaterings!;
-      final lastVitDate =
-          vitLogs.isEmpty ? null : () {
-            vitLogs.sort((a, b) => b.date.compareTo(a.date));
-            return vitLogs.first.date;
-          }();
+      final DateTime? lastVitDate = vitLogs.isEmpty
+          ? null
+          : ([...vitLogs]..sort((a, b) => b.date.compareTo(a.date))).first.date;
 
       final wateringLogs =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
 
       // 起算日が未定（活力剤ログなし）の場合は全水やりログを対象にする
       final wateringsAfter = lastVitDate == null
-          ? (wateringLogs..sort((a, b) => a.date.compareTo(b.date)))
-          : (wateringLogs
+          ? ([...wateringLogs]..sort((a, b) => a.date.compareTo(b.date)))
+          : ([...wateringLogs]
                 .where((l) => l.date.isAfter(lastVitDate))
                 .toList()
               ..sort((a, b) => a.date.compareTo(b.date)));

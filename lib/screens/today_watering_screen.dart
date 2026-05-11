@@ -190,8 +190,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           isActionNeeded(nextVitalizerDateCache[plant.id]);
     }).toSet();
 
+    final settings = context.read<SettingsProvider>();
     final allPlants = {...plantsWithRecords, ...plantsNeedingAction}.toList();
-    allPlants.sort((a, b) => _comparePlantsFor(a, b, logStatus, nextWateringDateCache));
+    allPlants.sort((a, b) => _comparePlantsFor(
+      a, b, logStatus, nextWateringDateCache,
+      settings.plantSortOrder, settings.customSortOrder,
+    ));
     return allPlants;
   }
 
@@ -200,6 +204,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     Plant b,
     DailyLogStatus logStatus,
     Map<String, DateTime?> nextWateringDateCache,
+    PlantSortOrder sortOrder,
+    List<String> customSortOrder,
   ) {
     final aCompleted = logStatus.isWatered(a.id);
     final bCompleted = logStatus.isWatered(b.id);
@@ -207,9 +213,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     // 完了済みは下に並ぶ
     if (aCompleted && !bCompleted) return 1;
     if (!aCompleted && bCompleted) return -1;
-
-    final settings = context.read<SettingsProvider>();
-    final sortOrder = settings.plantSortOrder;
     
     switch (sortOrder) {
       case PlantSortOrder.nameAsc:
@@ -231,16 +234,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       case PlantSortOrder.createdAtDesc:
         return b.createdAt.compareTo(a.createdAt);
       case PlantSortOrder.custom:
-        final customOrder = settings.customSortOrder;
-        if (customOrder.isNotEmpty) {
+        if (customSortOrder.isNotEmpty) {
+          final customOrder = customSortOrder;
           final aIndex = customOrder.indexOf(a.id);
           final bIndex = customOrder.indexOf(b.id);
           if (aIndex == -1 && bIndex == -1) return 0;
           if (aIndex == -1) return 1;
           if (bIndex == -1) return -1;
           return aIndex.compareTo(bIndex);
+        } else {
+          // フォールバック：水やり予定日順
         }
-        // フォールバック：水やり予定日順
         final aNextDate = nextWateringDateCache[a.id];
         final bNextDate = nextWateringDateCache[b.id];
         if (aNextDate == null && bNextDate == null) return 0;
@@ -323,7 +327,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     LogType logType,
     DailyLogStatus logStatus,
   ) async {
-    // 水やりの場合、仙6記録があるか確認
+    // 水やりの場合、他の記録（肥料・活力剤）があるか確認
     final hasOtherLogs = (logType == LogType.watering) &&
         logStatus.hasOtherLogs(plantId, LogType.watering);
     
