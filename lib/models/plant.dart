@@ -98,10 +98,10 @@ class Plant {
   /// nullable フィールドを明示的に null にしたい場合は sentinel パターンを使用する。
   Plant copyWith({
     String? name,
-    String? variety,
-    DateTime? purchaseDate,
-    String? purchaseLocation,
-    String? imagePath,
+    Object? variety = _sentinel,
+    Object? purchaseDate = _sentinel,
+    Object? purchaseLocation = _sentinel,
+    Object? imagePath = _sentinel,
     Object? wateringIntervalDays = _sentinel,
     Object? fertilizerIntervalDays = _sentinel,
     Object? fertilizerEveryNWaterings = _sentinel,
@@ -112,10 +112,10 @@ class Plant {
     return Plant(
       id: id,
       name: name ?? this.name,
-      variety: variety ?? this.variety,
-      purchaseDate: purchaseDate ?? this.purchaseDate,
-      purchaseLocation: purchaseLocation ?? this.purchaseLocation,
-      imagePath: imagePath ?? this.imagePath,
+      variety: variety == _sentinel ? this.variety : variety as String?,
+      purchaseDate: purchaseDate == _sentinel ? this.purchaseDate : purchaseDate as DateTime?,
+      purchaseLocation: purchaseLocation == _sentinel ? this.purchaseLocation : purchaseLocation as String?,
+      imagePath: imagePath == _sentinel ? this.imagePath : imagePath as String?,
       wateringIntervalDays: wateringIntervalDays == _sentinel
           ? this.wateringIntervalDays
           : wateringIntervalDays as int?,

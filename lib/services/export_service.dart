@@ -97,19 +97,37 @@ class ExportService {
     for (final plant in plants) {
       final map = plant.toMap();
       if (plant.imagePath != null) {
-        final imgFile = File(plant.imagePath!);
-        if (await imgFile.exists()) {
-          final ext = p.extension(plant.imagePath!).isNotEmpty
-              ? p.extension(plant.imagePath!)
-              : '.jpg';
-          final zipPath = 'images/plants/${plant.id}$ext';
-          archive.addFile(
-            ArchiveFile(zipPath, await imgFile.length(),
-                await imgFile.readAsBytes()),
-          );
-          map['imagePath'] = zipPath; // ZIP 内相対パスに変換
+        final path = plant.imagePath!;
+        if (path.startsWith('data:')) {
+          // #158対応: data URL（Base64）形式の場合はデコードしてZIPに格納する
+          try {
+            final comma = path.indexOf(',');
+            if (comma >= 0) {
+              final bytes = base64Decode(path.substring(comma + 1));
+              const zipPath = 'images/plants/';
+              final zipFilePath = '${zipPath}${plant.id}.jpg';
+              archive.addFile(ArchiveFile(zipFilePath, bytes.length, bytes));
+              map['imagePath'] = zipFilePath; // ZIP 内相対パスに変換
+            } else {
+              map['imagePath'] = null;
+            }
+          } catch (_) {
+            map['imagePath'] = null;
+          }
         } else {
-          map['imagePath'] = null;
+          // 旧形式: ファイルパスの場合はファイルから読み込む（後方互換）
+          final imgFile = File(path);
+          if (await imgFile.exists()) {
+            final ext = p.extension(path).isNotEmpty ? p.extension(path) : '.jpg';
+            final zipPath = 'images/plants/${plant.id}$ext';
+            archive.addFile(
+              ArchiveFile(zipPath, await imgFile.length(),
+                  await imgFile.readAsBytes()),
+            );
+            map['imagePath'] = zipPath; // ZIP 内相対パスに変換
+          } else {
+            map['imagePath'] = null;
+          }
         }
       }
       plantMaps.add(map);

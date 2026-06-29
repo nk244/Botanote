@@ -223,13 +223,14 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
         );
       } else {
-        // Update existing plant
+        // 既存植物の更新。nullable フィールドを明示的に null にできるよう
+        // sentinel パターンを用いて copyWith を呼び出す。
         final updatedPlant = widget.plant!.copyWith(
           name: _nameController.text.trim(),
-          variety: _varietyController.text.trim().isEmpty 
-              ? null 
+          variety: _varietyController.text.trim().isEmpty
+              ? null  // sentinel により null として保存される
               : _varietyController.text.trim(),
-          purchaseDate: _purchaseDate,
+          purchaseDate: _purchaseDate,  // null なら null として保存される
           purchaseLocation: _purchaseLocationController.text.trim().isEmpty
               ? null
               : _purchaseLocationController.text.trim(),
