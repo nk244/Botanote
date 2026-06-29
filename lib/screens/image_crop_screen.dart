@@ -1,32 +1,20 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:crop_your_image/crop_your_image.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
-/// トリミング結果を表すシールドクラス。
-/// Web では [bytes] のみ、モバイルでは [filePath] のみ使用。
+/// トリミング結果のファイルパスを保持するクラス。
 class CropResult {
-  final String? filePath;
-  final Uint8List? bytes;
-  const CropResult.path(this.filePath) : bytes = null;
-  const CropResult.web(this.bytes) : filePath = null;
+  final String filePath;
+  const CropResult(this.filePath);
 }
 
 class ImageCropScreen extends StatefulWidget {
-  /// モバイル用: 画像のファイルパス
-  final String? imagePath;
-  /// Web用: ImagePickerで取得したXFile
-  final XFile? xFile;
+  final String imagePath;
 
-  const ImageCropScreen.mobile({super.key, required this.imagePath})
-      : xFile = null;
-
-  const ImageCropScreen.web({super.key, required this.xFile})
-      : imagePath = null;
+  const ImageCropScreen({super.key, required this.imagePath});
 
   @override
   State<ImageCropScreen> createState() => _ImageCropScreenState();
@@ -44,31 +32,18 @@ class _ImageCropScreenState extends State<ImageCropScreen> {
   }
 
   Future<void> _loadImage() async {
-    Uint8List bytes;
-    if (kIsWeb && widget.xFile != null) {
-      bytes = await widget.xFile!.readAsBytes();
-    } else if (widget.imagePath != null) {
-      bytes = await File(widget.imagePath!).readAsBytes();
-    } else {
-      return;
-    }
+    final bytes = await File(widget.imagePath).readAsBytes();
     if (mounted) setState(() => _imageBytes = bytes);
   }
 
   Future<void> _onCropped(Uint8List cropped) async {
     setState(() => _isCropping = true);
     try {
-      if (kIsWeb) {
-        // Web: バイト列をそのまま返す
-        if (mounted) Navigator.of(context).pop(CropResult.web(cropped));
-      } else {
-        // モバイル: アプリドキュメントディレクトリに保存してパスを返す
-        final dir = await getApplicationDocumentsDirectory();
-        final fileName = 'crop_${path.basename(widget.imagePath!)}';
-        final outFile = File('${dir.path}/$fileName');
-        await outFile.writeAsBytes(cropped);
-        if (mounted) Navigator.of(context).pop(CropResult.path(outFile.path));
-      }
+      final dir = await getApplicationDocumentsDirectory();
+      final fileName = 'crop_${path.basename(widget.imagePath)}';
+      final outFile = File('${dir.path}/$fileName');
+      await outFile.writeAsBytes(cropped);
+      if (mounted) Navigator.of(context).pop(CropResult(outFile.path));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive_io.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -14,15 +13,13 @@ import 'database_service.dart';
 
 /// データのエクスポート / インポートを担うサービス
 ///
-/// モバイル: 画像を含む ZIP アーカイブとして保存・復元する。
+/// 画像を含む ZIP アーカイブとして保存・復元する。
 /// ZIP 構成:
-///   waterme_backup_XXXXXX.zip
+///   botanote_backup_XXXXXX.zip
 ///   ├── data.json          # Plants / Logs / Notes (imagePath は ZIP 内相対パス)
 ///   └── images/
 ///       ├── plants/`plant_id`.jpg
 ///       └── notes/`note_id`_`index`.jpg
-///
-/// Web: テキスト JSON のみ（画像なし）。
 class ExportService {
   static final ExportService _instance = ExportService._internal();
   factory ExportService() => _instance;
@@ -32,35 +29,10 @@ class ExportService {
 
   // ── エクスポート ──────────────────────────────────────────
 
-  /// 全データを JSON 文字列に変換して返す（Web 用・画像パスは絶対パスのまま）
-  Future<String> exportToJson() async {
-    final plants = await _db.getAllPlants();
-    final allLogs = <LogEntry>[];
-    for (final plant in plants) {
-      final logs = await _db.getLogsByPlant(plant.id);
-      allLogs.addAll(logs);
-    }
-    final notes = await _db.getAllNotes();
-
-    final data = {
-      'version': 1,
-      'exportedAt': DateTime.now().toIso8601String(),
-      'plants': plants.map((pl) => pl.toMap()).toList(),
-      'logs': allLogs.map((l) => l.toMap()).toList(),
-      'notes': notes.map((n) => n.toMap()).toList(),
-    };
-
-    return const JsonEncoder.withIndent('  ').convert(data);
-  }
-
-  /// ZIP を一時ディレクトリに生成し、OS のシェアシートで共有する（モバイル専用）
+  /// ZIP を一時ディレクトリに生成し、OS のシェアシートで共有する。
   ///
-  /// キャンセル時は null を返す。Web 環境では [UnsupportedError] をスローする。
+  /// キャンセル時は null を返す。
   Future<String?> exportToFile() async {
-    if (kIsWeb) {
-      throw UnsupportedError('Web 環境ではファイル保存に対応していません。');
-    }
-
     final ts = DateTime.now().millisecondsSinceEpoch;
     final fileName = 'botanote_backup_$ts.zip';
 
@@ -183,24 +155,12 @@ class ExportService {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['zip', 'json'],
-      withData: kIsWeb,
+      withData: false,
     );
 
     if (result == null || result.files.isEmpty) return null;
 
     final file = result.files.first;
-
-    if (kIsWeb) {
-      final bytes = file.bytes;
-      if (bytes == null) return null;
-      if (_isZipBytes(bytes)) {
-        // Web では一時パスがないため ZIP 展開はサポート外
-        throw const FormatException('WebブラウザではZIPインポートはサポートされていません');
-      }
-      // BOM付きUTF-8も考慮してデコード
-      return _importFromJson(_decodeUtf8(bytes));
-    }
-
     final path = file.path;
     if (path == null) return null;
 

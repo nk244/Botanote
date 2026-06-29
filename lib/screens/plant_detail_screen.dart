@@ -11,7 +11,6 @@ import '../utils/date_utils.dart';
 import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
 import 'note_detail_screen.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// SliverPersistentHeaderDelegate: TabBarを固定表示するためのデリゲート
 class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
@@ -301,11 +300,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     }
   }
 
-  /// 植物画像をWebとモバイルで出し分けて表示する
+  /// 植物画像を表示する
   Widget _buildFullImage() {
     final path = widget.plant.imagePath!;
 
-    // Base64 data URL の場合はWeb・モバイル共通でメモリから表示する
+    // Base64 data URL の場合はメモリから表示する（レガシーデータ互換）
     if (path.startsWith('data:')) {
       try {
         final comma = path.indexOf(',');
@@ -323,22 +322,13 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       }
     }
 
-    if (kIsWeb) {
-      return Image.network(
-        path,
+    if (File(path).existsSync()) {
+      return Image.file(
+        File(path),
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            _buildBrokenImageIcon(context),
       );
     } else {
-      if (File(path).existsSync()) {
-        return Image.file(
-          File(path),
-          fit: BoxFit.cover,
-        );
-      } else {
-        return _buildBrokenImageIcon(context);
-      }
+      return _buildBrokenImageIcon(context);
     }
   }
 

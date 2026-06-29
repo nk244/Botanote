@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/plant_provider.dart';
@@ -160,7 +159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('ZIP または JSON ファイルからデータを復元'),
             onTap: _isImporting ? null : () => _handleImport(context),
           ),
-          if (!kIsWeb) _buildImageMigrationTile(),
+          _buildImageMigrationTile(),
           const Divider(),
 
           // About
@@ -332,44 +331,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// エクスポート処理
   Future<void> _handleExport(BuildContext context) async {
-    if (kIsWeb) {
-      // Web 環境: JSON テキストをダイアログで表示（コピー可）
-      setState(() => _isExporting = true);
-      try {
-        final json = await ExportService().exportToJson();
-        if (!mounted) return;
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('エクスポートJSON'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300,
-              child: SingleChildScrollView(
-                child: SelectableText(json,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('閉じる'),
-              ),
-            ],
-          ),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エクスポートに失敗しました: $e')),
-        );
-      } finally {
-        if (mounted) setState(() => _isExporting = false);
-      }
-      return;
-    }
-
-    // モバイル環境: ファイルに保存
     setState(() => _isExporting = true);
     try {
       final path = await ExportService().exportToFile();

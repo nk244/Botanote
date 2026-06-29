@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/plant.dart';
@@ -78,8 +78,6 @@ class PlantProvider with ChangeNotifier {
   /// 設定画面の手動実行ボタンからも呼び出せる。
   /// 戻り値: [ImageMigrationResult]（変換成功・失敗・スキップ件数）
   Future<ImageMigrationResult> migrateBase64ToFiles() async {
-    if (kIsWeb) return const ImageMigrationResult(total: 0, success: 0, skipped: 0, failed: 0);
-
     // ID のみ取得（imagePath列を読まないので CursorWindow 制限を受けない）
     final ids = await _db.getPlantIdsWithBase64Images();
     if (ids.isEmpty) return const ImageMigrationResult(total: 0, success: 0, skipped: 0, failed: 0);

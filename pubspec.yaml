@@ -140,9 +140,3 @@ flutter_launcher_icons:
   # iOS
   ios: true
   image_path_ios: "assets/icons/icon.png"
-  # Web
-  web:
-    generate: true
-    image_path: "assets/icons/icon.png"
-    background_color: "#FFFFFF"
-    theme_color: "#4CAF50"
