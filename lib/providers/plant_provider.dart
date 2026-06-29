@@ -65,23 +65,39 @@ class PlantProvider with ChangeNotifier {
   }
 
   /// モバイル環境で imagePath がファイルパスのままの植物を
-  /// Base64 data URL に変換してDBを更新する（一度だけ実行される移行処理）。
+  /// Base64 data URL に変換してDBを更新する（loadPlants から自動実行）。
   Future<void> _migrateImagePathsToBase64() async {
-    // Web環境ではファイルシステムにアクセスできないためスキップする
-    if (kIsWeb) return;
+    await migrateImagePathsToBase64();
+  }
 
-    final needsMigration = _plants.where((p) {
+  /// ファイルパス形式の植物画像をBase64 data URLに変換してDBを更新する。
+  ///
+  /// 設定画面の手動実行ボタンからも呼び出せる。
+  /// 戻り値: [ImageMigrationResult]（変換成功・失敗・スキップ件数）
+  Future<ImageMigrationResult> migrateImagePathsToBase64() async {
+    if (kIsWeb) return const ImageMigrationResult(total: 0, success: 0, skipped: 0, failed: 0);
+
+    // 最新のDB状態を使う
+    final currentPlants = _plants.isEmpty ? await _db.getAllPlants() : _plants;
+
+    final needsMigration = currentPlants.where((p) {
       final path = p.imagePath;
       // ファイルパスが設定されており、data URL でない場合は移行対象
       return path != null && !path.startsWith('data:');
     }).toList();
 
-    if (needsMigration.isEmpty) return;
+    int success = 0;
+    int skipped = 0;
+    int failed = 0;
 
     for (final plant in needsMigration) {
       try {
         final file = File(plant.imagePath!);
-        if (!file.existsSync()) continue;
+        if (!file.existsSync()) {
+          // ファイルが存在しない場合はスキップ（消失済み）
+          skipped++;
+          continue;
+        }
         final bytes = await file.readAsBytes();
         final base64Str = base64Encode(bytes);
         final dataUrl = 'data:image/jpeg;base64,$base64Str';
@@ -91,10 +107,29 @@ class PlantProvider with ChangeNotifier {
         final idx = _plants.indexWhere((p) => p.id == plant.id);
         if (idx >= 0) _plants[idx] = migrated;
         debugPrint('画像をBase64に移行しました: ${plant.name}');
+        success++;
       } catch (e) {
         debugPrint('画像移行に失敗しました（${plant.name}）: $e');
+        failed++;
       }
     }
+
+    if (success > 0) notifyListeners();
+
+    return ImageMigrationResult(
+      total: needsMigration.length,
+      success: success,
+      skipped: skipped,
+      failed: failed,
+    );
+  }
+
+  /// ファイルパス形式の画像を持つ植物の件数を返す（移行前チェック用）。
+  int get pendingImageMigrationCount {
+    return _plants.where((p) {
+      final path = p.imagePath;
+      return path != null && !path.startsWith('data:');
+    }).length;
   }
 
   /// ソート設定に従ってソートした植物一覧を返す。
@@ -708,4 +743,26 @@ class PlantProvider with ChangeNotifier {
     }
     await loadPlants();
   }
+}
+
+/// 画像移行処理の結果
+class ImageMigrationResult {
+  /// 移行対象の総件数
+  final int total;
+
+  /// Base64変換に成功した件数
+  final int success;
+
+  /// ファイルが存在せずスキップした件数
+  final int skipped;
+
+  /// エラーにより失敗した件数
+  final int failed;
+
+  const ImageMigrationResult({
+    required this.total,
+    required this.success,
+    required this.skipped,
+    required this.failed,
+  });
 }
