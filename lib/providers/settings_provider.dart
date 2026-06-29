@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show ChangeNotifier;
 import '../models/app_settings.dart';
 import '../services/settings_service.dart';
 import '../services/notification_service.dart';
@@ -27,7 +27,7 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
     // アプリ起動時に通知設定が有効ならスマートスケジュールを実行する
     // （OSが再起動するとスケジュール済み通知が消えるため）
-    if (_settings.notificationEnabled && !kIsWeb) {
+    if (_settings.notificationEnabled) {
       await NotificationService.scheduleSmartWateringReminder(
         hour: _settings.notificationHour,
         minute: _settings.notificationMinute,
@@ -73,7 +73,7 @@ class SettingsProvider with ChangeNotifier {
     await _settingsService.saveSettings(_settings);
     notifyListeners();
     // 通知が有効なら再スケジュール
-    if (_settings.notificationEnabled && !kIsWeb) {
+    if (_settings.notificationEnabled) {
       await NotificationService.scheduleSmartWateringReminder(
         hour: hour,
         minute: minute,
@@ -87,24 +87,22 @@ class SettingsProvider with ChangeNotifier {
     _settings = _settings.copyWith(notificationEnabled: enabled);
     await _settingsService.saveSettings(_settings);
     notifyListeners();
-    if (!kIsWeb) {
-      if (enabled) {
-        // パーミッション確認してからスケジュール
-        final granted = await NotificationService().requestPermission();
-        if (granted) {
-          await NotificationService.scheduleSmartWateringReminder(
-            hour: _settings.notificationHour,
-            minute: _settings.notificationMinute,
-          );
-        } else {
-          // パーミッション拒否時は設定を元に戻す
-          _settings = _settings.copyWith(notificationEnabled: false);
-          await _settingsService.saveSettings(_settings);
-          notifyListeners();
-        }
+    if (enabled) {
+      // パーミッション確認してからスケジュール
+      final granted = await NotificationService().requestPermission();
+      if (granted) {
+        await NotificationService.scheduleSmartWateringReminder(
+          hour: _settings.notificationHour,
+          minute: _settings.notificationMinute,
+        );
       } else {
-        await NotificationService().cancelDailyWateringReminder();
+        // パーミッション拒否時は設定を元に戻す
+        _settings = _settings.copyWith(notificationEnabled: false);
+        await _settingsService.saveSettings(_settings);
+        notifyListeners();
       }
+    } else {
+      await NotificationService().cancelDailyWateringReminder();
     }
   }
 

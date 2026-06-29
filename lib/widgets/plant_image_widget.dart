@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
+import 'package:flutter/material.dart';
 import '../models/plant.dart';
 
-/// Reusable widget for displaying plant images
-/// Can accept either a Plant object or a direct imagePath string
+/// 植物画像を表示する共通ウィジェット。
+/// [plant] または [imagePath] のどちらか一方を指定する。
 class PlantImageWidget extends StatelessWidget {
   final Plant? plant;
   final String? imagePath;
@@ -34,22 +33,15 @@ class PlantImageWidget extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: effectiveBorderRadius,
-      // data URL はWeb・モバイル共通で Image.memory() で表示する
-      child: _isDataUrl(_effectiveImagePath!)
+      child: _effectiveImagePath!.startsWith('data:')
           ? _buildDataUrlImage(context, effectiveBorderRadius)
-          : kIsWeb
-              ? _buildWebImage(context, effectiveBorderRadius)
-              : _buildMobileImage(context, effectiveBorderRadius),
+          : _buildFileImage(context, effectiveBorderRadius),
     );
   }
-
-  /// imagePath が Base64 data URL かどうか判定する。
-  bool _isDataUrl(String path) => path.startsWith('data:');
 
   /// Base64 data URL を Image.memory() で表示する。
   Widget _buildDataUrlImage(BuildContext context, BorderRadius borderRadius) {
     try {
-      // "data:image/jpeg;base64,xxxxx" からbase64部分を抽出する
       final comma = _effectiveImagePath!.indexOf(',');
       if (comma < 0) return _buildPlaceholder(context, borderRadius);
       final bytes = base64Decode(_effectiveImagePath!.substring(comma + 1));
@@ -68,42 +60,26 @@ class PlantImageWidget extends StatelessWidget {
     }
   }
 
-  Widget _buildWebImage(BuildContext context, BorderRadius borderRadius) {
-    return Image.network(
-      _effectiveImagePath!,
-      width: width,
-      height: height,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) =>
-          _buildPlaceholder(context, borderRadius),
-    );
-  }
-
-  Widget _buildMobileImage(BuildContext context, BorderRadius borderRadius) {
+  /// ファイルパスから画像を表示する。
+  Widget _buildFileImage(BuildContext context, BorderRadius borderRadius) {
     final file = File(_effectiveImagePath!);
     if (!file.existsSync()) {
       return _buildPlaceholder(context, borderRadius);
     }
 
-    // cacheWidth/cacheHeightで縮小デコードし、frameBuilderでフェードイン表示する。
-    // プレースホルダーを先に出してテキスト表示をブロックしないようにする。
     return Image.file(
       file,
       width: width,
       height: height,
       fit: BoxFit.cover,
-      // リスト表示サイズに合わせて縮小デコードし、メモリ・描画負荷を削減。
-      // double.infinity など有限値以外の場合はキャッシュサイズを省略する。
       cacheWidth: width.isFinite ? (width * 3).toInt() : null,
       cacheHeight: height.isFinite ? (height * 3).toInt() : null,
       errorBuilder: (context, error, stackTrace) =>
           _buildPlaceholder(context, borderRadius),
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded || frame != null) {
-          // キャッシュ済みまたは読み込み完了: そのまま表示
           return child;
         }
-        // 読み込み中: プレースホルダーを表示
         return _buildPlaceholder(context, borderRadius);
       },
     );
