@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
 import 'image_crop_screen.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import '../providers/plant_provider.dart';
@@ -175,6 +177,17 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
+  /// 画像バイト列をドキュメントディレクトリに保存し、ファイルパスを返す。
+  Future<String> _saveImageToFile(Uint8List bytes) async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory('${docsDir.path}/botanote_images');
+    if (!imagesDir.existsSync()) imagesDir.createSync(recursive: true);
+    final fileName = '${const Uuid().v4()}.jpg';
+    final file = File('${imagesDir.path}/$fileName');
+    await file.writeAsBytes(bytes);
+    return file.path;
+  }
+
   Future<void> _savePlant() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -185,22 +198,29 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     try {
       final plantProvider = context.read<PlantProvider>();
 
-      // 画像を Base64 data URL に変換してDBへ保存する（モバイル・Web共通）。
-      // これによりスマホ変更後のバックアップ復元時も画像が失われない。
+      // 画像をドキュメントディレクトリにファイルとして保存し、パスをDBに記録する。
+      // Web環境のみ Base64 data URL で保存する（ファイルシステムが使えないため）。
       String? effectiveImagePath = _imagePath;
       if (_imageBytes != null) {
-        // Web・モバイル共通: トリミング済みバイト列を Base64 data URL に変換
-        final base64 = base64Encode(_imageBytes!);
-        effectiveImagePath = 'data:image/jpeg;base64,$base64';
-      } else if (!kIsWeb && _imagePath != null && !_imagePath!.startsWith('data:')) {
-        // モバイル: ファイルパスの場合はファイルを読み込んでBase64に変換する
-        try {
-          final bytes = await File(_imagePath!).readAsBytes();
-          final base64 = base64Encode(bytes);
+        if (kIsWeb) {
+          // Web: ファイルシステムがないため Base64 data URL のまま保存
+          final base64 = base64Encode(_imageBytes!);
           effectiveImagePath = 'data:image/jpeg;base64,$base64';
+        } else {
+          // モバイル: トリミング済みバイト列をファイルとして保存
+          effectiveImagePath = await _saveImageToFile(_imageBytes!);
+        }
+      } else if (!kIsWeb && _imagePath != null && _imagePath!.startsWith('data:')) {
+        // 既存の Base64 data URL 画像をファイルに変換（編集時の逆移行）
+        try {
+          final comma = _imagePath!.indexOf(',');
+          if (comma >= 0) {
+            final bytes = base64Decode(_imagePath!.substring(comma + 1));
+            effectiveImagePath = await _saveImageToFile(bytes);
+          }
         } catch (e) {
-          // 変換失敗時はファイルパスのまま保持する（後方互換）
-          debugPrint('画像のBase64変換に失敗しました: $e');
+          debugPrint('Base64→ファイル変換失敗: $e');
+          effectiveImagePath = null; // 変換失敗時は画像なしにフォールバック
         }
       }
       

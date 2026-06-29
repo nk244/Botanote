@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/plant.dart';
@@ -132,11 +133,61 @@ class DatabaseService {
   }
 
   /// すべての植物を更新日時の降順で取得する。
+  ///
+  /// imagePath に大きな Base64 データが含まれ Android CursorWindow を超過した場合は
+  /// imagePath を除いたクエリで再試行する（#164）。
   Future<List<Plant>> getAllPlants() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('plants',
-        orderBy: 'updatedAt DESC');
-    return List.generate(maps.length, (i) => Plant.fromMap(maps[i]));
+    try {
+      final maps = await db.query('plants', orderBy: 'updatedAt DESC');
+      return maps.map(Plant.fromMap).toList();
+    } catch (e) {
+      // CursorWindowオーバーフロー対策: imagePath列を除いてリトライ
+      debugPrint('getAllPlants失敗、imagePath除外でリトライ: $e');
+      return _getAllPlantsWithoutImages(db);
+    }
+  }
+
+  /// imagePath列を除いてすべての植物を取得する（CursorWindow回避用）
+  Future<List<Plant>> _getAllPlantsWithoutImages(Database db) async {
+    final maps = await db.rawQuery(
+      'SELECT id, name, variety, purchaseDate, purchaseLocation, '
+      'wateringIntervalDays, fertilizerIntervalDays, fertilizerEveryNWaterings, '
+      'vitalizerIntervalDays, vitalizerEveryNWaterings, createdAt, updatedAt '
+      'FROM plants ORDER BY updatedAt DESC',
+    );
+    // imagePath を null として扱い、後続の逆移行処理がIDベースで別途処理する
+    return maps.map((m) => Plant.fromMap({...m, 'imagePath': null})).toList();
+  }
+
+  /// Base64 data URL 形式の imagePath を持つ植物のIDリストを返す。
+  ///
+  /// imagePath 列を直接読まないため CursorWindow 制限を回避できる。
+  Future<List<String>> getPlantIdsWithBase64Images() async {
+    final db = await database;
+    final maps = await db.rawQuery(
+      "SELECT id FROM plants WHERE imagePath LIKE 'data:%'",
+    );
+    return maps.map((m) => m['id'] as String).toList();
+  }
+
+  /// 指定IDの植物の imagePath のみを返す。
+  Future<String?> getPlantImagePath(String id) async {
+    final db = await database;
+    final maps = await db.rawQuery(
+      'SELECT imagePath FROM plants WHERE id = ?', [id],
+    );
+    if (maps.isEmpty) return null;
+    return maps.first['imagePath'] as String?;
+  }
+
+  /// 指定IDの植物の imagePath だけを更新する。
+  Future<void> updatePlantImagePath(String id, String? imagePath) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE plants SET imagePath = ? WHERE id = ?',
+      [imagePath, id],
+    );
   }
 
   /// 指定IDの植物を取得する。存在しない場合は null を返す。

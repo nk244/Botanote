@@ -441,7 +441,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// 画像ファイル→DB移行タイル（旧形式バックアップ復元後の手動移行用）
+  /// Base64 data URL→ファイル変換タイル（#164 CursorWindowバグからの回復用）
   Widget _buildImageMigrationTile() {
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
@@ -454,16 +454,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Icon(
-                  Icons.storage,
+                  Icons.folder_outlined,
                   color: pending > 0
                       ? Theme.of(context).colorScheme.primary
                       : Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
-          title: const Text('植物画像をDBに移行'),
+          title: const Text('植物画像をファイルに変換'),
           subtitle: Text(
             pending > 0
-                ? '$pending件の画像ファイルをDBに保存できます'
-                : '移行対象なし（すべてDB保存済み）',
+                ? '$pending件の画像をファイルとして保存できます'
+                : '変換対象なし（すべてファイル保存済み）',
           ),
           trailing: pending > 0 ? const Icon(Icons.chevron_right) : null,
           onTap: (_isMigrating || pending == 0)
@@ -474,18 +474,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// 画像ファイルをBase64 data URLに変換してDBに保存する
+  /// DB内のBase64画像をファイルに変換する
   Future<void> _handleImageMigration(BuildContext context) async {
-    // 移行前に確認ダイアログを表示
+    // 変換前に確認ダイアログを表示
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('植物画像をDBに移行'),
+        title: const Text('植物画像をファイルに変換'),
         content: const Text(
-          'ファイルパス形式で保存されている植物画像を\n'
-          'データベース内に直接保存します。\n\n'
-          '移行後はバックアップZIPに画像が含まれるため、\n'
-          '機種変更後も画像を復元できるようになります。',
+          'データベース内にBase64形式で保存されている\n'
+          '植物画像をファイルとして保存し直します。\n\n'
+          'この操作はアプリ起動時に自動でも実行されます。',
         ),
         actions: [
           TextButton(
@@ -494,7 +493,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('移行する'),
+            child: const Text('変換する'),
           ),
         ],
       ),
@@ -505,7 +504,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isMigrating = true);
     try {
       final provider = context.read<PlantProvider>();
-      final result = await provider.migrateImagePathsToBase64();
+      final result = await provider.migrateBase64ToFiles();
       if (!context.mounted) return;
       _showMigrationResultDialog(context, result);
     } catch (e) {

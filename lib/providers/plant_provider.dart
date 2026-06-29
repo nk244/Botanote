@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint, kIsWeb;
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
@@ -43,8 +44,8 @@ class PlantProvider with ChangeNotifier {
     try {
       _plants = await _db.getAllPlants();
 
-      // モバイル環境でファイルパスのままの画像をBase64に移行する（#158対応）
-      await _migrateImagePathsToBase64();
+      // DB内の Base64 data URL 画像をファイルに逆移行する（#164 CursorWindow修正）
+      await _migrateBase64ToFiles();
 
       // 次回水やり日キャッシュを更新
       for (var plant in _plants) {
@@ -64,52 +65,67 @@ class PlantProvider with ChangeNotifier {
     }
   }
 
-  /// モバイル環境で imagePath がファイルパスのままの植物を
-  /// Base64 data URL に変換してDBを更新する（loadPlants から自動実行）。
-  Future<void> _migrateImagePathsToBase64() async {
-    await migrateImagePathsToBase64();
+  /// DB に Base64 data URL として保存されている植物画像をファイルに書き出す
+  /// （loadPlants から自動実行）。
+  Future<void> _migrateBase64ToFiles() async {
+    await migrateBase64ToFiles();
   }
 
-  /// ファイルパス形式の植物画像をBase64 data URLに変換してDBを更新する。
+  /// DB 内の Base64 data URL 画像をドキュメントディレクトリのファイルに変換する。
   ///
+  /// CursorWindow を超える行があっても安全なよう ID のみ先にクエリし、
+  /// imagePath は1行ずつ個別に取得して処理する。
   /// 設定画面の手動実行ボタンからも呼び出せる。
   /// 戻り値: [ImageMigrationResult]（変換成功・失敗・スキップ件数）
-  Future<ImageMigrationResult> migrateImagePathsToBase64() async {
+  Future<ImageMigrationResult> migrateBase64ToFiles() async {
     if (kIsWeb) return const ImageMigrationResult(total: 0, success: 0, skipped: 0, failed: 0);
 
-    // 最新のDB状態を使う
-    final currentPlants = _plants.isEmpty ? await _db.getAllPlants() : _plants;
+    // ID のみ取得（imagePath列を読まないので CursorWindow 制限を受けない）
+    final ids = await _db.getPlantIdsWithBase64Images();
+    if (ids.isEmpty) return const ImageMigrationResult(total: 0, success: 0, skipped: 0, failed: 0);
 
-    final needsMigration = currentPlants.where((p) {
-      final path = p.imagePath;
-      // ファイルパスが設定されており、data URL でない場合は移行対象
-      return path != null && !path.startsWith('data:');
-    }).toList();
+    final docsDir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory('${docsDir.path}/botanote_images');
+    if (!imagesDir.existsSync()) imagesDir.createSync(recursive: true);
 
     int success = 0;
     int skipped = 0;
     int failed = 0;
 
-    for (final plant in needsMigration) {
+    for (final id in ids) {
       try {
-        final file = File(plant.imagePath!);
-        if (!file.existsSync()) {
-          // ファイルが存在しない場合はスキップ（消失済み）
+        final imagePath = await _db.getPlantImagePath(id);
+        if (imagePath == null || !imagePath.startsWith('data:')) {
           skipped++;
           continue;
         }
-        final bytes = await file.readAsBytes();
-        final base64Str = base64Encode(bytes);
-        final dataUrl = 'data:image/jpeg;base64,$base64Str';
-        final migrated = plant.copyWith(imagePath: dataUrl);
-        await _db.updatePlant(migrated);
-        // インメモリのリストも更新する
-        final idx = _plants.indexWhere((p) => p.id == plant.id);
-        if (idx >= 0) _plants[idx] = migrated;
-        debugPrint('画像をBase64に移行しました: ${plant.name}');
+
+        final comma = imagePath.indexOf(',');
+        if (comma < 0) {
+          // 不正な data URL: imagePath をクリアしてスキップ
+          await _db.updatePlantImagePath(id, null);
+          final idx = _plants.indexWhere((p) => p.id == id);
+          if (idx >= 0) _plants[idx] = _plants[idx].copyWith(imagePath: null);
+          skipped++;
+          continue;
+        }
+
+        final bytes = base64Decode(imagePath.substring(comma + 1));
+        final fileName = '${const Uuid().v4()}.jpg';
+        final file = File('${imagesDir.path}/$fileName');
+        await file.writeAsBytes(bytes);
+
+        await _db.updatePlantImagePath(id, file.path);
+        final idx = _plants.indexWhere((p) => p.id == id);
+        if (idx >= 0) _plants[idx] = _plants[idx].copyWith(imagePath: file.path);
+        debugPrint('Base64→ファイルに変換しました: $id');
         success++;
       } catch (e) {
-        debugPrint('画像移行に失敗しました（${plant.name}）: $e');
+        // 読み取り失敗（CursorWindowオーバーフロー等）: imagePathをクリアして続行
+        debugPrint('Base64→ファイル変換失敗 (ID: $id): $e');
+        try { await _db.updatePlantImagePath(id, null); } catch (_) {}
+        final idx = _plants.indexWhere((p) => p.id == id);
+        if (idx >= 0) _plants[idx] = _plants[idx].copyWith(imagePath: null);
         failed++;
       }
     }
@@ -117,18 +133,18 @@ class PlantProvider with ChangeNotifier {
     if (success > 0) notifyListeners();
 
     return ImageMigrationResult(
-      total: needsMigration.length,
+      total: ids.length,
       success: success,
       skipped: skipped,
       failed: failed,
     );
   }
 
-  /// ファイルパス形式の画像を持つ植物の件数を返す（移行前チェック用）。
+  /// Base64 data URL 形式の画像を持つ植物の件数を返す（移行前チェック用）。
   int get pendingImageMigrationCount {
     return _plants.where((p) {
       final path = p.imagePath;
-      return path != null && !path.startsWith('data:');
+      return path != null && path.startsWith('data:');
     }).length;
   }
 
