@@ -134,11 +134,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
 
-          // AI設定
-          _buildSectionHeader(context, 'AI設定（Claude API）'),
-          _buildApiKeyTile(),
-          const Divider(),
-
           // Data management
           _buildSectionHeader(context, 'データ管理'),
           ListTile(
@@ -479,28 +474,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// Claude APIキー設定タイル
-  Widget _buildApiKeyTile() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, _) {
-        final currentKey = settings.settings.claudeApiKey;
-        final isSet = currentKey.isNotEmpty;
-        return ListTile(
-          leading: Icon(
-            Icons.key,
-            color: isSet
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          title: const Text('Claude APIキー'),
-          subtitle: Text(isSet ? '設定済み（タップして変更）' : '未設定'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showApiKeyDialog(context, settings, currentKey),
-        );
-      },
-    );
-  }
-
   /// DB内のBase64画像をファイルに変換する
   Future<void> _handleImageMigration(BuildContext context) async {
     // 変換前に確認ダイアログを表示
@@ -570,70 +543,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-
-  /// APIキー入力ダイアログを表示する。
-  Future<void> _showApiKeyDialog(
-    BuildContext context,
-    SettingsProvider settings,
-    String currentKey,
-  ) async {
-    final controller = TextEditingController(text: currentKey);
-    bool obscure = true;
-
-    final newKey = await showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Claude APIキー'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: controller,
-                obscureText: obscure,
-                decoration: InputDecoration(
-                  hintText: 'sk-ant-...',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                        obscure ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () =>
-                        setDialogState(() => obscure = !obscure),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Anthropicのコンソールから取得できます。\nAPIキーはこのデバイスにのみ保存されます。',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-          actions: [
-            if (currentKey.isNotEmpty)
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(''),
-                child: const Text('削除'),
-              ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    controller.dispose();
-    if (newKey == null || !context.mounted) return;
-    await settings.setClaudeApiKey(newKey);
   }
 
   Widget _buildSectionHeader(BuildContext context, String title) {

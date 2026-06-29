@@ -6,7 +6,6 @@ import '../providers/settings_provider.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
 import 'notes_list_screen.dart';
-import 'ai_chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +21,6 @@ class _HomeScreenState extends State<HomeScreen> {
     const TodayWateringScreen(),
     const PlantListScreen(),
     const NotesListScreen(),
-    const AiChatScreen(),
   ];
 
   @override
@@ -52,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // タブ切替時にデータを再読み込みする
           await context.read<PlantProvider>().loadPlants();
           // ノートタブ（index=2）切替時はノートも再読み込みする
-          if (index == 3) {
+          if (index == 2) {
             await context.read<NoteProvider>().loadNotes();
           }
         },
@@ -71,11 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.note_outlined),
             selectedIcon: Icon(Icons.note),
             label: 'ノート',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.smart_toy_outlined),
-            selectedIcon: Icon(Icons.smart_toy),
-            label: 'AI',
           ),
         ],
       ),
