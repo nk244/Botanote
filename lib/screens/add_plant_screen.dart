@@ -7,7 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'image_crop_screen.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import '../providers/plant_provider.dart';
 import '../models/plant.dart';
 import '../widgets/plant_image_widget.dart';
@@ -36,7 +35,6 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   int? _vitalizerIntervalDays;
   int? _vitalizerEveryNWaterings;
   String? _imagePath;
-  Uint8List? _imageBytes; // Web用: トリミング後のバイト列
   bool _isLoading = false;
 
   @override
@@ -66,7 +64,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
 
   Future<void> _showImageSourceOptions() async {
     // 既存画像がある場合は「再トリミング」選択肢も表示
-    final hasExistingImage = _imagePath != null || _imageBytes != null;
+    final hasExistingImage = _imagePath != null;
 
     // 選択肢の戻り値: ImageSource か 're-crop' か null（キャンセル）
     final choice = await showModalBottomSheet<Object>(
@@ -111,28 +109,17 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       final pickedFile = await picker.pickImage(source: source, maxWidth: 2048, maxHeight: 2048);
       if (pickedFile == null) return;
 
-      // Web・モバイル共通でトリミング画面へ遷移
+      // トリミング画面へ遷移
       final cropResult = await Navigator.of(context).push<CropResult?>(
         MaterialPageRoute(
-          builder: (_) => kIsWeb
-              ? ImageCropScreen.web(xFile: pickedFile)
-              : ImageCropScreen.mobile(imagePath: pickedFile.path),
+          builder: (_) => ImageCropScreen(imagePath: pickedFile.path),
         ),
       );
 
       // ユーザーが「戻る」を押した場合はキャンセル扱い
       if (cropResult == null) return;
 
-      if (kIsWeb && cropResult.bytes != null) {
-        // Web: バイト列をメモリに保持。表示はUint8Listから行う
-        setState(() {
-          _imagePath = pickedFile.path; // XFileのpathはBlob URLとして使用可
-          _imageBytes = cropResult.bytes;
-        });
-      } else if (cropResult.filePath != null) {
-        // モバイル: 保存済みファイルパスを使用
-        setState(() => _imagePath = cropResult.filePath);
-      }
+      setState(() => _imagePath = cropResult.filePath);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -144,29 +131,15 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
 
   /// 登録済み画像をそのままトリミング画面に渡して再トリミングする
   Future<void> _reCropExistingImage() async {
+    if (_imagePath == null) return;
     try {
-      CropResult? cropResult;
-      if (kIsWeb && _imageBytes != null) {
-        // Web: メモリ上のバイト列を XFile 経由で渡す
-        final tmpFile = XFile.fromData(_imageBytes!, mimeType: 'image/jpeg');
-        cropResult = await Navigator.of(context).push<CropResult?>(
-          MaterialPageRoute(
-            builder: (_) => ImageCropScreen.web(xFile: tmpFile),
-          ),
-        );
-        if (cropResult?.bytes != null) {
-          setState(() => _imageBytes = cropResult!.bytes);
-        }
-      } else if (_imagePath != null) {
-        // モバイル: 既存ファイルパスを渡す
-        cropResult = await Navigator.of(context).push<CropResult?>(
-          MaterialPageRoute(
-            builder: (_) => ImageCropScreen.mobile(imagePath: _imagePath!),
-          ),
-        );
-        if (cropResult?.filePath != null) {
-          setState(() => _imagePath = cropResult!.filePath);
-        }
+      final cropResult = await Navigator.of(context).push<CropResult?>(
+        MaterialPageRoute(
+          builder: (_) => ImageCropScreen(imagePath: _imagePath!),
+        ),
+      );
+      if (cropResult != null) {
+        setState(() => _imagePath = cropResult.filePath);
       }
     } catch (e) {
       if (mounted) {
@@ -198,20 +171,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     try {
       final plantProvider = context.read<PlantProvider>();
 
-      // 画像をドキュメントディレクトリにファイルとして保存し、パスをDBに記録する。
-      // Web環境のみ Base64 data URL で保存する（ファイルシステムが使えないため）。
+      // 旧 Base64 data URL 形式の画像をファイルに変換する（レガシーデータの移行）。
       String? effectiveImagePath = _imagePath;
-      if (_imageBytes != null) {
-        if (kIsWeb) {
-          // Web: ファイルシステムがないため Base64 data URL のまま保存
-          final base64 = base64Encode(_imageBytes!);
-          effectiveImagePath = 'data:image/jpeg;base64,$base64';
-        } else {
-          // モバイル: トリミング済みバイト列をファイルとして保存
-          effectiveImagePath = await _saveImageToFile(_imageBytes!);
-        }
-      } else if (!kIsWeb && _imagePath != null && _imagePath!.startsWith('data:')) {
-        // 既存の Base64 data URL 画像をファイルに変換（編集時の逆移行）
+      if (_imagePath != null && _imagePath!.startsWith('data:')) {
         try {
           final comma = _imagePath!.indexOf(',');
           if (comma >= 0) {
@@ -220,7 +182,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           }
         } catch (e) {
           debugPrint('Base64→ファイル変換失敗: $e');
-          effectiveImagePath = null; // 変換失敗時は画像なしにフォールバック
+          effectiveImagePath = null;
         }
       }
       
@@ -330,23 +292,15 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                       width: 2,
                     ),
                   ),
-                  child: (_imageBytes != null || _imagePath != null)
+                  child: _imagePath != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(10),
-                          child: _imageBytes != null
-                              // Web: トリミング済みバイト列から直接表示
-                              ? Image.memory(
-                                  _imageBytes!,
-                                  width: 150,
-                                  height: 150,
-                                  fit: BoxFit.cover,
-                                )
-                              : PlantImageWidget(
-                                  imagePath: _imagePath,
-                                  width: 150,
-                                  height: 150,
-                                  borderRadius: BorderRadius.zero,
-                                ),
+                          child: PlantImageWidget(
+                            imagePath: _imagePath,
+                            width: 150,
+                            height: 150,
+                            borderRadius: BorderRadius.zero,
+                          ),
                         )
                       : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
