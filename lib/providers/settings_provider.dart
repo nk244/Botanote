@@ -128,4 +128,11 @@ class SettingsProvider with ChangeNotifier {
     await _settingsService.saveSettings(_settings);
     notifyListeners();
   }
+
+  /// Claude APIキーを変更する。
+  Future<void> setClaudeApiKey(String key) async {
+    _settings = _settings.copyWith(claudeApiKey: key);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
 }

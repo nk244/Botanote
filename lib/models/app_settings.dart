@@ -97,6 +97,9 @@ class AppSettings {
   final PlantSortOrder plantSortOrder;
   final List<String> customSortOrder;
 
+  /// Claude APIキー（空文字列 = 未設定）
+  final String claudeApiKey;
+
   AppSettings({
     this.viewMode = ViewMode.card,
     this.theme = AppTheme.green,
@@ -107,6 +110,7 @@ class AppSettings {
     LogTypeColors? logTypeColors,
     this.plantSortOrder = PlantSortOrder.createdAtAsc,
     this.customSortOrder = const [],
+    this.claudeApiKey = '',
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -120,6 +124,7 @@ class AppSettings {
       'logTypeColors': logTypeColors.toMap(),
       'plantSortOrder': plantSortOrder.name,
       'customSortOrder': customSortOrder,
+      'claudeApiKey': claudeApiKey,
     };
   }
 
@@ -152,6 +157,7 @@ class AppSettings {
       customSortOrder: map['customSortOrder'] != null
           ? List<String>.from(map['customSortOrder'])
           : [],
+      claudeApiKey: map['claudeApiKey'] as String? ?? '',
     );
   }
 
@@ -165,6 +171,7 @@ class AppSettings {
     LogTypeColors? logTypeColors,
     PlantSortOrder? plantSortOrder,
     List<String>? customSortOrder,
+    String? claudeApiKey,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -176,6 +183,7 @@ class AppSettings {
       logTypeColors: logTypeColors ?? this.logTypeColors,
       plantSortOrder: plantSortOrder ?? this.plantSortOrder,
       customSortOrder: customSortOrder ?? this.customSortOrder,
+      claudeApiKey: claudeApiKey ?? this.claudeApiKey,
     );
   }
 }
