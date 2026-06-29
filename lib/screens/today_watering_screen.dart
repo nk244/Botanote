@@ -1146,31 +1146,33 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       return;
     }
 
-    final selectedPlant = await showDialog<Plant>(
+    final selectedPlants = await showDialog<List<Plant>>(
       context: context,
       builder: (context) => _UnscheduledWateringDialog(
         plants: unscheduledPlants,
       ),
     );
 
-    if (selectedPlant != null && mounted) {
-      // Show log type selection dialog
+    if (selectedPlants != null && selectedPlants.isNotEmpty && mounted) {
+      // ログ種別選択ダイアログを表示（選択した全植物に同じ種別を適用）
       final selectedLogTypes = await showDialog<Set<LogType>>(
         context: context,
         builder: (context) => _LogTypeSelectionDialog(),
       );
 
       if (selectedLogTypes != null && selectedLogTypes.isNotEmpty && mounted) {
-        // Record selected log types for the plant
-        for (final logType in selectedLogTypes) {
-          await _recordLog(plantProvider, selectedPlant.id, logType);
+        // 選択した全植物に対してログを一括記録
+        for (final plant in selectedPlants) {
+          for (final logType in selectedLogTypes) {
+            await _recordLog(plantProvider, plant.id, logType);
+          }
         }
         await _refreshAfterLogChange();
-        
+
         final logTypeNames = selectedLogTypes
             .map((type) => _getLogTypeName(type))
             .join('・');
-        _showSuccessMessage('${selectedPlant.name}に$logTypeNamesを記録しました');
+        _showSuccessMessage('${selectedPlants.length}件の植物に$logTypeNamesを記録しました');
       }
     }
   }
@@ -1537,7 +1539,7 @@ class _LogTypeSelectionDialogState extends State<_LogTypeSelectionDialog> {
   }
 }
 
-/// Dialog for selecting unscheduled plants to water
+/// 予定外植物への記録ダイアログ（複数選択対応）
 class _UnscheduledWateringDialog extends StatefulWidget {
   final List<Plant> plants;
 
@@ -1549,6 +1551,8 @@ class _UnscheduledWateringDialog extends StatefulWidget {
 
 class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> {
   String _searchQuery = '';
+  // 検索フィルタをまたいで選択状態を保持する
+  final Set<String> _selectedIds = {};
 
   @override
   Widget build(BuildContext context) {
@@ -1587,11 +1591,22 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
                       itemCount: filteredPlants.length,
                       itemBuilder: (context, index) {
                         final plant = filteredPlants[index];
-                        return ListTile(
-                          leading: PlantImageWidget(plant: plant, width: 40, height: 40),
+                        final isSelected = _selectedIds.contains(plant.id);
+                        return CheckboxListTile(
+                          value: isSelected,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedIds.add(plant.id);
+                              } else {
+                                _selectedIds.remove(plant.id);
+                              }
+                            });
+                          },
+                          secondary: PlantImageWidget(plant: plant, width: 40, height: 40),
                           title: Text(plant.name),
                           subtitle: plant.variety != null ? Text(plant.variety!) : null,
-                          onTap: () => Navigator.of(context).pop(plant),
+                          controlAffinity: ListTileControlAffinity.trailing,
                         );
                       },
                     ),
@@ -1603,6 +1618,20 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          // 0件選択中は disabled
+          onPressed: _selectedIds.isEmpty
+              ? null
+              : () {
+                  final selectedPlants = widget.plants
+                      .where((p) => _selectedIds.contains(p.id))
+                      .toList();
+                  Navigator.of(context).pop(selectedPlants);
+                },
+          child: Text(
+            _selectedIds.isEmpty ? '記録する' : '記録する（${_selectedIds.length}件）',
+          ),
         ),
       ],
     );
