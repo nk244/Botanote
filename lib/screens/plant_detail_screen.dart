@@ -11,6 +11,7 @@ import '../utils/date_utils.dart';
 import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
 import 'note_detail_screen.dart';
+import 'plant_health_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// SliverPersistentHeaderDelegate: TabBarを固定表示するためのデリゲート
@@ -379,7 +380,34 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           const SizedBox(height: 16),
           _buildFertilizerInfoCard(),
         ],
+        const SizedBox(height: 24),
+        _buildHealthDiagnoseButton(),
       ],
+    );
+  }
+
+  /// 健康診断ボタン
+  Widget _buildHealthDiagnoseButton() {
+    return FilledButton.tonalIcon(
+      onPressed: () async {
+        // 最終水やり日を取得してから画面遷移する
+        final logs = await context
+            .read<PlantProvider>()
+            .getAllLogsForPlantAndType(widget.plant.id, LogType.watering);
+        logs.sort((a, b) => b.date.compareTo(a.date));
+        final lastWateredAt = logs.isNotEmpty ? logs.first.date : null;
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => PlantHealthScreen(
+              plant: widget.plant,
+              lastWateredAt: lastWateredAt,
+            ),
+          ),
+        );
+      },
+      icon: const Icon(Icons.medical_services_outlined),
+      label: const Text('健康診断する'),
     );
   }
 

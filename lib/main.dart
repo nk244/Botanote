@@ -7,6 +7,7 @@ import 'package:workmanager/workmanager.dart';
 import 'providers/plant_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/note_provider.dart';
+import 'providers/ai_provider.dart';
 import 'screens/home_screen.dart';
 import 'theme/app_themes.dart';
 import 'models/app_settings.dart';
@@ -69,6 +70,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PlantProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()..loadSettings()),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
+        ChangeNotifierProvider(create: (_) => AiProvider()),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settingsProvider, _) {
