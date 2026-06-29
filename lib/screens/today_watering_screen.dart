@@ -280,24 +280,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     _showSuccessMessage(_buildLogMessage(count));
   }
 
-  Future<void> _recordLog(
-    PlantProvider provider,
-    String plantId,
-    LogType logType,
-  ) async {
-    switch (logType) {
-      case LogType.watering:
-        await provider.recordWatering(plantId, _selectedDate, null);
-        break;
-      case LogType.fertilizer:
-        await provider.recordFertilizer(plantId, _selectedDate, null);
-        break;
-      case LogType.vitalizer:
-        await provider.recordVitalizer(plantId, _selectedDate, null);
-        break;
-    }
-  }
-
   String _buildLogMessage(int count) {
     final actionNames = _selectedBulkLogTypes
         .map((type) => _getLogTypeName(type))
@@ -1161,18 +1143,19 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
       );
 
       if (selectedLogTypes != null && selectedLogTypes.isNotEmpty && mounted) {
-        // 選択した全植物に対してログを一括記録
-        for (final plant in selectedPlants) {
-          for (final logType in selectedLogTypes) {
-            await _recordLog(plantProvider, plant.id, logType);
-          }
-        }
+        // 選択した全植物 × 全ログ種別を一括登録する
+        final plantIds = selectedPlants.map((p) => p.id).toList();
+        await plantProvider.bulkRecordLogs(plantIds, selectedLogTypes.toList(), _selectedDate);
         await _refreshAfterLogChange();
 
         final logTypeNames = selectedLogTypes
             .map((type) => _getLogTypeName(type))
             .join('・');
-        _showSuccessMessage('${selectedPlants.length}件の植物に$logTypeNamesを記録しました');
+        // 1件の場合は植物名、複数の場合はN件で表示する
+        final plantLabel = selectedPlants.length == 1
+            ? selectedPlants.first.name
+            : '${selectedPlants.length}件の植物';
+        _showSuccessMessage('$plantLabelに$logTypeNamesを記録しました');
       }
     }
   }
