@@ -1,7 +1,7 @@
 ---
 issue: 169
 title: IoTセンサーのデバイス-植物マッピングとアプリ起動時自動取得
-status: approved
+status: implemented
 ---
 
 ## 概要
