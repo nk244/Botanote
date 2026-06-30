@@ -27,7 +27,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     });
   }
 
-  /// SensorSource の表示名を返す。
   String _sourceName(SensorSource source) {
     switch (source) {
       case SensorSource.natureRemo:
@@ -39,8 +38,38 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     }
   }
 
-  /// センサーデータ取得と記録のフローを開始する。
-  Future<void> _startFetchFlow(SensorSource source) async {
+  /// マッピングを使って一括取得・保存する（メインフロー）
+  Future<void> _fetchWithMappings() async {
+    final settingsProvider = context.read<SettingsProvider>();
+    final settings = settingsProvider.settings;
+    setState(() => _isFetching = true);
+    try {
+      final count = await context
+          .read<SensorLogProvider>()
+          .fetchAndSaveWithMappings(settings);
+      await settingsProvider.updateLastSensorFetchAt(DateTime.now());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count > 0
+                ? '$count件のセンサーログを記録しました'
+                : 'データを取得しましたが記録できたログはありませんでした',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取得に失敗しました: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isFetching = false);
+    }
+  }
+
+  /// マッピング未設定時の手動取得フロー（フォールバック）
+  Future<void> _startManualFetchFlow(SensorSource source) async {
     final settings = context.read<SettingsProvider>().settings;
     setState(() => _isFetching = true);
 
@@ -66,7 +95,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
         return;
       }
 
-      // デバイスが複数ある場合はユーザーに選択させる
+      // 複数デバイスがある場合はユーザーに選択させる
       final SensorData selected;
       if (data.length == 1) {
         selected = data.first;
@@ -76,7 +105,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
         selected = picked;
       }
 
-      // 取得結果確認と記録ダイアログを表示
       await _showRecordDialog(selected, source);
     } catch (e) {
       if (!mounted) return;
@@ -88,7 +116,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     }
   }
 
-  /// 複数デバイスがある場合のデバイス選択ダイアログ
   Future<SensorData?> _showDevicePickerDialog(List<SensorData> devices) {
     return showDialog<SensorData>(
       context: context,
@@ -120,7 +147,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     );
   }
 
-  /// センサーデータ確認と記録ダイアログ
   Future<void> _showRecordDialog(SensorData data, SensorSource source) async {
     final plants = context.read<PlantProvider>().plants;
     String? selectedPlantId;
@@ -134,7 +160,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // センサー値の表示
               _buildSensorValueRow(
                 Icons.thermostat,
                 '温度',
@@ -151,7 +176,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
                     : '--',
               ),
               const SizedBox(height: 16),
-              // 植物への紐付け選択
               DropdownButtonFormField<String?>(
                 initialValue: selectedPlantId,
                 decoration: const InputDecoration(
@@ -168,8 +192,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
                         child: Text(p.name),
                       )),
                 ],
-                onChanged: (v) =>
-                    setDialogState(() => selectedPlantId = v),
+                onChanged: (v) => setDialogState(() => selectedPlantId = v),
               ),
             ],
           ),
@@ -281,7 +304,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
       ),
       body: Column(
         children: [
-          _buildFetchButtons(),
+          _buildFetchArea(),
           const Divider(height: 1),
           Expanded(child: _buildLogList()),
         ],
@@ -289,12 +312,14 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     );
   }
 
-  Widget _buildFetchButtons() {
+  Widget _buildFetchArea() {
     final settings = context.watch<SettingsProvider>().settings;
     final hasNatureRemo = settings.natureRemoToken.isNotEmpty;
     final hasSwitchBot = settings.switchBotToken.isNotEmpty &&
         settings.switchBotSecret.isNotEmpty;
+    final hasMappings = settings.sensorDeviceMappings.isNotEmpty;
 
+    // APIトークン未設定
     if (!hasNatureRemo && !hasSwitchBot) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -316,9 +341,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const IotSettingsScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const IotSettingsScreen()),
               ),
               icon: const Icon(Icons.settings),
               label: const Text('IoT設定を開く'),
@@ -328,22 +351,117 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
       );
     }
 
+    // マッピングが設定済み → 1タップ取得ボタン
+    if (hasMappings) {
+      return _buildMappingFetchArea(settings.sensorDeviceMappings.length);
+    }
+
+    // マッピング未設定 → 手動取得ボタン + マッピング設定へのヒント
+    return _buildManualFetchArea(hasNatureRemo, hasSwitchBot);
+  }
+
+  /// マッピング設定済みのときに表示する取得エリア
+  Widget _buildMappingFetchArea(int deviceCount) {
+    final settings = context.read<SettingsProvider>().settings;
+    final lastFetchStr = settings.lastSensorFetchAt;
+    String lastFetchLabel = '未取得';
+    if (lastFetchStr != null) {
+      final dt = DateTime.tryParse(lastFetchStr);
+      if (dt != null) {
+        lastFetchLabel =
+            '前回: ${DateFormat('MM/dd HH:mm').format(dt.toLocal())}';
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          FilledButton.icon(
+            onPressed: _isFetching ? null : _fetchWithMappings,
+            icon: _isFetching
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sensors),
+            label: const Text('今すぐ取得'),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$deviceCount台のデバイスから取得して紐づけ済み植物に記録します',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              Text(
+                lastFetchLabel,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// マッピング未設定のときに表示する手動取得エリア
+  Widget _buildManualFetchArea(bool hasNatureRemo, bool hasSwitchBot) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // マッピング設定を促すバナー
+          Card(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'IoT設定でデバイスと植物を紐づけると、1タップで全デバイスのデータを取得・記録できます。',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSecondaryContainer,
+                          ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const IotSettingsScreen()),
+                    ),
+                    child: const Text('設定'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // 手動取得ボタン
           if (hasNatureRemo)
-            _buildFetchButton(
+            _buildManualFetchButton(
               label: 'Nature Remo からデータ取得',
-              icon: Icons.sensors,
               source: SensorSource.natureRemo,
             ),
           if (hasNatureRemo && hasSwitchBot) const SizedBox(height: 8),
           if (hasSwitchBot)
-            _buildFetchButton(
+            _buildManualFetchButton(
               label: 'SwitchBot からデータ取得',
-              icon: Icons.sensors,
               source: SensorSource.switchBot,
             ),
         ],
@@ -351,21 +469,28 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     );
   }
 
-  Widget _buildFetchButton({
+  Widget _buildManualFetchButton({
     required String label,
-    required IconData icon,
     required SensorSource source,
   }) {
-    return FilledButton.icon(
-      onPressed: _isFetching ? null : () => _startFetchFlow(source),
-      icon: _isFetching
-          ? const SizedBox(
+    return FilledButton.tonal(
+      onPressed:
+          _isFetching ? null : () => _startManualFetchFlow(source),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (_isFetching)
+            const SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(icon),
-      label: Text(label),
+          else
+            const Icon(Icons.sensors),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
     );
   }
 
@@ -406,7 +531,6 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
           );
         }
 
-        // 植物ID→名前の変換マップを生成
         final plantMap = {
           for (final p in plantProvider.plants) p.id: p.name,
         };
