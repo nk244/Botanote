@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/sensor_device_mapping.dart';
+import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/iot_service.dart';
 
-/// IoT連携APIキーの設定画面
+/// IoT連携APIキー・デバイスマッピング・自動取得間隔の設定画面
 class IotSettingsScreen extends StatefulWidget {
   const IotSettingsScreen({super.key});
 
@@ -19,15 +21,17 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
   bool _isSaving = false;
   bool _isTestingNatureRemo = false;
   bool _isTestingSwitchBot = false;
+  bool _isFetchingDevices = false;
 
-  /// Nature Remoのトークン入力フィールドの表示/非表示
   bool _obscureNatureRemo = true;
-
-  /// SwitchBotのトークン入力フィールドの表示/非表示
   bool _obscureSwitchBotToken = true;
-
-  /// SwitchBotのシークレット入力フィールドの表示/非表示
   bool _obscureSwitchBotSecret = true;
+
+  /// 現在の編集中マッピング（deviceId → plantIdリスト）
+  late List<SensorDeviceMapping> _mappings;
+
+  /// 自動取得間隔（時間）
+  late int _fetchIntervalHours;
 
   @override
   void initState() {
@@ -39,6 +43,8 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
         TextEditingController(text: settings.switchBotToken);
     _switchBotSecretController =
         TextEditingController(text: settings.switchBotSecret);
+    _mappings = List.from(settings.sensorDeviceMappings);
+    _fetchIntervalHours = settings.sensorFetchIntervalHours;
   }
 
   @override
@@ -52,11 +58,14 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
-      await context.read<SettingsProvider>().updateIotSettings(
-            natureRemoToken: _natureRemoController.text.trim(),
-            switchBotToken: _switchBotTokenController.text.trim(),
-            switchBotSecret: _switchBotSecretController.text.trim(),
-          );
+      final provider = context.read<SettingsProvider>();
+      await provider.updateIotSettings(
+        natureRemoToken: _natureRemoController.text.trim(),
+        switchBotToken: _switchBotTokenController.text.trim(),
+        switchBotSecret: _switchBotSecretController.text.trim(),
+      );
+      await provider.updateDeviceMappings(_mappings);
+      await provider.updateSensorFetchInterval(_fetchIntervalHours);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('設定を保存しました')),
@@ -132,6 +141,146 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     }
   }
 
+  /// 設定済み API からデバイスを一括取得してリストに表示する
+  Future<void> _fetchDevices() async {
+    final natureRemoToken = _natureRemoController.text.trim();
+    final switchBotToken = _switchBotTokenController.text.trim();
+    final switchBotSecret = _switchBotSecretController.text.trim();
+
+    if (natureRemoToken.isEmpty && switchBotToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('APIトークンを入力してから取得してください')),
+      );
+      return;
+    }
+
+    setState(() => _isFetchingDevices = true);
+    try {
+      final iot = IotService();
+      final allDevices = <SensorData>[];
+
+      if (natureRemoToken.isNotEmpty) {
+        try {
+          final devices = await iot.fetchNatureRemoData(natureRemoToken);
+          allDevices.addAll(devices);
+        } catch (e) {
+          // NatureRemoが失敗しても SwitchBot の取得を続行
+        }
+      }
+      if (switchBotToken.isNotEmpty && switchBotSecret.isNotEmpty) {
+        try {
+          final devices =
+              await iot.fetchSwitchBotData(switchBotToken, switchBotSecret);
+          allDevices.addAll(devices);
+        } catch (e) {
+          // SwitchBotが失敗しても続行
+        }
+      }
+
+      if (!mounted) return;
+
+      if (allDevices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('デバイスが見つかりませんでした')),
+        );
+        return;
+      }
+
+      setState(() {
+        // 取得できたデバイスのうちマッピングに存在しないものを初期登録
+        for (final device in allDevices) {
+          final exists = _mappings.any((m) => m.deviceId == device.deviceId);
+          if (!exists) {
+            _mappings.add(SensorDeviceMapping(
+              deviceId: device.deviceId,
+              deviceName: device.deviceName,
+              source: device.source,
+              plantIds: [],
+            ));
+          }
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _isFetchingDevices = false);
+    }
+  }
+
+  /// デバイスに紐づける植物を複数選択するダイアログを表示する
+  Future<void> _showPlantPickerDialog(SensorDeviceMapping mapping) async {
+    final plantProvider = context.read<PlantProvider>();
+    final plants = plantProvider.plants;
+
+    if (plants.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('植物が登録されていません')),
+      );
+      return;
+    }
+
+    // 現在選択中の植物IDセット（ダイアログ内で変更する）
+    final selectedIds = Set<String>.from(mapping.plantIds);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('${mapping.deviceName}の植物を設定'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: plants.length,
+              itemBuilder: (_, i) {
+                final plant = plants[i];
+                final isSelected = selectedIds.contains(plant.id);
+                return CheckboxListTile(
+                  title: Text(plant.name),
+                  subtitle: plant.variety != null
+                      ? Text(plant.variety!)
+                      : null,
+                  value: isSelected,
+                  onChanged: (checked) {
+                    setDialogState(() {
+                      if (checked == true) {
+                        selectedIds.add(plant.id);
+                      } else {
+                        selectedIds.remove(plant.id);
+                      }
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('確定'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      final idx = _mappings.indexWhere((m) => m.deviceId == mapping.deviceId);
+      if (idx >= 0) {
+        _mappings[idx] = SensorDeviceMapping(
+          deviceId: mapping.deviceId,
+          deviceName: mapping.deviceName,
+          source: mapping.source,
+          plantIds: selectedIds.toList(),
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -159,7 +308,11 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           _buildNatureRemoSection(),
           const SizedBox(height: 24),
           _buildSwitchBotSection(),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          _buildDeviceMappingSection(),
+          const SizedBox(height: 24),
+          _buildAutoFetchSection(),
+          const SizedBox(height: 24),
           _buildNoteCard(),
         ],
       ),
@@ -276,6 +429,128 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     );
   }
 
+  /// デバイス-植物マッピングカード
+  Widget _buildDeviceMappingSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'デバイスと植物の紐づけ',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'センサーを取得してから、各デバイスに植物を紐づけます。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isFetchingDevices ? null : _fetchDevices,
+              icon: _isFetchingDevices
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sensors),
+              label: const Text('センサーを取得'),
+            ),
+            if (_mappings.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Divider(),
+              ..._mappings.map((mapping) => _buildMappingTile(mapping)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// デバイス1件のマッピング行
+  Widget _buildMappingTile(SensorDeviceMapping mapping) {
+    final plantProvider = context.read<PlantProvider>();
+    final plants = plantProvider.plants;
+
+    // 紐づけ済み植物名の一覧を作成
+    final linkedNames = mapping.plantIds
+        .map((id) {
+          try {
+            return plants.firstWhere((p) => p.id == id).name;
+          } catch (_) {
+            return null;
+          }
+        })
+        .where((n) => n != null)
+        .cast<String>()
+        .toList();
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.device_hub),
+      title: Text(mapping.deviceName),
+      subtitle: linkedNames.isEmpty
+          ? const Text('植物が未設定')
+          : Text(linkedNames.join('、')),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _showPlantPickerDialog(mapping),
+    );
+  }
+
+  /// 自動取得間隔カード
+  Widget _buildAutoFetchSection() {
+    const intervalOptions = [
+      (label: '無効', hours: 0),
+      (label: '3時間ごと', hours: 3),
+      (label: '6時間ごと', hours: 6),
+      (label: '12時間ごと', hours: 12),
+      (label: '24時間ごと', hours: 24),
+    ];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '自動取得（アプリ起動時）',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'アプリ起動時に指定した間隔が経過していれば自動でデータを取得します。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              value: _fetchIntervalHours,
+              decoration: const InputDecoration(
+                labelText: '取得間隔',
+                border: OutlineInputBorder(),
+              ),
+              items: intervalOptions
+                  .map((opt) => DropdownMenuItem<int>(
+                        value: opt.hours,
+                        child: Text(opt.label),
+                      ))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _fetchIntervalHours = v);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildNoteCard() {
     return Card(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -310,3 +585,4 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     );
   }
 }
+

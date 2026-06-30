@@ -1,3 +1,5 @@
+import 'sensor_device_mapping.dart';
+
 enum ViewMode {
   list,
   card,
@@ -106,6 +108,15 @@ class AppSettings {
   /// SwitchBot HMAC署名シークレット
   final String switchBotSecret;
 
+  /// デバイス-植物マッピング設定
+  final List<SensorDeviceMapping> sensorDeviceMappings;
+
+  /// センサー自動取得間隔（時間）。0 = 無効
+  final int sensorFetchIntervalHours;
+
+  /// 最後にセンサーを自動取得した日時（ISO8601文字列、未取得は null）
+  final String? lastSensorFetchAt;
+
   AppSettings({
     this.viewMode = ViewMode.card,
     this.theme = AppTheme.green,
@@ -119,6 +130,9 @@ class AppSettings {
     this.natureRemoToken = '',
     this.switchBotToken = '',
     this.switchBotSecret = '',
+    this.sensorDeviceMappings = const [],
+    this.sensorFetchIntervalHours = 0,
+    this.lastSensorFetchAt,
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -135,6 +149,10 @@ class AppSettings {
       'natureRemoToken': natureRemoToken,
       'switchBotToken': switchBotToken,
       'switchBotSecret': switchBotSecret,
+      'sensorDeviceMappings':
+          sensorDeviceMappings.map((m) => m.toMap()).toList(),
+      'sensorFetchIntervalHours': sensorFetchIntervalHours,
+      'lastSensorFetchAt': lastSensorFetchAt,
     };
   }
 
@@ -170,6 +188,14 @@ class AppSettings {
       natureRemoToken: map['natureRemoToken'] as String? ?? '',
       switchBotToken: map['switchBotToken'] as String? ?? '',
       switchBotSecret: map['switchBotSecret'] as String? ?? '',
+      sensorDeviceMappings:
+          (map['sensorDeviceMappings'] as List<dynamic>? ?? [])
+              .map((m) => SensorDeviceMapping.fromMap(
+                  Map<String, dynamic>.from(m as Map)))
+              .toList(),
+      sensorFetchIntervalHours:
+          map['sensorFetchIntervalHours'] as int? ?? 0,
+      lastSensorFetchAt: map['lastSensorFetchAt'] as String?,
     );
   }
 
@@ -186,6 +212,9 @@ class AppSettings {
     String? natureRemoToken,
     String? switchBotToken,
     String? switchBotSecret,
+    List<SensorDeviceMapping>? sensorDeviceMappings,
+    int? sensorFetchIntervalHours,
+    Object? lastSensorFetchAt = _sentinel,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -200,6 +229,15 @@ class AppSettings {
       natureRemoToken: natureRemoToken ?? this.natureRemoToken,
       switchBotToken: switchBotToken ?? this.switchBotToken,
       switchBotSecret: switchBotSecret ?? this.switchBotSecret,
+      sensorDeviceMappings: sensorDeviceMappings ?? this.sensorDeviceMappings,
+      sensorFetchIntervalHours:
+          sensorFetchIntervalHours ?? this.sensorFetchIntervalHours,
+      lastSensorFetchAt: lastSensorFetchAt == _sentinel
+          ? this.lastSensorFetchAt
+          : lastSensorFetchAt as String?,
     );
   }
 }
+
+/// sentinel: copyWith で lastSensorFetchAt を null クリアするために使用
+const Object _sentinel = Object();
