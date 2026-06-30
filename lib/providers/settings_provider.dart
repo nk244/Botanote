@@ -127,4 +127,19 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// IoT連携のAPIキーを更新する。
+  Future<void> updateIotSettings({
+    required String natureRemoToken,
+    required String switchBotToken,
+    required String switchBotSecret,
+  }) async {
+    _settings = _settings.copyWith(
+      natureRemoToken: natureRemoToken,
+      switchBotToken: switchBotToken,
+      switchBotSecret: switchBotSecret,
+    );
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
 }

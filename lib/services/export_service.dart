@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
+import '../models/sensor_log.dart';
 import 'database_service.dart';
 
 /// データのエクスポート / インポートを担うサービス
@@ -131,13 +132,17 @@ class ExportService {
       noteMaps.add(map);
     }
 
+    // ── センサーログを収集 ──
+    final sensorLogs = await _db.getAllSensorLogs();
+
     // ── data.json を生成 ──
     final data = {
-      'version': 2,
+      'version': 3,
       'exportedAt': DateTime.now().toIso8601String(),
       'plants': plantMaps,
       'logs': allLogs.map((l) => l.toMap()).toList(),
       'notes': noteMaps,
+      'sensorLogs': sensorLogs.map((s) => s.toMap()).toList(),
     };
     final jsonBytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
     archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
@@ -210,7 +215,7 @@ class ExportService {
         jsonDecode(jsonStr) as Map<String, dynamic>;
 
     final version = data['version'] as int? ?? 1;
-    if (version > 2) {
+    if (version > 3) {
       throw FormatException('未対応のバックアップバージョン: $version');
     }
 
@@ -237,7 +242,7 @@ class ExportService {
     final Map<String, dynamic> data =
         jsonDecode(jsonStr) as Map<String, dynamic>;
     final version = data['version'] as int? ?? 1;
-    if (version > 2) {
+    if (version > 3) {
       throw FormatException('未対応のバックアップバージョン: $version');
     }
     return _importData(data, const {});
@@ -290,10 +295,20 @@ class ExportService {
       noteCount++;
     }
 
+    // センサーログをインポート
+    int sensorLogCount = 0;
+    final sensorLogsJson = data['sensorLogs'] as List<dynamic>? ?? [];
+    for (final s in sensorLogsJson) {
+      final log = SensorLog.fromMap(Map<String, dynamic>.from(s as Map));
+      await _db.insertSensorLog(log);
+      sensorLogCount++;
+    }
+
     return ImportResult(
       plantCount: plantCount,
       logCount: logCount,
       noteCount: noteCount,
+      sensorLogCount: sensorLogCount,
     );
   }
 }
@@ -303,14 +318,23 @@ class ImportResult {
   final int plantCount;
   final int logCount;
   final int noteCount;
+  final int sensorLogCount;
 
   const ImportResult({
     required this.plantCount,
     required this.logCount,
     required this.noteCount,
+    this.sensorLogCount = 0,
   });
 
   @override
-  String toString() =>
-      '植物: $plantCount件、ログ: $logCount件、ノート: $noteCount件';
+  String toString() {
+    final parts = [
+      '植物: $plantCount件',
+      'ログ: $logCount件',
+      'ノート: $noteCount件',
+    ];
+    if (sensorLogCount > 0) parts.add('センサーログ: $sensorLogCount件');
+    return parts.join('、');
+  }
 }
