@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- IoT API 通信に必要 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Push notification permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Android 12 (API 31-32): ユーザーが許可設定画面で許可する必要あり -->
