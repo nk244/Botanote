@@ -19,6 +19,17 @@ class SensorLogProvider with ChangeNotifier {
   List<SensorLog> get logs => _logs;
   bool get isLoading => _isLoading;
 
+  /// deviceId をキーに、そのデバイスの最新ログ1件を返すマップ。
+  ///
+  /// _logs は recordedAt DESC 順なので先頭の1件が最新になる。
+  Map<String, SensorLog> get latestLogPerDevice {
+    final result = <String, SensorLog>{};
+    for (final log in _logs) {
+      result.putIfAbsent(log.deviceId, () => log);
+    }
+    return result;
+  }
+
   /// DB からすべてのセンサーログを読み込む。
   Future<void> loadLogs() async {
     _isLoading = true;
