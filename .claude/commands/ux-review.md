@@ -110,3 +110,102 @@
 ```
 ux: <変更概要> (#<N>)
 ```
+
+---
+
+### ステップ7: Androidエミュレーターによる視覚確認（任意）
+
+コードレビューで発見しにくい **レイアウト崩れ・フォントサイズ・余白・色** の問題を実機相当の画面で確認する。
+ユーザーが「エミュレーターでテストして」と言った場合、または🟢確認事項が多い場合に実施する。
+
+#### 環境情報
+- エミュレーター: `Medium_Phone_API_36.1`
+- パッケージ名: `com.example.bota_note`
+- スクリーンショット保存先: `C:\Users\zorn5\AppData\Local\Temp\claude\C--Users-zorn5-source-botanote\ux_screenshots\`
+
+#### 手順
+
+**1. エミュレーターを起動する**
+
+```bash
+# 起動済み確認
+adb devices
+
+# 未起動なら起動（起動完了まで1〜2分かかる）
+flutter emulators --launch Medium_Phone_API_36.1
+
+# 起動完了を待つ
+adb wait-for-device shell getprop sys.boot_completed
+```
+
+**2. アプリをビルドしてインストールする**
+
+```bash
+flutter build apk --debug
+adb install -r build\app\outputs\flutter-apk\app-debug.apk
+```
+
+**3. アプリを起動する**
+
+```bash
+adb shell am start -n com.example.bota_note/.MainActivity
+# 起動後3秒ほど待つ
+```
+
+**4. スクリーンショットを撮影して確認する**
+
+```bash
+# スクリーンショットをPCに保存
+adb exec-out screencap -p > "C:\Users\zorn5\AppData\Local\Temp\claude\C--Users-zorn5-source-botanote\ux_screenshots\screen_home.png"
+```
+
+撮影後、Read ツールで画像ファイルを開き **視覚的にレイアウトを確認する**。
+
+**5. 画面を操作して各画面を確認する**
+
+UI要素の座標は `uiautomator dump` で取得する（解像度依存のハードコーディングを避けるため）:
+
+```bash
+# UI要素の座標ダンプ
+adb shell uiautomator dump /sdcard/ui.xml
+adb pull /sdcard/ui.xml "C:\Users\zorn5\AppData\Local\Temp\claude\C--Users-zorn5-source-botanote\ux_screenshots\ui.xml"
+```
+
+XMLから目的の要素の `bounds` 属性（例: `[540,2100][810,2280]`）を読み取り、中心座標を計算してタップ:
+
+```bash
+# タップ（X座標, Y座標）
+adb shell input tap 675 2190
+
+# テキスト入力
+adb shell input text "sample_text"
+
+# 戻るボタン
+adb shell input keyevent 4
+
+# スクロール（下方向）
+adb shell input swipe 540 1400 540 700 500
+```
+
+#### 確認する画面と操作フロー
+
+設計書の「変更対象ファイル」に含まれる画面を順番に確認する。
+各画面でスクリーンショットを撮影し、以下を目視チェックする:
+
+- テキストが切れていないか（overflow）
+- ボタン・カードの余白が適切か
+- 空状態・ローディング状態が意図通り表示されるか
+- ダークモード時に色が読めるか（テーマ切替可能な場合）
+
+#### 視覚確認レポートの追記
+
+発見した問題を「🔴 要修正」「🟡 改善推奨」に追加し、スクリーンショットのパスを添付する。
+（例: `![センサー画面](ux_screenshots/screen_sensor.png)`）
+
+#### エミュレーターの制限事項
+
+以下はエミュレーターでは確認できない:
+- 実際のIoT APIへの接続（Nature Remo / SwitchBot）
+- 端末ごとのフォントレンダリング差異
+- 画面輝度・実際の色再現性
+- 通知・バックグラウンド動作（workmanager）
