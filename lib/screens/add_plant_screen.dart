@@ -58,8 +58,10 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   }
 
   Future<void> _showImageSourceOptions() async {
-    // 既存画像がある場合は「再トリミング」選択肢も表示
+    // async ギャップ前に context 依存の参照を取得しておく
     final hasExistingImage = _imagePath != null;
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     // 選択肢の戻り値: ImageSource か 're-crop' か null（キャンセル）
     final choice = await showModalBottomSheet<Object>(
@@ -105,7 +107,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       if (pickedFile == null) return;
 
       // トリミング画面へ遷移
-      final cropResult = await Navigator.of(context).push<CropResult?>(
+      final cropResult = await navigator.push<CropResult?>(
         MaterialPageRoute(
           builder: (_) => ImageCropScreen(imagePath: pickedFile.path),
         ),
@@ -116,11 +118,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
 
       setState(() => _imagePath = cropResult.filePath);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('画像の取得に失敗しました: $e')),
-        );
-      }
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('画像の取得に失敗しました: $e')),
+      );
     }
   }
 

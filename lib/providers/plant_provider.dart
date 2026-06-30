@@ -644,13 +644,6 @@ class PlantProvider with ChangeNotifier {
     await _db.deleteLog(logId);
   }
 
-  /// コーチ機能用に直近30件のログを取得する。
-  Future<List<LogEntry>> getAllLogsForCoach() async {
-    final allLogs = await _db.getAllLogs();
-    allLogs.sort((a, b) => b.date.compareTo(a.date));
-    return allLogs.take(30).toList();
-  }
-
   /// すべての植物の水やり間隔を指定日数に一括設定する。
   Future<void> bulkUpdateWateringInterval(int days) async {
     for (final plant in _plants) {

@@ -1,6 +1,6 @@
 # Botanote 🌱💧
 
-植物の水やり・肥料・活力剤ログ管理アプリ。スケジュール通知・ログ記録・ノート機能を備えた Flutter 製アプリです。
+植物の水やり・肥料・活力剤ログ管理アプリ。スケジュール通知・ログ記録・ノート機能・IoTセンサー連携を備えた Flutter 製アプリです。
 
 ---
 
@@ -15,19 +15,18 @@
 | ⏱️ 間隔設定 | 水やり・肥料・活力剤それぞれに「N日ごと」または「水やりN回に1回」の間隔を設定可能 |
 | 📸 植物画像 | カメラ・ギャラリーから画像取得、トリミング対応。詳細画面で背景表示 |
 | 📝 ノート | 植物に紐付けられる自由記述ノート。タイトル・タグ・画像添付に対応 |
-| 🔔 プッシュ通知 | 指定時刻に水やりリマインダーを送信（Android / iOS） |
+| 🔔 プッシュ通知 | 指定時刻に水やりリマインダーを送信（Android / iOS）。当日に水やり予定がある場合のみ通知 |
+| 🌡️ IoTセンサー連携 | Nature Remo / SwitchBot の REST API から温湿度・照度などを自動取得。植物との紐付けで環境ダッシュボードを表示 |
 | 🎨 テーマ設定 | グリーン / ブルー / パープル / オレンジの 4 テーマ。ライト / ダーク / システム連動の 3 モード切り替え対応 |
 | 🔄 並び替え | 名前順・購入日順・ドラッグ操作によるカスタム順 |
 | 💾 ZIPバックアップ | 植物・ログ・ノート・画像ファイルをまとめて ZIP に圧縮してバックアップ・復元 |
-| 🌐 Web 対応 | SharedPreferences によりリロード後もデータを保持 |
 
 ---
 
 ## 対応プラットフォーム
 
-- Android
-- iOS
-- Web (Chrome)
+- Android（主要）
+- iOS（主要）
 
 ---
 
@@ -54,7 +53,6 @@ flutter pub get
 flutter devices
 
 # 4. アプリを起動
-flutter run -d chrome       # Web
 flutter run -d android      # Android
 flutter run -d ios          # iOS (macOS のみ)
 ```
@@ -66,17 +64,18 @@ flutter run -d ios          # iOS (macOS のみ)
 ```
 lib/
 ├── main.dart                         # エントリポイント
-├── data/
-│   └── test_data_generator.dart     # 開発用テストデータ生成
 ├── models/
 │   ├── plant.dart                   # 植物モデル
 │   ├── log_entry.dart               # 水やり/肥料/活力剤ログ
 │   ├── note.dart                    # ノートモデル
 │   ├── app_settings.dart            # アプリ設定（テーマ・通知）
-│   └── daily_log_status.dart        # 日別ログステータス
+│   ├── daily_log_status.dart        # 日別ログステータス
+│   ├── sensor_log.dart              # センサーログモデル
+│   └── sensor_device_mapping.dart   # センサーデバイス ↔ 植物マッピング
 ├── providers/
 │   ├── plant_provider.dart          # 植物データの状態管理
 │   ├── note_provider.dart           # ノートデータの状態管理
+│   ├── sensor_log_provider.dart     # センサーログの状態管理
 │   └── settings_provider.dart       # 設定の状態管理
 ├── screens/
 │   ├── home_screen.dart             # ホーム（タブナビゲーション）
@@ -85,17 +84,17 @@ lib/
 │   ├── plant_detail_screen.dart     # 植物詳細（画像背景・タブ表示）
 │   ├── add_plant_screen.dart        # 植物追加・編集
 │   ├── image_crop_screen.dart       # 画像トリミング
+│   ├── sensor_log_screen.dart       # センサーログ・環境ダッシュボード
+│   ├── iot_settings_screen.dart     # IoTセンサー連携設定
 │   ├── notes_list_screen.dart       # ノート一覧（検索・タグ絞り込み）
 │   ├── note_detail_screen.dart      # ノート詳細
 │   ├── add_edit_note_screen.dart    # ノート追加・編集
 │   └── settings_screen.dart         # 設定（テーマ・通知・データ管理）
 ├── services/
 │   ├── database_service.dart        # SQLite 操作（Android/iOS）
-│   ├── web_storage_service.dart     # SharedPreferences によるデータ永続化（Web）
-│   ├── memory_storage_service.dart  # インメモリストレージ（Web 開発用）
-│   ├── export_service.dart          # JSON エクスポート/インポート
+│   ├── export_service.dart          # JSON エクスポート/インポート・ZIPバックアップ
 │   ├── log_service.dart             # 水やりログ集計
-│   ├── notification_service.dart    # ローカルプッシュ通知
+│   ├── notification_service.dart    # ローカルプッシュ通知・スマートスケジューリング
 │   └── settings_service.dart        # 設定の永続化（SharedPreferences）
 ├── theme/
 │   └── app_themes.dart              # テーマ定義
@@ -113,12 +112,13 @@ lib/
 |---|---|---|
 | `provider` | ^6.1.1 | 状態管理 |
 | `sqflite` | ^2.3.0 | SQLite（モバイル） |
-| `shared_preferences` | ^2.2.2 | 設定永続化 / Web 永続化 |
+| `shared_preferences` | ^2.2.2 | 設定永続化 |
 | `image_picker` | ^1.0.7 | カメラ・ギャラリー取得 |
 | `crop_your_image` | ^1.0.0 | 画像トリミング |
 | `flutter_local_notifications` | ^20.1.0 | ローカルプッシュ通知 |
 | `table_calendar` | ^3.1.2 | カレンダーUI |
 | `timezone` | ^0.10.1 | タイムゾーン管理 |
+| `flutter_timezone` | ^5.0.1 | 端末タイムゾーン取得 |
 | `flutter_localizations` | SDK | カレンダー・UI の日本語ローカライゼーション |
 | `intl` | ^0.20.2 | 日付フォーマット（ja） |
 | `archive` | ^4.0.9 | ZIPバックアップ |
@@ -127,6 +127,9 @@ lib/
 | `permission_handler` | ^11.2.0 | ランタイムパーミッション |
 | `uuid` | ^4.3.3 | UUID 生成 |
 | `path_provider` | ^2.1.1 | ドキュメントディレクトリ取得 |
+| `workmanager` | ^0.9.0 | バックグラウンドタスク（通知スケジューリング） |
+| `http` | ^1.2.0 | IoTセンサー REST API 通信 |
+| `crypto` | ^3.0.3 | SwitchBot HMAC-SHA256 署名 |
 
 ---
 
@@ -145,9 +148,6 @@ flutter test
 # Android 向け実行
 flutter run -d android
 
-# Web 向け実行
-flutter run -d chrome
-
 # リリースビルド（Android APK）
 flutter build apk --release
 ```
@@ -159,11 +159,10 @@ flutter build apk --release
 - **状態管理**: Provider パターン（`ChangeNotifier`）
 - **設計パターン**: Provider + Repository パターン
   - `screens/` → `providers/` → `services/` → `models/` の一方向依存
-- **データ永続化**:
-  - モバイル: SQLite（`sqflite`）。DBバージョン管理による累積マイグレーション方式
-  - Web: SharedPreferences（`shared_preferences`）
+- **データ永続化**: SQLite（`sqflite`）。DBバージョン管理による累積マイグレーション方式
 - **サービス層**: DB 操作・通知・ファイル I/O を `lib/services/` に分離
-- **プラットフォーム分岐**: `kIsWeb` で Web / モバイルを切り替え
+- **IoTセンサー連携**: Nature Remo（Bearer トークン認証）および SwitchBot（HMAC-SHA256署名）の REST API を `http` パッケージで呼び出し。センサーログは SQLite に保存
+- **バックグラウンド処理**: `workmanager` によるバックグラウンドタスクでスマート通知をスケジューリング（当日に水やり予定がある場合のみ通知）
 - **バックアップ**: 植物・ログ・ノート・画像を ZIP に圧縮して共有シートで書き出し、ファイルピッカーで復元
 
 ---

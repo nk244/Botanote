@@ -23,7 +23,8 @@ class _PlantListScreenState extends State<PlantListScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
       context.read<PlantProvider>().loadPlants();
     });
   }

@@ -78,7 +78,7 @@ class ExportService {
             if (comma >= 0) {
               final bytes = base64Decode(path.substring(comma + 1));
               const zipPath = 'images/plants/';
-              final zipFilePath = '${zipPath}${plant.id}.jpg';
+              final zipFilePath = '$zipPath${plant.id}.jpg';
               archive.addFile(ArchiveFile(zipFilePath, bytes.length, bytes));
               map['imagePath'] = zipFilePath; // ZIP 内相対パスに変換
             } else {
