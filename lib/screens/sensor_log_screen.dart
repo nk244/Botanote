@@ -61,7 +61,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
 
       if (data.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('センサーデータが見つかりませんでした')),
+          const SnackBar(content: Text('センサーデバイスが見つかりませんでした')),
         );
         return;
       }
@@ -226,7 +226,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
   String _formatSensorValues(double? temperature, double? humidity) {
     final parts = <String>[];
     if (temperature != null) parts.add('${temperature.toStringAsFixed(1)}℃');
-    if (humidity != null) parts.add('${humidity.toStringAsFixed(1)}%');
+    if (humidity != null) parts.add('${humidity.toStringAsFixed(0)}%');
     return parts.isEmpty ? '温湿度データなし' : parts.join(' / ');
   }
 
@@ -266,7 +266,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('センサーログ'),
+        title: const Text('センサー'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -310,7 +310,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'IoTデバイスが連携されていません',
+              'センサーが設定されていません',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 8),

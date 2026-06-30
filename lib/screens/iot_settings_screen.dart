@@ -87,7 +87,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(devices.isEmpty
-              ? '接続成功（デバイスなし）'
+              ? '接続しました（温湿度センサーが見つかりません）'
               : '接続成功: $names'),
         ),
       );
@@ -118,7 +118,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(devices.isEmpty
-              ? '接続成功（温湿度センサーなし）'
+              ? '接続しました（温湿度センサーが見つかりません）'
               : '接続成功: $names'),
         ),
       );
@@ -204,7 +204,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.wifi_tethering),
+                  : const Icon(Icons.network_check),
               label: const Text('接続テスト'),
             ),
           ],
@@ -267,7 +267,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.wifi_tethering),
+                  : const Icon(Icons.network_check),
               label: const Text('接続テスト'),
             ),
           ],

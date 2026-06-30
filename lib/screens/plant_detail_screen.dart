@@ -605,7 +605,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
               if (hasNatureRemo)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: OutlinedButton.icon(
+                  child: FilledButton.icon(
                     onPressed: _isFetchingSensor
                         ? null
                         : () => _startFetchFlow(SensorSource.natureRemo),
@@ -622,7 +622,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
               if (hasSwitchBot)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: OutlinedButton.icon(
+                  child: FilledButton.icon(
                     onPressed: _isFetchingSensor
                         ? null
                         : () => _startFetchFlow(SensorSource.switchBot),
@@ -765,7 +765,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             ),
             const SizedBox(height: 12),
             Text(
-              'IoTセンサーが設定されていません',
+              'センサーが設定されていません',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -784,7 +784,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
   }
 
-  /// センサーログ1件のリストタイル（長押しで削除）
+  /// センサーログ1件のリストタイル
   Widget _buildSensorLogTile(SensorLog log) {
     final parts = [
       if (log.temperature != null)
@@ -800,22 +800,16 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       child: ListTile(
         leading: const Icon(Icons.thermostat),
         title: Text(parts.join('   ')),
-        subtitle: Text('${log.deviceName}  ($sourceLabel)'),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              DateFormat('MM月dd日').format(log.recordedAt),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            Text(
-              DateFormat('HH:mm').format(log.recordedAt),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+        subtitle: Text(
+          '${log.deviceName}  ($sourceLabel)\n'
+          '${DateFormat('MM月dd日 HH:mm').format(log.recordedAt)}',
         ),
-        onLongPress: () => _deleteSensorLog(log),
+        isThreeLine: true,
+        trailing: IconButton(
+          icon: const Icon(Icons.delete_outline, size: 20),
+          tooltip: '削除',
+          onPressed: () => _deleteSensorLog(log),
+        ),
       ),
     );
   }
