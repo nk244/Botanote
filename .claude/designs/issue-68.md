@@ -1,7 +1,7 @@
 ---
 issue: 68
 title: IoTセンサー連携
-status: approved
+status: implemented
 ---
 
 ## 概要
