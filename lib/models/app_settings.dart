@@ -97,6 +97,15 @@ class AppSettings {
   final PlantSortOrder plantSortOrder;
   final List<String> customSortOrder;
 
+  /// Nature Remo APIトークン
+  final String natureRemoToken;
+
+  /// SwitchBot APIトークン
+  final String switchBotToken;
+
+  /// SwitchBot HMAC署名シークレット
+  final String switchBotSecret;
+
   AppSettings({
     this.viewMode = ViewMode.card,
     this.theme = AppTheme.green,
@@ -107,6 +116,9 @@ class AppSettings {
     LogTypeColors? logTypeColors,
     this.plantSortOrder = PlantSortOrder.createdAtAsc,
     this.customSortOrder = const [],
+    this.natureRemoToken = '',
+    this.switchBotToken = '',
+    this.switchBotSecret = '',
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -120,6 +132,9 @@ class AppSettings {
       'logTypeColors': logTypeColors.toMap(),
       'plantSortOrder': plantSortOrder.name,
       'customSortOrder': customSortOrder,
+      'natureRemoToken': natureRemoToken,
+      'switchBotToken': switchBotToken,
+      'switchBotSecret': switchBotSecret,
     };
   }
 
@@ -152,6 +167,9 @@ class AppSettings {
       customSortOrder: map['customSortOrder'] != null
           ? List<String>.from(map['customSortOrder'])
           : [],
+      natureRemoToken: map['natureRemoToken'] as String? ?? '',
+      switchBotToken: map['switchBotToken'] as String? ?? '',
+      switchBotSecret: map['switchBotSecret'] as String? ?? '',
     );
   }
 
@@ -165,6 +183,9 @@ class AppSettings {
     LogTypeColors? logTypeColors,
     PlantSortOrder? plantSortOrder,
     List<String>? customSortOrder,
+    String? natureRemoToken,
+    String? switchBotToken,
+    String? switchBotSecret,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -176,6 +197,9 @@ class AppSettings {
       logTypeColors: logTypeColors ?? this.logTypeColors,
       plantSortOrder: plantSortOrder ?? this.plantSortOrder,
       customSortOrder: customSortOrder ?? this.customSortOrder,
+      natureRemoToken: natureRemoToken ?? this.natureRemoToken,
+      switchBotToken: switchBotToken ?? this.switchBotToken,
+      switchBotSecret: switchBotSecret ?? this.switchBotSecret,
     );
   }
 }

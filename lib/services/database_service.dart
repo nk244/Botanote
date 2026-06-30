@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
+import '../models/sensor_log.dart';
 
 /// SQLite データベースへのアクセスを担うサービス。
 ///
@@ -32,7 +33,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -72,6 +73,22 @@ class DatabaseService {
               // 既にカラムが存在する場合は無視
             }
           }
+        }
+        if (oldVersion < 5) {
+          // センサーログテーブルを追加
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS sensor_logs(
+              id TEXT PRIMARY KEY,
+              plantId TEXT,
+              source TEXT NOT NULL,
+              deviceId TEXT NOT NULL,
+              deviceName TEXT NOT NULL,
+              temperature REAL,
+              humidity REAL,
+              recordedAt TEXT NOT NULL,
+              createdAt TEXT NOT NULL
+            )
+          ''');
         }
       },
     );
@@ -119,6 +136,21 @@ class DatabaseService {
         plantIds TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    // センサーログテーブル
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sensor_logs(
+        id TEXT PRIMARY KEY,
+        plantId TEXT,
+        source TEXT NOT NULL,
+        deviceId TEXT NOT NULL,
+        deviceName TEXT NOT NULL,
+        temperature REAL,
+        humidity REAL,
+        recordedAt TEXT NOT NULL,
+        createdAt TEXT NOT NULL
       )
     ''');
   }
@@ -360,6 +392,43 @@ class DatabaseService {
     }
 
     return duePlants;
+  }
+
+  // ── SensorLog CRUD ───────────────────────────────────────────
+
+  /// センサーログを挿入する。
+  Future<void> insertSensorLog(SensorLog log) async {
+    final db = await database;
+    await db.insert('sensor_logs', log.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// すべてのセンサーログを計測日時の降順で取得する。
+  Future<List<SensorLog>> getAllSensorLogs() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sensor_logs',
+      orderBy: 'recordedAt DESC',
+    );
+    return List.generate(maps.length, (i) => SensorLog.fromMap(maps[i]));
+  }
+
+  /// 指定植物のセンサーログを取得する。
+  Future<List<SensorLog>> getSensorLogsByPlant(String plantId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sensor_logs',
+      where: 'plantId = ?',
+      whereArgs: [plantId],
+      orderBy: 'recordedAt DESC',
+    );
+    return List.generate(maps.length, (i) => SensorLog.fromMap(maps[i]));
+  }
+
+  /// 指定IDのセンサーログを削除する。
+  Future<void> deleteSensorLog(String id) async {
+    final db = await database;
+    await db.delete('sensor_logs', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> close() async {

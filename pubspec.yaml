@@ -71,6 +71,10 @@ dependencies:
   # バックグラウンドタスク（通知スケジューリング）
   workmanager: ^0.9.0
 
+  # IoTセンサー連携（HTTP通信・HMAC署名）
+  http: ^1.2.0
+  crypto: ^3.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

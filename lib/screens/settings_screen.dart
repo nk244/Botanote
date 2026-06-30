@@ -5,6 +5,7 @@ import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
+import 'iot_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -160,6 +161,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _isImporting ? null : () => _handleImport(context),
           ),
           _buildImageMigrationTile(),
+          const Divider(),
+
+          // IoTセンサー連携
+          _buildSectionHeader(context, 'IoTセンサー連携'),
+          ListTile(
+            leading: const Icon(Icons.sensors),
+            title: const Text('センサー連携の設定'),
+            subtitle: const Text('Nature Remo / SwitchBot の APIキーを管理'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const IotSettingsScreen(),
+              ),
+            ),
+          ),
           const Divider(),
 
           // About
