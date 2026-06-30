@@ -224,7 +224,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('植物を選択\n${mapping.deviceName}'),
+          title: Text('${mapping.deviceName}の植物を設定'),
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -496,10 +496,8 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       subtitle: linkedNames.isEmpty
           ? const Text('植物が未設定')
           : Text(linkedNames.join('、')),
-      trailing: TextButton(
-        onPressed: () => _showPlantPickerDialog(mapping),
-        child: const Text('植物を選択'),
-      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _showPlantPickerDialog(mapping),
     );
   }
 
