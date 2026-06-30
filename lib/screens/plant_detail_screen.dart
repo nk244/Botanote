@@ -845,7 +845,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     await _loadSensorLogs();
   }
 
-  /// IoTサービスからデータを取得してこの植物に紐付けて保存するフロー
+  /// IoTサービスからデータを取得してこの植物に紐付けて保存するフロー。
+  ///
+  /// マッピング設定に現在の植物が含まれているデバイスがある場合は
+  /// そのデバイスを自動選択し、ない場合はデバイス選択ダイアログを表示する。
   Future<void> _startFetchFlow(SensorSource source) async {
     final settingsProvider = context.read<SettingsProvider>();
     final sensorProvider = context.read<SensorLogProvider>();
@@ -856,6 +859,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     });
 
     try {
+      // マッピング設定でこの植物に紐づくデバイスを検索
+      final mappedDevice = settings.sensorDeviceMappings.where(
+        (m) => m.source == source && m.plantIds.contains(widget.plant.id),
+      ).firstOrNull;
+
       final List<SensorData> devices;
       if (source == SensorSource.natureRemo) {
         devices = await sensorProvider.fetchNatureRemoData(
@@ -875,8 +883,25 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         return;
       }
 
+      // マッピング済みデバイスがある場合は自動選択
       final SensorData selected;
-      if (devices.length == 1) {
+      if (mappedDevice != null) {
+        final found = devices.where(
+          (d) => d.deviceId == mappedDevice.deviceId,
+        ).firstOrNull;
+        if (found != null) {
+          selected = found;
+        } else {
+          // マッピングされたデバイスが取得結果に存在しない場合は手動選択にフォールバック
+          if (devices.length == 1) {
+            selected = devices.first;
+          } else {
+            final picked = await _showDevicePickerDialog(devices);
+            if (!mounted || picked == null) return;
+            selected = picked;
+          }
+        }
+      } else if (devices.length == 1) {
         selected = devices.first;
       } else {
         final picked = await _showDevicePickerDialog(devices);

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
+import '../models/sensor_log.dart';
 
 /// IoTデバイスから取得したセンサーデータ（生データ）
 class SensorData {
@@ -17,11 +18,15 @@ class SensorData {
   /// 湿度（%）
   final double? humidity;
 
+  /// データ取得元
+  final SensorSource source;
+
   const SensorData({
     required this.deviceId,
     required this.deviceName,
     this.temperature,
     this.humidity,
+    this.source = SensorSource.manual,
   });
 }
 
@@ -81,6 +86,7 @@ class IotService {
         deviceName: map['name'] as String? ?? '不明なデバイス',
         temperature: temperature,
         humidity: humidity,
+        source: SensorSource.natureRemo,
       );
     }).toList();
   }
@@ -149,6 +155,7 @@ class IotService {
             deviceName: deviceName,
             temperature: temperature,
             humidity: humidity,
+            source: SensorSource.switchBot,
           ));
         }
       } catch (_) {

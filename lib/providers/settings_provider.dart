@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 import '../models/app_settings.dart';
+import '../models/sensor_device_mapping.dart';
 import '../services/settings_service.dart';
 import '../services/notification_service.dart';
 import 'plant_provider.dart';
@@ -137,6 +138,30 @@ class SettingsProvider with ChangeNotifier {
       natureRemoToken: natureRemoToken,
       switchBotToken: switchBotToken,
       switchBotSecret: switchBotSecret,
+    );
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
+  /// デバイス-植物マッピングを更新する。
+  Future<void> updateDeviceMappings(
+      List<SensorDeviceMapping> mappings) async {
+    _settings = _settings.copyWith(sensorDeviceMappings: mappings);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
+  /// センサー自動取得間隔（時間）を更新する。0 は無効。
+  Future<void> updateSensorFetchInterval(int hours) async {
+    _settings = _settings.copyWith(sensorFetchIntervalHours: hours);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
+  /// センサー最終自動取得日時を更新する。null でクリアする。
+  Future<void> updateLastSensorFetchAt(DateTime? time) async {
+    _settings = _settings.copyWith(
+      lastSensorFetchAt: time?.toIso8601String(),
     );
     await _settingsService.saveSettings(_settings);
     notifyListeners();
