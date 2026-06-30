@@ -74,6 +74,11 @@ class SensorLogProvider with ChangeNotifier {
     await loadLogs();
   }
 
+  /// 指定植物のセンサーログを取得して返す（DB から直接クエリ）。
+  Future<List<SensorLog>> getLogsForPlant(String plantId) async {
+    return _db.getSensorLogsByPlant(plantId);
+  }
+
   /// 指定IDのセンサーログを削除する。
   Future<void> deleteSensorLog(String id) async {
     try {

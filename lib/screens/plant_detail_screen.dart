@@ -5,11 +5,16 @@ import 'package:intl/intl.dart';
 import 'dart:io';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
+import '../models/sensor_log.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
+import '../providers/sensor_log_provider.dart';
+import '../providers/settings_provider.dart';
+import '../services/iot_service.dart';
 import '../utils/date_utils.dart';
 import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
+import 'iot_settings_screen.dart';
 import 'note_detail_screen.dart';
 
 /// SliverPersistentHeaderDelegate: TabBarを固定表示するためのデリゲート
@@ -60,12 +65,14 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   List<LogEntry> _fertilizerLogs = [];
   List<LogEntry> _vitalizerLogs = [];
   DateTime? _nextWateringDate;
+  List<SensorLog> _sensorLogs = [];
+  bool _isFetchingSensor = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 4,
       vsync: this,
       initialIndex: widget.initialTabIndex,
     );
@@ -81,6 +88,17 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   Future<void> _loadData() async {
     await _loadLogs();
     await _loadNextWateringDate();
+    await _loadSensorLogs();
+  }
+
+  Future<void> _loadSensorLogs() async {
+    final logs = await context.read<SensorLogProvider>()
+        .getLogsForPlant(widget.plant.id);
+    if (mounted) {
+      setState(() {
+        _sensorLogs = logs;
+      });
+    }
   }
 
   Future<void> _loadLogs() async {
@@ -176,10 +194,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     // TabBar ウィジェット（SliverPersistentHeader に渡す）
     final tabBar = TabBar(
       controller: _tabController,
-        tabs: const [
+      tabs: const [
         Tab(text: '情報'),
         Tab(text: 'ログ'),
         Tab(text: 'ノート'),
+        Tab(text: '環境'),
       ],
     );
 
@@ -247,6 +266,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             _buildInfoTab(),
             _buildUnifiedLogTab(),
             _buildNoteTab(),
+            _buildEnvironmentTab(),
           ],
         ),
       ),
@@ -559,6 +579,376 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           },
         );
       },
+    );
+  }
+
+  // ── 環境タブ ─────────────────────────────────────────────────
+
+  Widget _buildEnvironmentTab() {
+    return Consumer<SettingsProvider>(
+      builder: (context, settings, _) {
+        final hasNatureRemo =
+            settings.settings.natureRemoToken.isNotEmpty;
+        final hasSwitchBot =
+            settings.settings.switchBotToken.isNotEmpty &&
+                settings.settings.switchBotSecret.isNotEmpty;
+        final hasAnyIot = hasNatureRemo || hasSwitchBot;
+
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildLatestSensorCard(),
+            const SizedBox(height: 16),
+            if (!hasAnyIot)
+              _buildIotSetupPrompt()
+            else ...[
+              if (hasNatureRemo)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: _isFetchingSensor
+                        ? null
+                        : () => _startFetchFlow(SensorSource.natureRemo),
+                    icon: _isFetchingSensor
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sensors),
+                    label: const Text('Nature Remo からデータ取得'),
+                  ),
+                ),
+              if (hasSwitchBot)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: _isFetchingSensor
+                        ? null
+                        : () => _startFetchFlow(SensorSource.switchBot),
+                    icon: _isFetchingSensor
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sensors),
+                    label: const Text('SwitchBot からデータ取得'),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 8),
+            if (_sensorLogs.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.thermostat_outlined,
+                        size: 48,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.4),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'センサー記録がありません',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else ...[
+              Text(
+                '記録履歴',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ..._sensorLogs.map(_buildSensorLogTile),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// 最新センサー値カード（温度・湿度を大きく表示）
+  Widget _buildLatestSensorCard() {
+    final latest = _sensorLogs.isNotEmpty ? _sensorLogs.first : null;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '最新の環境データ',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      Icon(Icons.thermostat, size: 36,
+                          color: colorScheme.primary),
+                      const SizedBox(height: 4),
+                      Text(
+                        latest?.temperature != null
+                            ? '${latest!.temperature!.toStringAsFixed(1)} ℃'
+                            : '--',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      Text('気温',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Icon(Icons.water_drop, size: 36,
+                          color: colorScheme.primary),
+                      const SizedBox(height: 4),
+                      Text(
+                        latest?.humidity != null
+                            ? '${latest!.humidity!.toStringAsFixed(0)} %'
+                            : '--',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      Text('湿度',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (latest != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                '${latest.deviceName}  '
+                '${DateFormat('MM月dd日 HH:mm').format(latest.recordedAt)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// センサー未設定時の案内カード
+  Widget _buildIotSetupPrompt() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(
+              Icons.sensors_off,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'IoTセンサーが設定されていません',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const IotSettingsScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.settings),
+              label: const Text('センサー設定を開く'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// センサーログ1件のリストタイル（長押しで削除）
+  Widget _buildSensorLogTile(SensorLog log) {
+    final parts = [
+      if (log.temperature != null)
+        '${log.temperature!.toStringAsFixed(1)} ℃',
+      if (log.humidity != null)
+        '${log.humidity!.toStringAsFixed(0)} %',
+    ];
+    final sourceLabel =
+        log.source == SensorSource.natureRemo ? 'Nature Remo' : 'SwitchBot';
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 2),
+      child: ListTile(
+        leading: const Icon(Icons.thermostat),
+        title: Text(parts.join('   ')),
+        subtitle: Text('${log.deviceName}  ($sourceLabel)'),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              DateFormat('MM月dd日').format(log.recordedAt),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              DateFormat('HH:mm').format(log.recordedAt),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+        onLongPress: () => _deleteSensorLog(log),
+      ),
+    );
+  }
+
+  /// センサーログを削除する（長押し操作）
+  Future<void> _deleteSensorLog(SensorLog log) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('記録を削除'),
+        content: Text(
+          '${DateFormat('yyyy年MM月dd日 HH:mm').format(log.recordedAt)} の'
+          '記録を削除しますか？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    await context.read<SensorLogProvider>().deleteSensorLog(log.id); // ignore: use_build_context_synchronously
+    await _loadSensorLogs();
+  }
+
+  /// IoTサービスからデータを取得してこの植物に紐付けて保存するフロー
+  Future<void> _startFetchFlow(SensorSource source) async {
+    final settingsProvider = context.read<SettingsProvider>();
+    final sensorProvider = context.read<SensorLogProvider>();
+    final settings = settingsProvider.settings;
+
+    setState(() {
+      _isFetchingSensor = true;
+    });
+
+    try {
+      final List<SensorData> devices;
+      if (source == SensorSource.natureRemo) {
+        devices = await sensorProvider.fetchNatureRemoData(
+            settings.natureRemoToken);
+      } else {
+        devices = await sensorProvider.fetchSwitchBotData(
+            settings.switchBotToken, settings.switchBotSecret);
+      }
+
+      if (!mounted) return;
+
+      if (devices.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('センサーデバイスが見つかりませんでした')),
+        );
+        return;
+      }
+
+      final SensorData selected;
+      if (devices.length == 1) {
+        selected = devices.first;
+      } else {
+        final picked = await _showDevicePickerDialog(devices);
+        if (!mounted || picked == null) return;
+        selected = picked;
+      }
+
+      await sensorProvider.saveSensorLog( // ignore: use_build_context_synchronously
+        data: selected,
+        source: source,
+        plantId: widget.plant.id,
+      );
+
+      if (!mounted) return;
+      await _loadSensorLogs();
+
+      ScaffoldMessenger.of(context).showSnackBar( // ignore: use_build_context_synchronously
+        SnackBar(content: Text('${selected.deviceName} のデータを記録しました')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('取得エラー: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFetchingSensor = false;
+        });
+      }
+    }
+  }
+
+  /// 複数デバイスがある場合の選択ダイアログ
+  Future<SensorData?> _showDevicePickerDialog(
+      List<SensorData> devices) async {
+    return showDialog<SensorData>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('デバイスを選択'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: devices
+                .map(
+                  (d) => ListTile(
+                    title: Text(d.deviceName),
+                    subtitle: Text([
+                      if (d.temperature != null)
+                        '${d.temperature!.toStringAsFixed(1)} ℃',
+                      if (d.humidity != null)
+                        '${d.humidity!.toStringAsFixed(0)} %',
+                    ].join('   ')),
+                    onTap: () => Navigator.of(ctx).pop(d),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('キャンセル'),
+          ),
+        ],
+      ),
     );
   }
 
