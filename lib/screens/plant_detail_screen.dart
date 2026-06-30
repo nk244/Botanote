@@ -160,6 +160,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   Future<void> _deletePlant() async {
+    // async ギャップ前に context 依存の参照を取得しておく
+    final plantProvider = context.read<PlantProvider>();
+    final navigator = Navigator.of(context);
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -182,10 +186,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
 
     if (confirm == true) {
-      await context.read<PlantProvider>().deletePlant(widget.plant.id);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      await plantProvider.deletePlant(widget.plant.id);
+      if (!context.mounted) return;
+      navigator.pop();
     }
   }
 
@@ -546,7 +549,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                         initialPlantId: widget.plant.id,
                       ),
                     ),
-                  ).then((_) => context.read<NoteProvider>().loadNotes()),
+                  ).then((_) {
+                    if (context.mounted) context.read<NoteProvider>().loadNotes();
+                  }),
                   icon: const Icon(Icons.add),
                   label: const Text('ノートを追加'),
                 ),
@@ -573,7 +578,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   MaterialPageRoute(
                     builder: (_) => NoteDetailScreen(note: note),
                   ),
-                ).then((_) => context.read<NoteProvider>().loadNotes()),
+                ).then((_) {
+                  if (context.mounted) context.read<NoteProvider>().loadNotes();
+                }),
               ),
             );
           },

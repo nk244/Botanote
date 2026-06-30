@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
-import '../providers/settings_provider.dart';
 import '../providers/sensor_log_provider.dart';
+import '../providers/settings_provider.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
 import 'notes_list_screen.dart';
@@ -30,9 +30,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final plantProvider = context.read<PlantProvider>();
-      final settingsProvider = context.read<SettingsProvider>();
-      settingsProvider.setupNotificationCallback(plantProvider);
       // アプリ起動時にセンサー自動取得が必要か確認する
       _checkAndAutoFetch();
     });
@@ -87,16 +84,16 @@ class _HomeScreenState extends State<HomeScreen> {
             _selectedIndex = index;
           });
           // タブ切替時にデータを再読み込みする
-          if (!mounted) return;
+          if (!context.mounted) return;
           await context.read<PlantProvider>().loadPlants();
           // ノートタブ（index=2）切替時はノートも再読み込みする
           if (index == 2) {
-            if (!mounted) return;
+            if (!context.mounted) return;
             await context.read<NoteProvider>().loadNotes();
           }
           // センサータブ（index=3）切替時はセンサーログも再読み込みする
           if (index == 3) {
-            if (!mounted) return;
+            if (!context.mounted) return;
             await context.read<SensorLogProvider>().loadLogs();
           }
         },

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
+import '../providers/sensor_log_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
@@ -181,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const ListTile(
             leading: Icon(Icons.info),
             title: Text('バージョン'),
-            subtitle: Text('1.0.0'),
+            subtitle: Text('1.2.0'),
           ),
           ListTile(
             leading: const Icon(Icons.code),
@@ -191,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               showAboutDialog(
                 context: context,
                 applicationName: 'Botanote',
-                applicationVersion: '1.0.0',
+                applicationVersion: '1.2.0',
                 applicationIcon: const Icon(Icons.eco, size: 48),
                 children: const [
                   Text('植物の水やりを管理するためのアプリです。'),
@@ -259,15 +260,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (confirmed != true) return;
     final days = int.parse(controller.text);
-    if (!mounted) return;
+    if (!context.mounted) return;
     try {
       await context.read<PlantProvider>().bulkUpdateWateringInterval(days);
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('すべての植物の水やり間隔を $days 日に設定しました')),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('更新に失敗しました: $e')),
       );
@@ -327,16 +328,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
     if (confirmed != true) return;
-    if (!mounted) return;
+    if (!context.mounted) return;
     try {
       await context.read<PlantProvider>().bulkAdjustWateringInterval(delta);
-      if (!mounted) return;
+      if (!context.mounted) return;
       final label = delta > 0 ? '+$delta' : '$delta';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('水やり間隔を $label 日調整しました')),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('更新に失敗しました: $e')),
       );
@@ -348,7 +349,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isExporting = true);
     try {
       final path = await ExportService().exportToFile();
-      if (!mounted) return;
+      if (!context.mounted) return;
       if (path == null) {
         // ユーザーがキャンセル
         return;
@@ -357,12 +358,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SnackBar(content: Text('バックアップファイルを共有しました')),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('エクスポートに失敗しました: $e')),
       );
     } finally {
-      if (mounted) setState(() => _isExporting = false);
+      if (context.mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -394,25 +395,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _isImporting = true);
     try {
       final result = await ExportService().importFromFilePicker();
-      if (!mounted) return;
+      if (!context.mounted) return;
       if (result == null) {
         // キャンセル
         return;
       }
-      // PlantProvider・NoteProvider を再読み込みして反映
+      // 各Providerを再読み込みして反映
       await context.read<PlantProvider>().loadPlants();
+      if (!context.mounted) return;
       await context.read<NoteProvider>().loadNotes();
-      if (!mounted) return;
+      if (!context.mounted) return;
+      await context.read<SensorLogProvider>().loadLogs();
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('インポートしました（$result）')),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('インポートに失敗しました: $e')),
       );
     } finally {
-      if (mounted) setState(() => _isImporting = false);
+      if (context.mounted) setState(() => _isImporting = false);
     }
   }
 

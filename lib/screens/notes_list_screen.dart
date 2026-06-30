@@ -26,7 +26,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
       context.read<NoteProvider>().loadNotes();
       context.read<PlantProvider>().loadPlants();
     });

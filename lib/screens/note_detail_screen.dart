@@ -123,6 +123,7 @@ class NoteDetailScreen extends StatelessWidget {
                 ),
               );
               if (confirmed == true) {
+                if (!context.mounted) return;
                 await context.read<NoteProvider>().deleteNote(note.id);
                 if (context.mounted && Navigator.of(context).canPop()) {
                   Navigator.of(context).pop();

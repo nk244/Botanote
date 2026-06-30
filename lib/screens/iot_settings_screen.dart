@@ -530,7 +530,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
-              value: _fetchIntervalHours,
+              initialValue: _fetchIntervalHours,
               decoration: const InputDecoration(
                 labelText: '取得間隔',
                 border: OutlineInputBorder(),

@@ -327,14 +327,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
     LogType logType,
     DailyLogStatus logStatus,
   ) async {
+    // async ギャップ前にプロバイダー参照を取得しておく
+    final plantProvider = context.read<PlantProvider>();
+
     // 水やりの場合、他の記録（肥料・活力剤）があるか確認
     final hasOtherLogs = (logType == LogType.watering) &&
         logStatus.hasOtherLogs(plantId, LogType.watering);
-    
+
     final logTypesToDelete = await _confirmDeletion(hasOtherLogs, plantId, logType, logStatus);
     if (logTypesToDelete == null) return;
 
-    final plantProvider = context.read<PlantProvider>();
     await plantProvider.deleteMultipleLogsForDate(
       plantId,
       logTypesToDelete,
@@ -1124,13 +1126,13 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         .toList();
     
     if (unscheduledPlants.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('すべての植物が表示されています')),
-        );
-      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('すべての植物が表示されています')),
+      );
       return;
     }
+    if (!context.mounted) return;
 
     final selectedPlants = await showDialog<List<Plant>>(
       context: context,
