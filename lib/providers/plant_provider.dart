@@ -1,7 +1,4 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/plant.dart';
 import '../models/log_entry.dart';
@@ -44,9 +41,6 @@ class PlantProvider with ChangeNotifier {
     try {
       _plants = await _db.getAllPlants();
 
-      // DB内の Base64 data URL 画像をファイルに逆移行する（#164 CursorWindow修正）
-      await _migrateBase64ToFiles();
-
       // 次回水やり日キャッシュを更新
       for (var plant in _plants) {
         _nextWateringCache[plant.id] = await calculateNextWateringDate(plant.id);
@@ -63,87 +57,6 @@ class PlantProvider with ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     }
-  }
-
-  /// DB に Base64 data URL として保存されている植物画像をファイルに書き出す
-  /// （loadPlants から自動実行）。
-  Future<void> _migrateBase64ToFiles() async {
-    await migrateBase64ToFiles();
-  }
-
-  /// DB 内の Base64 data URL 画像をドキュメントディレクトリのファイルに変換する。
-  ///
-  /// CursorWindow を超える行があっても安全なよう ID のみ先にクエリし、
-  /// imagePath は1行ずつ個別に取得して処理する。
-  /// 設定画面の手動実行ボタンからも呼び出せる。
-  /// 戻り値: [ImageMigrationResult]（変換成功・失敗・スキップ件数）
-  Future<ImageMigrationResult> migrateBase64ToFiles() async {
-    // ID のみ取得（imagePath列を読まないので CursorWindow 制限を受けない）
-    final ids = await _db.getPlantIdsWithBase64Images();
-    if (ids.isEmpty) return const ImageMigrationResult(total: 0, success: 0, skipped: 0, failed: 0);
-
-    final docsDir = await getApplicationDocumentsDirectory();
-    final imagesDir = Directory('${docsDir.path}/botanote_images');
-    if (!imagesDir.existsSync()) imagesDir.createSync(recursive: true);
-
-    int success = 0;
-    int skipped = 0;
-    int failed = 0;
-
-    for (final id in ids) {
-      try {
-        final imagePath = await _db.getPlantImagePath(id);
-        if (imagePath == null || !imagePath.startsWith('data:')) {
-          skipped++;
-          continue;
-        }
-
-        final comma = imagePath.indexOf(',');
-        if (comma < 0) {
-          // 不正な data URL: imagePath をクリアしてスキップ
-          await _db.updatePlantImagePath(id, null);
-          final idx = _plants.indexWhere((p) => p.id == id);
-          if (idx >= 0) _plants[idx] = _plants[idx].copyWith(imagePath: null);
-          skipped++;
-          continue;
-        }
-
-        final bytes = base64Decode(imagePath.substring(comma + 1));
-        final fileName = '${const Uuid().v4()}.jpg';
-        final file = File('${imagesDir.path}/$fileName');
-        await file.writeAsBytes(bytes);
-
-        await _db.updatePlantImagePath(id, file.path);
-        final idx = _plants.indexWhere((p) => p.id == id);
-        if (idx >= 0) _plants[idx] = _plants[idx].copyWith(imagePath: file.path);
-        debugPrint('Base64→ファイルに変換しました: $id');
-        success++;
-      } catch (e) {
-        // 読み取り失敗（CursorWindowオーバーフロー等）: imagePathをクリアして続行
-        debugPrint('Base64→ファイル変換失敗 (ID: $id): $e');
-        try { await _db.updatePlantImagePath(id, null); } catch (_) {}
-        final idx = _plants.indexWhere((p) => p.id == id);
-        if (idx >= 0) _plants[idx] = _plants[idx].copyWith(imagePath: null);
-        failed++;
-      }
-    }
-
-    if (success > 0) notifyListeners();
-
-    return ImageMigrationResult(
-      total: ids.length,
-      success: success,
-      skipped: skipped,
-      failed: failed,
-    );
-  }
-
-  /// Base64 data URL 形式の画像を持つ植物の件数を返す（移行前チェック用）。
-  int get pendingImageMigrationCount {
-    return _plants.where((p) {
-      final path = p.imagePath;
-      return path != null && path.startsWith('data:');
-    }).length;
   }
 
   /// ソート設定に従ってソートした植物一覧を返す。
@@ -766,24 +679,3 @@ class PlantProvider with ChangeNotifier {
   }
 }
 
-/// 画像移行処理の結果
-class ImageMigrationResult {
-  /// 移行対象の総件数
-  final int total;
-
-  /// Base64変換に成功した件数
-  final int success;
-
-  /// ファイルが存在せずスキップした件数
-  final int skipped;
-
-  /// エラーにより失敗した件数
-  final int failed;
-
-  const ImageMigrationResult({
-    required this.total,
-    required this.success,
-    required this.skipped,
-    required this.failed,
-  });
-}

@@ -1,11 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
 import 'image_crop_screen.dart';
 import '../providers/plant_provider.dart';
 import '../models/plant.dart';
@@ -150,16 +145,6 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
-  /// 画像バイト列をドキュメントディレクトリに保存し、ファイルパスを返す。
-  Future<String> _saveImageToFile(Uint8List bytes) async {
-    final docsDir = await getApplicationDocumentsDirectory();
-    final imagesDir = Directory('${docsDir.path}/botanote_images');
-    if (!imagesDir.existsSync()) imagesDir.createSync(recursive: true);
-    final fileName = '${const Uuid().v4()}.jpg';
-    final file = File('${imagesDir.path}/$fileName');
-    await file.writeAsBytes(bytes);
-    return file.path;
-  }
 
   Future<void> _savePlant() async {
     if (!_formKey.currentState!.validate()) return;
@@ -171,21 +156,8 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     try {
       final plantProvider = context.read<PlantProvider>();
 
-      // 旧 Base64 data URL 形式の画像をファイルに変換する（レガシーデータの移行）。
-      String? effectiveImagePath = _imagePath;
-      if (_imagePath != null && _imagePath!.startsWith('data:')) {
-        try {
-          final comma = _imagePath!.indexOf(',');
-          if (comma >= 0) {
-            final bytes = base64Decode(_imagePath!.substring(comma + 1));
-            effectiveImagePath = await _saveImageToFile(bytes);
-          }
-        } catch (e) {
-          debugPrint('Base64→ファイル変換失敗: $e');
-          effectiveImagePath = null;
-        }
-      }
-      
+      final String? effectiveImagePath = _imagePath;
+
       if (widget.plant == null) {
         // Add new plant
         await plantProvider.addPlant(

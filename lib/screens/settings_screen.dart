@@ -17,7 +17,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
-  bool _isMigrating = false;
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +159,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('ZIP または JSON ファイルからデータを復元'),
             onTap: _isImporting ? null : () => _handleImport(context),
           ),
-          _buildImageMigrationTile(),
           const Divider(),
 
           // IoTセンサー連携
@@ -416,110 +414,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
-  }
-
-  /// Base64 data URL→ファイル変換タイル（#164 CursorWindowバグからの回復用）
-  Widget _buildImageMigrationTile() {
-    return Consumer<PlantProvider>(
-      builder: (context, plantProvider, _) {
-        final pending = plantProvider.pendingImageMigrationCount;
-        return ListTile(
-          leading: _isMigrating
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  Icons.folder_outlined,
-                  color: pending > 0
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          title: const Text('植物画像をファイルに変換'),
-          subtitle: Text(
-            pending > 0
-                ? '$pending件の画像をファイルとして保存できます'
-                : '変換対象なし（すべてファイル保存済み）',
-          ),
-          trailing: pending > 0 ? const Icon(Icons.chevron_right) : null,
-          onTap: (_isMigrating || pending == 0)
-              ? null
-              : () => _handleImageMigration(context),
-        );
-      },
-    );
-  }
-
-  /// DB内のBase64画像をファイルに変換する
-  Future<void> _handleImageMigration(BuildContext context) async {
-    // 変換前に確認ダイアログを表示
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('植物画像をファイルに変換'),
-        content: const Text(
-          'データベース内にBase64形式で保存されている\n'
-          '植物画像をファイルとして保存し直します。\n\n'
-          'この操作はアプリ起動時に自動でも実行されます。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('変換する'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    if (!context.mounted) return;
-
-    setState(() => _isMigrating = true);
-    try {
-      final provider = context.read<PlantProvider>();
-      final result = await provider.migrateBase64ToFiles();
-      if (!context.mounted) return;
-      _showMigrationResultDialog(context, result);
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('移行に失敗しました: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _isMigrating = false);
-    }
-  }
-
-  /// 移行結果ダイアログを表示する
-  void _showMigrationResultDialog(
-    BuildContext context,
-    ImageMigrationResult result,
-  ) {
-    final lines = <String>[];
-    if (result.success > 0) lines.add('移行成功: ${result.success}件');
-    if (result.skipped > 0) {
-      lines.add('ファイル不在でスキップ: ${result.skipped}件');
-    }
-    if (result.failed > 0) lines.add('エラーで失敗: ${result.failed}件');
-    if (result.total == 0) lines.add('移行対象の画像はありませんでした');
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('移行完了'),
-        content: Text(lines.join('\n')),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildSectionHeader(BuildContext context, String title) {
