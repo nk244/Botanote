@@ -157,12 +157,4 @@ class SettingsProvider with ChangeNotifier {
     await _settingsService.saveSettings(_settings);
     notifyListeners();
   }
-
-  /// AI診断・同定機能用のAPIキーを更新する（Issue #177/#178）。
-  Future<void> updateAiApiKey(String apiKey) async {
-    _settings = _settings.copyWith(aiApiKey: apiKey);
-    await _settingsService.saveSettings(_settings);
-    notifyListeners();
-  }
-
 }
