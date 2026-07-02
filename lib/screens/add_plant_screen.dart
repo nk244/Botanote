@@ -33,6 +33,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   String? _imagePath;
   String? _locationId;
   bool _isLoading = false;
+  // 季節調整（Issue #173）: 冬季（12〜2月）の間隔延長
+  bool _seasonalAdjustmentEnabled = false;
+  double _dormantSeasonIntervalMultiplier = 1.5;
 
   @override
   void initState() {
@@ -49,6 +52,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       _vitalizerEveryNWaterings = widget.plant!.vitalizerEveryNWaterings;
       _imagePath = widget.plant!.imagePath;
       _locationId = widget.plant!.locationId;
+      _seasonalAdjustmentEnabled = widget.plant!.seasonalAdjustmentEnabled;
+      _dormantSeasonIntervalMultiplier =
+          widget.plant!.dormantSeasonIntervalMultiplier ?? 1.5;
     }
   }
 
@@ -179,6 +185,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
           locationId: _locationId,
+          seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
+          dormantSeasonIntervalMultiplier:
+              _seasonalAdjustmentEnabled ? _dormantSeasonIntervalMultiplier : null,
         );
       } else {
         // 既存植物の更新。nullable フィールドを明示的に null にできるよう
@@ -199,6 +208,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
           locationId: _locationId,
+          seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
+          dormantSeasonIntervalMultiplier:
+              _seasonalAdjustmentEnabled ? _dormantSeasonIntervalMultiplier : null,
         );
         await plantProvider.updatePlant(updatedPlant);
       }
@@ -473,6 +485,45 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               }),
               wateringIntervalDays: _wateringInterval,
             ),
+            const Divider(),
+
+            // 季節調整（Issue #173）: 冬季（12〜2月）の間隔延長
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.ac_unit),
+              title: const Text('冬季は間隔を延長する'),
+              subtitle: const Text('12〜2月は水やり・肥料・活力剤の間隔を自動で延ばす'),
+              value: _seasonalAdjustmentEnabled,
+              onChanged: (value) {
+                setState(() {
+                  _seasonalAdjustmentEnabled = value;
+                });
+              },
+            ),
+            if (_seasonalAdjustmentEnabled)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: DropdownButtonFormField<double>(
+                  initialValue: _dormantSeasonIntervalMultiplier,
+                  decoration: const InputDecoration(
+                    labelText: '冬季の延長倍率',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.timelapse),
+                  ),
+                  items: const [1.2, 1.5, 2.0, 3.0]
+                      .map((multiplier) => DropdownMenuItem(
+                            value: multiplier,
+                            child: Text('$multiplier倍'),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _dormantSeasonIntervalMultiplier = value;
+                    });
+                  },
+                ),
+              ),
             const Divider(),
           ],
         ),
