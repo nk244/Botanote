@@ -239,6 +239,27 @@ class PlantProvider with ChangeNotifier {
     await loadPlants();
   }
 
+  /// 記録専用のケアログ（植え替え・剪定・葉水・掃除等）を記録する（Issue #175）。
+  /// 水やり/肥料/活力剤と異なり間隔・スケジュールを持たない。
+  Future<void> recordCareLog(
+    String plantId,
+    LogType type,
+    DateTime date,
+    String? note,
+  ) async {
+    final log = LogEntry(
+      id: const Uuid().v4(),
+      plantId: plantId,
+      type: type,
+      date: date,
+      note: note,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await _db.insertLog(log);
+    await loadPlants();
+  }
+
   /// 複数植物 × 複数ログ種別を一括挿入し、最後に loadPlants を 1回呼び出す。
   /// 画面のチラツキを防止するために一括登録時に使用する。
   Future<void> bulkRecordLogs(
