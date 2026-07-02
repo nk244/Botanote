@@ -1,9 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'image_crop_screen.dart';
 import '../providers/plant_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/plant.dart';
+import '../services/ai_service.dart';
 import '../widgets/plant_image_widget.dart';
 
 class AddPlantScreen extends StatefulWidget {
@@ -31,6 +36,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   int? _vitalizerEveryNWaterings;
   String? _imagePath;
   bool _isLoading = false;
+  bool _isIdentifying = false;
 
   @override
   void initState() {
@@ -145,6 +151,104 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
+
+  /// [_imagePath] からvision APIに渡す画像バイト列とmedia_typeを取得する。
+  /// Web環境等でBase64データURLとして保存されている場合はデコードする。
+  ({Uint8List bytes, String mediaType})? _readImageForAi() {
+    final path = _imagePath;
+    if (path == null) return null;
+
+    if (path.startsWith('data:')) {
+      final comma = path.indexOf(',');
+      if (comma < 0) return null;
+      final header = path.substring(5, path.indexOf(';'));
+      final bytes = base64Decode(path.substring(comma + 1));
+      return (bytes: bytes, mediaType: header.isEmpty ? 'image/jpeg' : header);
+    }
+
+    final file = File(path);
+    if (!file.existsSync()) return null;
+    final lower = path.toLowerCase();
+    final mediaType = lower.endsWith('.png')
+        ? 'image/png'
+        : lower.endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+    return (bytes: file.readAsBytesSync(), mediaType: mediaType);
+  }
+
+  /// 登録済みの写真からAIで植物名・品種名を推定する（Issue #178）。
+  Future<void> _identifyPlantFromImage() async {
+    final apiKey = context.read<SettingsProvider>().settings.aiApiKey;
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (apiKey.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('設定画面でAI診断用のAPIキーを登録してください')),
+      );
+      return;
+    }
+
+    final image = _readImageForAi();
+    if (image == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('画像を読み込めませんでした')));
+      return;
+    }
+
+    setState(() => _isIdentifying = true);
+    try {
+      final result = await AiService.identifyPlant(
+        apiKey: apiKey,
+        imageBytes: image.bytes,
+        mediaType: image.mediaType,
+      );
+
+      if (!mounted) return;
+      final apply = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('AI植物名推定結果'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('植物名: ${result.name}'),
+              if (result.variety != null && result.variety!.isNotEmpty)
+                Text('品種名: ${result.variety}'),
+              const SizedBox(height: 8),
+              Text('信頼度: ${result.confidence}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('閉じる'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('反映'),
+            ),
+          ],
+        ),
+      );
+
+      if (apply == true) {
+        setState(() {
+          _nameController.text = result.name;
+          if (result.variety != null && result.variety!.isNotEmpty) {
+            _varietyController.text = result.variety!;
+          }
+        });
+      }
+    } on AiServiceException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('AI推定に失敗しました: $e')));
+    } finally {
+      if (mounted) setState(() => _isIdentifying = false);
+    }
+  }
 
   Future<void> _savePlant() async {
     if (!_formKey.currentState!.validate()) return;
@@ -292,6 +396,20 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                 ),
               ),
             ),
+            if (_imagePath != null)
+              Center(
+                child: TextButton.icon(
+                  onPressed: _isIdentifying ? null : _identifyPlantFromImage,
+                  icon: _isIdentifying
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.auto_awesome_outlined, size: 18),
+                  label: const Text('AIで植物名を推定'),
+                ),
+              ),
             const SizedBox(height: 24),
 
             // Plant name

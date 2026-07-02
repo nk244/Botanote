@@ -117,6 +117,9 @@ class AppSettings {
   /// 最後にセンサーを自動取得した日時（ISO8601文字列、未取得は null）
   final String? lastSensorFetchAt;
 
+  /// AI診断・同定機能用のAnthropic APIキー（Issue #177/#178）
+  final String aiApiKey;
+
   AppSettings({
     this.viewMode = ViewMode.card,
     this.theme = AppTheme.green,
@@ -133,6 +136,7 @@ class AppSettings {
     this.sensorDeviceMappings = const [],
     this.sensorFetchIntervalHours = 0,
     this.lastSensorFetchAt,
+    this.aiApiKey = '',
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -153,6 +157,7 @@ class AppSettings {
           sensorDeviceMappings.map((m) => m.toMap()).toList(),
       'sensorFetchIntervalHours': sensorFetchIntervalHours,
       'lastSensorFetchAt': lastSensorFetchAt,
+      'aiApiKey': aiApiKey,
     };
   }
 
@@ -196,6 +201,7 @@ class AppSettings {
       sensorFetchIntervalHours:
           map['sensorFetchIntervalHours'] as int? ?? 0,
       lastSensorFetchAt: map['lastSensorFetchAt'] as String?,
+      aiApiKey: map['aiApiKey'] as String? ?? '',
     );
   }
 
@@ -215,6 +221,7 @@ class AppSettings {
     List<SensorDeviceMapping>? sensorDeviceMappings,
     int? sensorFetchIntervalHours,
     Object? lastSensorFetchAt = _sentinel,
+    String? aiApiKey,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -235,6 +242,7 @@ class AppSettings {
       lastSensorFetchAt: lastSensorFetchAt == _sentinel
           ? this.lastSensorFetchAt
           : lastSensorFetchAt as String?,
+      aiApiKey: aiApiKey ?? this.aiApiKey,
     );
   }
 }
