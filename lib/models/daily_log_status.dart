@@ -46,6 +46,10 @@ class DailyLogStatus {
       case LogType.vitalizer:
         _vitalized[plantId] = value;
         break;
+      default:
+        // 記録専用のケアタイプ（植え替え・剪定・葉水・掃除等）は
+        // スケジュール管理対象外のため何もしない（Issue #175）
+        break;
     }
   }
 
@@ -58,6 +62,9 @@ class DailyLogStatus {
         return isWatered(plantId) || isVitalized(plantId);
       case LogType.vitalizer:
         return isWatered(plantId) || isFertilized(plantId);
+      default:
+        // 記録専用のケアタイプ（Issue #175）はスケジュール管理対象外
+        return isWatered(plantId) || isFertilized(plantId) || isVitalized(plantId);
     }
   }
 

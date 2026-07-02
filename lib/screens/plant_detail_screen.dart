@@ -65,6 +65,15 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   List<LogEntry> _wateringLogs = [];
   List<LogEntry> _fertilizerLogs = [];
   List<LogEntry> _vitalizerLogs = [];
+  List<LogEntry> _otherCareLogs = [];
+
+  /// 記録専用のケアタイプ一覧（Issue #175）
+  static const _otherCareTypes = [
+    LogType.repotting,
+    LogType.pruning,
+    LogType.misting,
+    LogType.cleaning,
+  ];
   DateTime? _nextWateringDate;
   List<SensorLog> _sensorLogs = [];
   bool _isFetchingSensor = false;
@@ -108,13 +117,16 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       provider.getAllLogsForPlantAndType(widget.plant.id, LogType.watering),
       provider.getAllLogsForPlantAndType(widget.plant.id, LogType.fertilizer),
       provider.getAllLogsForPlantAndType(widget.plant.id, LogType.vitalizer),
+      for (final type in _otherCareTypes)
+        provider.getAllLogsForPlantAndType(widget.plant.id, type),
     ]);
-    
+
     if (mounted) {
       setState(() {
         _wateringLogs = logs[0];
         _fertilizerLogs = logs[1];
         _vitalizerLogs = logs[2];
+        _otherCareLogs = logs.sublist(3).expand((l) => l).toList();
       });
     }
   }
@@ -137,6 +149,14 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         return '肥料';
       case LogType.vitalizer:
         return '活力剤';
+      case LogType.repotting:
+        return '植え替え';
+      case LogType.pruning:
+        return '剪定';
+      case LogType.misting:
+        return '葉水';
+      case LogType.cleaning:
+        return '掃除';
     }
   }
 
@@ -490,30 +510,50 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       ..._wateringLogs,
       ..._fertilizerLogs,
       ..._vitalizerLogs,
+      ..._otherCareLogs,
     ]..sort((a, b) => b.date.compareTo(a.date));
 
-    if (allLogs.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.history,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'まだログがありません',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '「記録」ボタンから水やり・肝料・活力剤を記録できます',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+    final recordCareButton = Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: OutlinedButton.icon(
+          onPressed: _showRecordCareDialog,
+          icon: const Icon(Icons.add),
+          label: const Text('その他のケアを記録'),
         ),
+      ),
+    );
+
+    if (allLogs.isEmpty) {
+      return Column(
+        children: [
+          recordCareButton,
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.history,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'まだログがありません',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '「記録」ボタンから水やり・肝料・活力剤を記録できます',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -528,13 +568,42 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
     return ListView.builder(
       padding: const EdgeInsets.all(8),
-      itemCount: sortedDays.length,
+      itemCount: sortedDays.length + 1,
       itemBuilder: (context, index) {
-        final day = sortedDays[index];
+        if (index == 0) return recordCareButton;
+        final day = sortedDays[index - 1];
         final logs = groupedByDate[day]!;
         return _buildGroupedLogRow(day, logs);
       },
     );
+  }
+
+  /// 「その他のケアを記録」ダイアログを表示し、選択結果を保存する（Issue #175）。
+  Future<void> _showRecordCareDialog() async {
+    // async ギャップ前に context 依存の参照を取得しておく
+    final plantProvider = context.read<PlantProvider>();
+
+    final result = await showDialog<_CareLogResult>(
+      context: context,
+      builder: (context) => const _RecordCareDialog(),
+    );
+    if (result == null) return;
+
+    try {
+      await plantProvider.recordCareLog(
+        widget.plant.id,
+        result.type,
+        result.date,
+        result.note,
+      );
+      if (mounted) await _loadLogs();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('記録に失敗しました: $e')),
+        );
+      }
+    }
   }
 
   Widget _buildNoteTab() {
@@ -1090,7 +1159,125 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         return Icons.grass;
       case LogType.vitalizer:
         return Icons.favorite;
+      case LogType.repotting:
+        return Icons.yard;
+      case LogType.pruning:
+        return Icons.content_cut;
+      case LogType.misting:
+        return Icons.grain;
+      case LogType.cleaning:
+        return Icons.cleaning_services;
     }
+  }
+}
+
+/// 「その他のケアを記録」ダイアログの選択結果（Issue #175）
+class _CareLogResult {
+  final LogType type;
+  final DateTime date;
+  final String? note;
+
+  const _CareLogResult({required this.type, required this.date, this.note});
+}
+
+/// 記録専用のケアタイプ（植え替え・剪定・葉水・掃除）を選択して記録するダイアログ。
+class _RecordCareDialog extends StatefulWidget {
+  const _RecordCareDialog();
+
+  @override
+  State<_RecordCareDialog> createState() => _RecordCareDialogState();
+}
+
+class _RecordCareDialogState extends State<_RecordCareDialog> {
+  static const _choices = [
+    (type: LogType.repotting, label: '植え替え', icon: Icons.yard),
+    (type: LogType.pruning, label: '剪定', icon: Icons.content_cut),
+    (type: LogType.misting, label: '葉水', icon: Icons.grain),
+    (type: LogType.cleaning, label: '掃除', icon: Icons.cleaning_services),
+  ];
+
+  LogType _selectedType = LogType.repotting;
+  DateTime _selectedDate = DateTime.now();
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('その他のケアを記録'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _choices.map((choice) {
+                return ChoiceChip(
+                  label: Text(choice.label),
+                  avatar: Icon(choice.icon, size: 18),
+                  selected: _selectedType == choice.type,
+                  onSelected: (_) {
+                    setState(() => _selectedType = choice.type);
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.calendar_today),
+              title: const Text('日付'),
+              subtitle: Text(DateFormat('yyyy年MM月dd日').format(_selectedDate)),
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now(),
+                );
+                if (date != null) {
+                  setState(() => _selectedDate = date);
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'メモ（任意）',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.of(context).pop(_CareLogResult(
+              type: _selectedType,
+              date: _selectedDate,
+              note: _noteController.text.trim().isEmpty
+                  ? null
+                  : _noteController.text.trim(),
+            ));
+          },
+          child: const Text('記録'),
+        ),
+      ],
+    );
   }
 }
 
