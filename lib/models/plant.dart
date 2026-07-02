@@ -36,6 +36,13 @@ class Plant {
   /// 屋外の植物かどうか（天気連動ケアアラート対象、Issue #176）
   final bool isOutdoor;
 
+  /// 冬季（12〜2月）の間隔延長を有効にするか
+  final bool seasonalAdjustmentEnabled;
+
+  /// 冬季の間隔倍率（例: 1.5 = 1.5倍に延長）。
+  /// [seasonalAdjustmentEnabled] が true でもこれが null の場合は調整されない。
+  final double? dormantSeasonIntervalMultiplier;
+
   /// 登録日時
   final DateTime createdAt;
 
@@ -55,6 +62,8 @@ class Plant {
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
     this.isOutdoor = false,
+    this.seasonalAdjustmentEnabled = false,
+    this.dormantSeasonIntervalMultiplier,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -73,6 +82,8 @@ class Plant {
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
       'isOutdoor': isOutdoor ? 1 : 0,
+      'seasonalAdjustmentEnabled': seasonalAdjustmentEnabled ? 1 : 0,
+      'dormantSeasonIntervalMultiplier': dormantSeasonIntervalMultiplier,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -95,6 +106,9 @@ class Plant {
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
       isOutdoor: (map['isOutdoor'] as int?) == 1,
+      seasonalAdjustmentEnabled: (map['seasonalAdjustmentEnabled'] as int?) == 1,
+      dormantSeasonIntervalMultiplier:
+          map['dormantSeasonIntervalMultiplier'] as double?,
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );
@@ -114,6 +128,8 @@ class Plant {
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
     bool? isOutdoor,
+    bool? seasonalAdjustmentEnabled,
+    Object? dormantSeasonIntervalMultiplier = _sentinel,
     DateTime? updatedAt,
   }) {
     return Plant(
@@ -139,6 +155,11 @@ class Plant {
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
       isOutdoor: isOutdoor ?? this.isOutdoor,
+      seasonalAdjustmentEnabled:
+          seasonalAdjustmentEnabled ?? this.seasonalAdjustmentEnabled,
+      dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier == _sentinel
+          ? this.dormantSeasonIntervalMultiplier
+          : dormantSeasonIntervalMultiplier as double?,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
