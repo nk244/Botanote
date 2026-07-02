@@ -4,6 +4,7 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/app_settings.dart';
 import '../services/database_service.dart';
+import '../services/home_widget_service.dart';
 
 /// 植物データとログを管理する Provider。
 ///
@@ -50,6 +51,10 @@ class PlantProvider with ChangeNotifier {
       _logDatesCache = allLogs
           .map((l) => DateTime(l.date.year, l.date.month, l.date.day))
           .toSet();
+
+      // ホーム画面ウィジェットに今日の水やり予定を反映する（Issue #174）
+      await HomeWidgetService.updateTodayWateringWidget(
+          getPlantsNeedingWateringToday());
     } catch (e) {
       debugPrint('Error loading plants: $e');
     } finally {
@@ -57,6 +62,19 @@ class PlantProvider with ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     }
+  }
+
+  /// 今日水やりが必要な植物一覧を返す（ホーム画面ウィジェット用、Issue #174）。
+  /// 判定条件は [hasAnyWateringScheduledForToday] と同じ。
+  List<Plant> getPlantsNeedingWateringToday() {
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    return _plants.where((plant) {
+      final next = _nextWateringCache[plant.id];
+      if (next == null) return false;
+      final nextDate = DateTime(next.year, next.month, next.day);
+      return !nextDate.isAfter(todayDate);
+    }).toList();
   }
 
   /// ソート設定に従ってソートした植物一覧を返す。

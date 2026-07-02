@@ -75,6 +75,9 @@ dependencies:
   http: ^1.2.0
   crypto: ^3.0.3
 
+  # ホーム画面ウィジェット（Issue #174）
+  home_widget: ^0.9.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
