@@ -514,6 +514,11 @@ class PlantProvider with ChangeNotifier {
     return _db.getLogsByPlant(plantId);
   }
 
+  /// 全植物・全種別のログを取得する（ケア統計画面用、Issue #182）。
+  Future<List<LogEntry>> getAllLogsAcrossPlants() async {
+    return _db.getAllLogs();
+  }
+
   /// ログリストから次回水やり日を計算する（DBアクセスなし・同期的）。
   ///
   /// [plant] の [wateringIntervalDays] が null の場合は null を返す。
