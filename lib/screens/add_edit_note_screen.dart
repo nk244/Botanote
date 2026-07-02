@@ -6,6 +6,7 @@ import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
+import '../services/ai_service.dart';
 
 class AddEditNoteScreen extends StatefulWidget {
   final Note? note;
@@ -22,6 +23,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   late TextEditingController _contentController;
   List<String> _selectedPlantIds = [];
   List<String> _selectedImagePaths = [];
+  bool _isDiagnosing = false;
 
   /// 新規作成時のみ使用する作成日（デフォルト=今日）
   late DateTime _selectedDate;
@@ -216,6 +218,18 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
               children: [
                 Text('画像', style: Theme.of(context).textTheme.titleSmall),
                 const Spacer(),
+                if (_selectedImagePaths.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _isDiagnosing ? null : _diagnoseFirstImage,
+                    icon: _isDiagnosing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.health_and_safety_outlined, size: 18),
+                    label: const Text('AI診断'),
+                  ),
                 TextButton.icon(
                   onPressed: _showImageSourceOptions,
                   icon: const Icon(Icons.add_a_photo, size: 18),
@@ -234,6 +248,71 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         ),
       ),
     );
+  }
+
+  /// 拡張子からvision APIに渡すmedia_typeを推定する。
+  String _mediaTypeFor(String path) {
+    final lower = path.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
+  }
+
+  /// 最初の添付画像をAIで診断し、結果ダイアログを表示する（Issue #177）。
+  Future<void> _diagnoseFirstImage() async {
+    if (_selectedImagePaths.isEmpty) return;
+
+    // async ギャップ前に context 依存の参照を取得しておく
+    final apiKey = context.read<SettingsProvider>().settings.aiApiKey;
+    final messenger = ScaffoldMessenger.of(context);
+
+    if (apiKey.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('設定画面でAI診断用のAPIキーを登録してください')),
+      );
+      return;
+    }
+
+    setState(() => _isDiagnosing = true);
+    try {
+      final path = _selectedImagePaths.first;
+      final bytes = await File(path).readAsBytes();
+      final result = await AiService.diagnosePlantHealth(
+        apiKey: apiKey,
+        imageBytes: bytes,
+        mediaType: _mediaTypeFor(path),
+      );
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('AI診断結果'),
+          content: SingleChildScrollView(child: Text(result)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('閉じる'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final prefix = _contentController.text.isEmpty ? '' : '\n\n';
+                _contentController.text += '$prefix【AI診断結果】\n$result';
+                Navigator.of(context).pop();
+              },
+              child: const Text('内容欄に追記'),
+            ),
+          ],
+        ),
+      );
+    } on AiServiceException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('AI診断に失敗しました: $e')));
+    } finally {
+      if (mounted) setState(() => _isDiagnosing = false);
+    }
   }
 
   Widget _buildImageThumb(String path) {
