@@ -8,6 +8,7 @@ import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
 import 'care_stats_screen.dart';
+import 'location_list_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -169,6 +170,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const CareStatsScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 植物管理
+          _buildSectionHeader(context, '植物管理'),
+          ListTile(
+            leading: const Icon(Icons.home_outlined),
+            title: const Text('置き場所管理'),
+            subtitle: const Text('リビング・ベランダ等の置き場所を登録・編集'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LocationListScreen(),
               ),
             ),
           ),

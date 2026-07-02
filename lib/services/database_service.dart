@@ -5,6 +5,7 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
 import '../models/sensor_log.dart';
+import '../models/location.dart';
 
 /// SQLite データベースへのアクセスを担うサービス。
 ///
@@ -33,7 +34,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 5,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -90,6 +91,38 @@ class DatabaseService {
             )
           ''');
         }
+        if (oldVersion < 6) {
+          // plants テーブルに季節調整（冬季の間隔延長）カラムを追加
+          try {
+            await db.execute(
+                'ALTER TABLE plants ADD COLUMN seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+          try {
+            await db.execute(
+                'ALTER TABLE plants ADD COLUMN dormantSeasonIntervalMultiplier REAL');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+        }
+        if (oldVersion < 7) {
+          // 置き場所（Location）テーブルを追加（Issue #180）
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS locations(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              isOutdoor INTEGER NOT NULL DEFAULT 0,
+              createdAt TEXT NOT NULL,
+              updatedAt TEXT NOT NULL
+            )
+          ''');
+          try {
+            await db.execute('ALTER TABLE plants ADD COLUMN locationId TEXT');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+        }
       },
     );
   }
@@ -108,6 +141,19 @@ class DatabaseService {
         fertilizerEveryNWaterings INTEGER,
         vitalizerIntervalDays INTEGER,
         vitalizerEveryNWaterings INTEGER,
+        locationId TEXT,
+        seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0,
+        dormantSeasonIntervalMultiplier REAL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE locations(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        isOutdoor INTEGER NOT NULL DEFAULT 0,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )
@@ -185,7 +231,8 @@ class DatabaseService {
     final maps = await db.rawQuery(
       'SELECT id, name, variety, purchaseDate, purchaseLocation, '
       'wateringIntervalDays, fertilizerIntervalDays, fertilizerEveryNWaterings, '
-      'vitalizerIntervalDays, vitalizerEveryNWaterings, createdAt, updatedAt '
+      'vitalizerIntervalDays, vitalizerEveryNWaterings, locationId, '
+      'seasonalAdjustmentEnabled, dormantSeasonIntervalMultiplier, createdAt, updatedAt '
       'FROM plants ORDER BY updatedAt DESC',
     );
     // imagePath を null として扱い、後続の逆移行処理がIDベースで別途処理する
@@ -286,6 +333,40 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  // ── Location CRUD（Issue #180） ─────────────────────────────
+
+  /// 置き場所を挿入する。
+  Future<void> insertLocation(Location location) async {
+    final db = await database;
+    await db.insert('locations', location.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// すべての置き場所を名前順で取得する。
+  Future<List<Location>> getAllLocations() async {
+    final db = await database;
+    final maps = await db.query('locations', orderBy: 'name ASC');
+    return maps.map(Location.fromMap).toList();
+  }
+
+  /// 置き場所情報を更新する。
+  Future<void> updateLocation(Location location) async {
+    final db = await database;
+    await db.update('locations', location.toMap(),
+        where: 'id = ?', whereArgs: [location.id]);
+  }
+
+  /// 指定IDの置き場所を削除し、その場所が設定されていた植物の
+  /// [Plant.locationId] を NULL にクリアする。
+  Future<void> deleteLocation(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update('plants', {'locationId': null},
+          where: 'locationId = ?', whereArgs: [id]);
+      await txn.delete('locations', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   // ── Notes CRUD ───────────────────────────────────────────────
