@@ -33,6 +33,9 @@ class Plant {
   /// 活力剤間隔（水やりN回に1回）。[vitalizerIntervalDays] と排他
   final int? vitalizerEveryNWaterings;
 
+  /// 屋外の植物かどうか（天気連動ケアアラート対象、Issue #176）
+  final bool isOutdoor;
+
   /// 置き場所ID（[Location] への参照、Issue #180）
   final String? locationId;
 
@@ -61,6 +64,7 @@ class Plant {
     this.fertilizerEveryNWaterings,
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
+    this.isOutdoor = false,
     this.locationId,
     this.seasonalAdjustmentEnabled = false,
     this.dormantSeasonIntervalMultiplier,
@@ -81,6 +85,7 @@ class Plant {
       'fertilizerEveryNWaterings': fertilizerEveryNWaterings,
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
+      'isOutdoor': isOutdoor ? 1 : 0,
       'locationId': locationId,
       'seasonalAdjustmentEnabled': seasonalAdjustmentEnabled ? 1 : 0,
       'dormantSeasonIntervalMultiplier': dormantSeasonIntervalMultiplier,
@@ -105,6 +110,7 @@ class Plant {
       fertilizerEveryNWaterings: map['fertilizerEveryNWaterings'] as int?,
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
+      isOutdoor: (map['isOutdoor'] as int?) == 1,
       locationId: map['locationId'] as String?,
       seasonalAdjustmentEnabled: (map['seasonalAdjustmentEnabled'] as int?) == 1,
       dormantSeasonIntervalMultiplier:
@@ -127,6 +133,7 @@ class Plant {
     Object? fertilizerEveryNWaterings = _sentinel,
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
+    bool? isOutdoor,
     Object? locationId = _sentinel,
     bool? seasonalAdjustmentEnabled,
     Object? dormantSeasonIntervalMultiplier = _sentinel,
@@ -154,6 +161,7 @@ class Plant {
       vitalizerEveryNWaterings: vitalizerEveryNWaterings == _sentinel
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
+      isOutdoor: isOutdoor ?? this.isOutdoor,
       locationId: locationId == _sentinel ? this.locationId : locationId as String?,
       seasonalAdjustmentEnabled:
           seasonalAdjustmentEnabled ?? this.seasonalAdjustmentEnabled,

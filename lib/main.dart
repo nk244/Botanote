@@ -25,6 +25,8 @@ void callbackDispatcher() {
         taskName == Workmanager.iOSBackgroundTask) {
       // 翌日の水やり予定をDBから確認し、予定があれば翌日に通知をスケジュール
       await NotificationService.scheduleSmartWateringReminder();
+      // 翌日の天気予報を確認し、屋外植物のケアアラートが必要ならスケジュール
+      await NotificationService.scheduleWeatherAlert();
     }
     return Future.value(true);
   });

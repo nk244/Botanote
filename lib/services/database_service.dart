@@ -107,6 +107,14 @@ class DatabaseService {
           }
         }
         if (oldVersion < 7) {
+          // plants テーブルに屋外フラグを追加（天気連動ケアアラート、Issue #176）
+          try {
+            await db.execute(
+                'ALTER TABLE plants ADD COLUMN isOutdoor INTEGER NOT NULL DEFAULT 0');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+
           // 置き場所（Location）テーブルを追加（Issue #180）
           await db.execute('''
             CREATE TABLE IF NOT EXISTS locations(
@@ -141,6 +149,7 @@ class DatabaseService {
         fertilizerEveryNWaterings INTEGER,
         vitalizerIntervalDays INTEGER,
         vitalizerEveryNWaterings INTEGER,
+        isOutdoor INTEGER NOT NULL DEFAULT 0,
         locationId TEXT,
         seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0,
         dormantSeasonIntervalMultiplier REAL,
@@ -231,7 +240,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       'SELECT id, name, variety, purchaseDate, purchaseLocation, '
       'wateringIntervalDays, fertilizerIntervalDays, fertilizerEveryNWaterings, '
-      'vitalizerIntervalDays, vitalizerEveryNWaterings, locationId, '
+      'vitalizerIntervalDays, vitalizerEveryNWaterings, isOutdoor, locationId, '
       'seasonalAdjustmentEnabled, dormantSeasonIntervalMultiplier, createdAt, updatedAt '
       'FROM plants ORDER BY updatedAt DESC',
     );

@@ -31,6 +31,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   int? _vitalizerIntervalDays;
   int? _vitalizerEveryNWaterings;
   String? _imagePath;
+  bool _isOutdoor = false;
   String? _locationId;
   bool _isLoading = false;
   // 季節調整（Issue #173）: 冬季（12〜2月）の間隔延長
@@ -51,6 +52,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       _vitalizerIntervalDays = widget.plant!.vitalizerIntervalDays;
       _vitalizerEveryNWaterings = widget.plant!.vitalizerEveryNWaterings;
       _imagePath = widget.plant!.imagePath;
+      _isOutdoor = widget.plant!.isOutdoor;
       _locationId = widget.plant!.locationId;
       _seasonalAdjustmentEnabled = widget.plant!.seasonalAdjustmentEnabled;
       _dormantSeasonIntervalMultiplier =
@@ -184,6 +186,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           fertilizerEveryNWaterings: _fertilizerEveryNWaterings,
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
+          isOutdoor: _isOutdoor,
           locationId: _locationId,
           seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
           dormantSeasonIntervalMultiplier:
@@ -207,6 +210,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           fertilizerEveryNWaterings: _fertilizerEveryNWaterings,
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
+          isOutdoor: _isOutdoor,
           locationId: _locationId,
           seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
           dormantSeasonIntervalMultiplier:
@@ -383,6 +387,19 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.store),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // 屋外の植物（天気連動ケアアラート対象、Issue #176）
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.deck),
+              title: const Text('屋外の植物'),
+              subtitle: const Text('天気連動ケアアラートの対象になります'),
+              value: _isOutdoor,
+              onChanged: (value) {
+                setState(() => _isOutdoor = value);
+              },
             ),
             const SizedBox(height: 16),
 

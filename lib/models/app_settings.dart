@@ -117,6 +117,15 @@ class AppSettings {
   /// 最後にセンサーを自動取得した日時（ISO8601文字列、未取得は null）
   final String? lastSensorFetchAt;
 
+  /// 天気連動ケアアラートの有効/無効（Issue #176）
+  final bool weatherAlertsEnabled;
+
+  /// 天気予報取得地点の緯度
+  final double? weatherLatitude;
+
+  /// 天気予報取得地点の経度
+  final double? weatherLongitude;
+
   AppSettings({
     this.viewMode = ViewMode.card,
     this.theme = AppTheme.green,
@@ -133,6 +142,9 @@ class AppSettings {
     this.sensorDeviceMappings = const [],
     this.sensorFetchIntervalHours = 0,
     this.lastSensorFetchAt,
+    this.weatherAlertsEnabled = false,
+    this.weatherLatitude,
+    this.weatherLongitude,
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -153,6 +165,9 @@ class AppSettings {
           sensorDeviceMappings.map((m) => m.toMap()).toList(),
       'sensorFetchIntervalHours': sensorFetchIntervalHours,
       'lastSensorFetchAt': lastSensorFetchAt,
+      'weatherAlertsEnabled': weatherAlertsEnabled,
+      'weatherLatitude': weatherLatitude,
+      'weatherLongitude': weatherLongitude,
     };
   }
 
@@ -196,6 +211,9 @@ class AppSettings {
       sensorFetchIntervalHours:
           map['sensorFetchIntervalHours'] as int? ?? 0,
       lastSensorFetchAt: map['lastSensorFetchAt'] as String?,
+      weatherAlertsEnabled: map['weatherAlertsEnabled'] as bool? ?? false,
+      weatherLatitude: (map['weatherLatitude'] as num?)?.toDouble(),
+      weatherLongitude: (map['weatherLongitude'] as num?)?.toDouble(),
     );
   }
 
@@ -215,6 +233,9 @@ class AppSettings {
     List<SensorDeviceMapping>? sensorDeviceMappings,
     int? sensorFetchIntervalHours,
     Object? lastSensorFetchAt = _sentinel,
+    bool? weatherAlertsEnabled,
+    Object? weatherLatitude = _sentinel,
+    Object? weatherLongitude = _sentinel,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -235,6 +256,13 @@ class AppSettings {
       lastSensorFetchAt: lastSensorFetchAt == _sentinel
           ? this.lastSensorFetchAt
           : lastSensorFetchAt as String?,
+      weatherAlertsEnabled: weatherAlertsEnabled ?? this.weatherAlertsEnabled,
+      weatherLatitude: weatherLatitude == _sentinel
+          ? this.weatherLatitude
+          : weatherLatitude as double?,
+      weatherLongitude: weatherLongitude == _sentinel
+          ? this.weatherLongitude
+          : weatherLongitude as double?,
     );
   }
 }
