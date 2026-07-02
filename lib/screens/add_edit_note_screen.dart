@@ -6,6 +6,7 @@ import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
+import '../services/claude_share_service.dart';
 
 class AddEditNoteScreen extends StatefulWidget {
   final Note? note;
@@ -216,6 +217,12 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
               children: [
                 Text('画像', style: Theme.of(context).textTheme.titleSmall),
                 const Spacer(),
+                if (_selectedImagePaths.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _shareFirstImageForDiagnosis,
+                    icon: const Icon(Icons.health_and_safety_outlined, size: 18),
+                    label: const Text('Claudeで診断'),
+                  ),
                 TextButton.icon(
                   onPressed: _showImageSourceOptions,
                   icon: const Icon(Icons.add_a_photo, size: 18),
@@ -234,6 +241,29 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         ),
       ),
     );
+  }
+
+  /// 最初の添付画像を診断依頼文とともにClaudeアプリへ共有する（Issue #177）。
+  ///
+  /// Anthropic APIを直接呼び出す従量課金方式は使わず、OSの共有シート経由で
+  /// Claudeアプリ（無料プラン・Proプランいずれでも利用可能）に画像と質問文を渡す。
+  /// 応答はClaudeアプリ上で確認し、内容欄に手動で貼り付ける。
+  Future<void> _shareFirstImageForDiagnosis() async {
+    if (_selectedImagePaths.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ClaudeShareService.shareForDiagnosis(_selectedImagePaths.first);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Claudeアプリでの診断結果をこの内容欄に貼り付けてください'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: $e')));
+    }
   }
 
   Widget _buildImageThumb(String path) {

@@ -4,7 +4,7 @@ import 'package:share_plus/share_plus.dart';
 ///
 /// Anthropic APIを直接呼び出す従量課金方式ではなく、OSの共有シート経由で
 /// Claudeアプリ（無料プラン・Proプランいずれでも利用可能）に画像と質問文を渡す。
-/// 応答はClaudeアプリ上で確認し、ユーザーが手動で入力欄に転記する。
+/// 応答はClaudeアプリ上で確認し、ユーザーが手動でノート/入力欄に転記する。
 class ClaudeShareService {
   /// 病害虫診断を依頼するプロンプト付きで画像を共有する。
   static Future<void> shareForDiagnosis(String imagePath) async {

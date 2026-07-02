@@ -7,6 +7,9 @@ import '../providers/sensor_log_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
+import 'light_meter_screen.dart';
+import 'care_stats_screen.dart';
+import 'location_list_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -160,6 +163,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('ZIP または JSON ファイルからデータを復元'),
             onTap: _isImporting ? null : () => _handleImport(context),
           ),
+          ListTile(
+            leading: const Icon(Icons.bar_chart),
+            title: const Text('ケア統計'),
+            subtitle: const Text('月別のケア件数・植物ごとの頻度を振り返る'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const CareStatsScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 植物管理
+          _buildSectionHeader(context, '植物管理'),
+          ListTile(
+            leading: const Icon(Icons.home_outlined),
+            title: const Text('置き場所管理'),
+            subtitle: const Text('リビング・ベランダ等の置き場所を登録・編集'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LocationListScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 天気連動ケアアラート（Issue #176）
+          _buildSectionHeader(context, '天気連動ケアアラート'),
+          Consumer<SettingsProvider>(
+            builder: (context, settings, _) {
+              final lat = settings.settings.weatherLatitude;
+              final lon = settings.settings.weatherLongitude;
+              final hasLocation = lat != null && lon != null;
+              return Column(
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.cloud_outlined),
+                    title: const Text('天気連動ケアアラート'),
+                    subtitle: const Text('屋外の植物がある場合、猛暑・低温・大雨・強UVの前日に通知します'),
+                    value: settings.settings.weatherAlertsEnabled,
+                    onChanged: (value) async {
+                      if (value && !hasLocation) {
+                        // 座標未設定の場合は先に観測地点を入力させる
+                        await _showWeatherLocationDialog(context, settings);
+                        return;
+                      }
+                      await settings.updateWeatherAlertSettings(
+                        enabled: value,
+                        latitude: lat,
+                        longitude: lon,
+                      );
+                    },
+                  ),
+                  if (settings.settings.weatherAlertsEnabled)
+                    ListTile(
+                      leading: const Icon(Icons.place_outlined),
+                      title: const Text('観測地点'),
+                      subtitle: Text(
+                        hasLocation
+                            ? '緯度 ${lat.toStringAsFixed(4)} / 経度 ${lon.toStringAsFixed(4)}'
+                            : '未設定',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _showWeatherLocationDialog(context, settings),
+                    ),
+                ],
+              );
+            },
+          ),
           const Divider(),
 
           // IoTセンサー連携
@@ -172,6 +246,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const IotSettingsScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 光量メーター（Issue #181）
+          _buildSectionHeader(context, '光量メーター'),
+          ListTile(
+            leading: const Icon(Icons.wb_sunny_outlined),
+            title: const Text('光量メーター'),
+            subtitle: const Text('カメラで置き場所の明るさの目安を測定'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LightMeterScreen(),
               ),
             ),
           ),
@@ -210,6 +299,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 
   /// 水やり間隔を一括設定するダイアログ
+  /// 天気連動ケアアラートの観測地点（緯度・経度）を入力するダイアログ（Issue #176）。
+  Future<void> _showWeatherLocationDialog(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    final latController = TextEditingController(
+      text: settings.settings.weatherLatitude?.toString() ?? '',
+    );
+    final lonController = TextEditingController(
+      text: settings.settings.weatherLongitude?.toString() ?? '',
+    );
+    final formKey = GlobalKey<FormState>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('観測地点を設定'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Googleマップ等で自宅の座標を調べて入力してください。'),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: latController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true, signed: true),
+                decoration: const InputDecoration(
+                  labelText: '緯度',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  final n = double.tryParse(v ?? '');
+                  if (n == null || n < -90 || n > 90) return '-90〜90の数値を入力してください';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: lonController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true, signed: true),
+                decoration: const InputDecoration(
+                  labelText: '経度',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (v) {
+                  final n = double.tryParse(v ?? '');
+                  if (n == null || n < -180 || n > 180) return '-180〜180の数値を入力してください';
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final lat = double.parse(latController.text);
+    final lon = double.parse(lonController.text);
+    await settings.updateWeatherAlertSettings(
+      enabled: true,
+      latitude: lat,
+      longitude: lon,
+    );
+  }
+
   Future<void> _showBulkSetIntervalDialog(BuildContext context) async {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();

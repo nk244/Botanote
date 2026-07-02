@@ -33,6 +33,16 @@ class SettingsProvider with ChangeNotifier {
         minute: _settings.notificationMinute,
       );
     }
+    // 天気連動ケアアラートが有効なら起動時に再スケジュールする（Issue #176）
+    if (_settings.weatherAlertsEnabled) {
+      await NotificationService.scheduleWeatherAlert(
+        enabled: true,
+        latitude: _settings.weatherLatitude,
+        longitude: _settings.weatherLongitude,
+        hour: _settings.notificationHour,
+        minute: _settings.notificationMinute,
+      );
+    }
   }
 
   /// 表示モードを変更する。
@@ -156,5 +166,27 @@ class SettingsProvider with ChangeNotifier {
     );
     await _settingsService.saveSettings(_settings);
     notifyListeners();
+  }
+
+  /// 天気連動ケアアラートの設定を更新し、再スケジュールする（Issue #176）。
+  Future<void> updateWeatherAlertSettings({
+    required bool enabled,
+    double? latitude,
+    double? longitude,
+  }) async {
+    _settings = _settings.copyWith(
+      weatherAlertsEnabled: enabled,
+      weatherLatitude: latitude,
+      weatherLongitude: longitude,
+    );
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+    await NotificationService.scheduleWeatherAlert(
+      enabled: enabled,
+      latitude: latitude,
+      longitude: longitude,
+      hour: _settings.notificationHour,
+      minute: _settings.notificationMinute,
+    );
   }
 }

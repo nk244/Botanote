@@ -1389,6 +1389,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
           backgroundColor: (context) => Color(colors.vitalizerBg),
           foregroundColor: (context) => Color(colors.vitalizerFg),
         );
+      default:
+        // 記録専用のケアタイプ（Issue #175）はスケジュール画面に表示されないため
+        // 到達しない想定だが、exhaustive switch のため汎用表示を返す
+        return _LogChipConfig(
+          label: 'その他',
+          icon: Icons.spa,
+          backgroundColor: (context) =>
+              Theme.of(context).colorScheme.secondaryContainer,
+          foregroundColor: (context) =>
+              Theme.of(context).colorScheme.onSecondaryContainer,
+        );
     }
   }
 
@@ -1417,6 +1428,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
         return '肥料';
       case LogType.vitalizer:
         return '活力剤';
+      default:
+        return 'その他';
     }
   }
 }
