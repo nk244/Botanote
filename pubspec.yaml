@@ -48,6 +48,7 @@ dependencies:
   # Image handling
   image_picker: ^1.0.7
   crop_your_image: ^1.0.0
+  image: ^4.8.0
   
   # Notifications
   flutter_local_notifications: ^20.1.0
