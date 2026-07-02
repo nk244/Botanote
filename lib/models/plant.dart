@@ -33,6 +33,9 @@ class Plant {
   /// 活力剤間隔（水やりN回に1回）。[vitalizerIntervalDays] と排他
   final int? vitalizerEveryNWaterings;
 
+  /// 置き場所ID（[Location] への参照、Issue #180）
+  final String? locationId;
+
   /// 登録日時
   final DateTime createdAt;
 
@@ -51,6 +54,7 @@ class Plant {
     this.fertilizerEveryNWaterings,
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
+    this.locationId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -68,6 +72,7 @@ class Plant {
       'fertilizerEveryNWaterings': fertilizerEveryNWaterings,
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
+      'locationId': locationId,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -89,6 +94,7 @@ class Plant {
       fertilizerEveryNWaterings: map['fertilizerEveryNWaterings'] as int?,
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
+      locationId: map['locationId'] as String?,
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );
@@ -107,6 +113,7 @@ class Plant {
     Object? fertilizerEveryNWaterings = _sentinel,
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
+    Object? locationId = _sentinel,
     DateTime? updatedAt,
   }) {
     return Plant(
@@ -131,6 +138,7 @@ class Plant {
       vitalizerEveryNWaterings: vitalizerEveryNWaterings == _sentinel
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
+      locationId: locationId == _sentinel ? this.locationId : locationId as String?,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

@@ -138,6 +138,7 @@ class PlantProvider with ChangeNotifier {
     int? fertilizerEveryNWaterings,
     int? vitalizerIntervalDays,
     int? vitalizerEveryNWaterings,
+    String? locationId,
   }) async {
     final now = DateTime.now();
     final plant = Plant(
@@ -152,6 +153,7 @@ class PlantProvider with ChangeNotifier {
       fertilizerEveryNWaterings: fertilizerEveryNWaterings,
       vitalizerIntervalDays: vitalizerIntervalDays,
       vitalizerEveryNWaterings: vitalizerEveryNWaterings,
+      locationId: locationId,
       createdAt: now,
       updatedAt: now,
     );

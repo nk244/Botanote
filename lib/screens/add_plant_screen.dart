@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'image_crop_screen.dart';
 import '../providers/plant_provider.dart';
+import '../providers/location_provider.dart';
 import '../models/plant.dart';
 import '../widgets/plant_image_widget.dart';
 
@@ -30,6 +31,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   int? _vitalizerIntervalDays;
   int? _vitalizerEveryNWaterings;
   String? _imagePath;
+  String? _locationId;
   bool _isLoading = false;
 
   @override
@@ -46,6 +48,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       _vitalizerIntervalDays = widget.plant!.vitalizerIntervalDays;
       _vitalizerEveryNWaterings = widget.plant!.vitalizerEveryNWaterings;
       _imagePath = widget.plant!.imagePath;
+      _locationId = widget.plant!.locationId;
     }
   }
 
@@ -175,6 +178,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           fertilizerEveryNWaterings: _fertilizerEveryNWaterings,
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
+          locationId: _locationId,
         );
       } else {
         // 既存植物の更新。nullable フィールドを明示的に null にできるよう
@@ -194,6 +198,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           fertilizerEveryNWaterings: _fertilizerEveryNWaterings,
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
+          locationId: _locationId,
         );
         await plantProvider.updatePlant(updatedPlant);
       }
@@ -368,7 +373,38 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
+            // 置き場所（Issue #180）
+            Consumer<LocationProvider>(
+              builder: (context, locationProvider, _) {
+                final locations = locationProvider.locations;
+                final validValue =
+                    locations.any((l) => l.id == _locationId) ? _locationId : null;
+                return DropdownButtonFormField<String?>(
+                  initialValue: validValue,
+                  decoration: const InputDecoration(
+                    labelText: '置き場所（任意）',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.home_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('未設定'),
+                    ),
+                    ...locations.map((location) => DropdownMenuItem<String?>(
+                          value: location.id,
+                          child: Text(location.name),
+                        )),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _locationId = value);
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+
             // Watering interval
             ListTile(
               contentPadding: EdgeInsets.zero,
