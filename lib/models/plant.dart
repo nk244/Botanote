@@ -33,6 +33,9 @@ class Plant {
   /// 活力剤間隔（水やりN回に1回）。[vitalizerIntervalDays] と排他
   final int? vitalizerEveryNWaterings;
 
+  /// 屋外の植物かどうか（天気連動ケアアラート対象、Issue #176）
+  final bool isOutdoor;
+
   /// 登録日時
   final DateTime createdAt;
 
@@ -51,6 +54,7 @@ class Plant {
     this.fertilizerEveryNWaterings,
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
+    this.isOutdoor = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -68,6 +72,7 @@ class Plant {
       'fertilizerEveryNWaterings': fertilizerEveryNWaterings,
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
+      'isOutdoor': isOutdoor ? 1 : 0,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -89,6 +94,7 @@ class Plant {
       fertilizerEveryNWaterings: map['fertilizerEveryNWaterings'] as int?,
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
+      isOutdoor: (map['isOutdoor'] as int?) == 1,
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );
@@ -107,6 +113,7 @@ class Plant {
     Object? fertilizerEveryNWaterings = _sentinel,
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
+    bool? isOutdoor,
     DateTime? updatedAt,
   }) {
     return Plant(
@@ -131,6 +138,7 @@ class Plant {
       vitalizerEveryNWaterings: vitalizerEveryNWaterings == _sentinel
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
+      isOutdoor: isOutdoor ?? this.isOutdoor,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

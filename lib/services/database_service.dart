@@ -33,7 +33,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -90,6 +90,15 @@ class DatabaseService {
             )
           ''');
         }
+        if (oldVersion < 6) {
+          // plants テーブルに屋外フラグを追加（天気連動ケアアラート、Issue #176）
+          try {
+            await db.execute(
+                'ALTER TABLE plants ADD COLUMN isOutdoor INTEGER NOT NULL DEFAULT 0');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+        }
       },
     );
   }
@@ -108,6 +117,7 @@ class DatabaseService {
         fertilizerEveryNWaterings INTEGER,
         vitalizerIntervalDays INTEGER,
         vitalizerEveryNWaterings INTEGER,
+        isOutdoor INTEGER NOT NULL DEFAULT 0,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )
@@ -185,7 +195,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       'SELECT id, name, variety, purchaseDate, purchaseLocation, '
       'wateringIntervalDays, fertilizerIntervalDays, fertilizerEveryNWaterings, '
-      'vitalizerIntervalDays, vitalizerEveryNWaterings, createdAt, updatedAt '
+      'vitalizerIntervalDays, vitalizerEveryNWaterings, isOutdoor, createdAt, updatedAt '
       'FROM plants ORDER BY updatedAt DESC',
     );
     // imagePath を null として扱い、後続の逆移行処理がIDベースで別途処理する

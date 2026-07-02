@@ -30,6 +30,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   int? _vitalizerIntervalDays;
   int? _vitalizerEveryNWaterings;
   String? _imagePath;
+  bool _isOutdoor = false;
   bool _isLoading = false;
 
   @override
@@ -46,6 +47,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       _vitalizerIntervalDays = widget.plant!.vitalizerIntervalDays;
       _vitalizerEveryNWaterings = widget.plant!.vitalizerEveryNWaterings;
       _imagePath = widget.plant!.imagePath;
+      _isOutdoor = widget.plant!.isOutdoor;
     }
   }
 
@@ -175,6 +177,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           fertilizerEveryNWaterings: _fertilizerEveryNWaterings,
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
+          isOutdoor: _isOutdoor,
         );
       } else {
         // 既存植物の更新。nullable フィールドを明示的に null にできるよう
@@ -194,6 +197,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           fertilizerEveryNWaterings: _fertilizerEveryNWaterings,
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
+          isOutdoor: _isOutdoor,
         );
         await plantProvider.updatePlant(updatedPlant);
       }
@@ -368,7 +372,20 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
+            // 屋外の植物（天気連動ケアアラート対象、Issue #176）
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.deck),
+              title: const Text('屋外の植物'),
+              subtitle: const Text('天気連動ケアアラートの対象になります'),
+              value: _isOutdoor,
+              onChanged: (value) {
+                setState(() => _isOutdoor = value);
+              },
+            ),
+            const SizedBox(height: 16),
+
             // Watering interval
             ListTile(
               contentPadding: EdgeInsets.zero,

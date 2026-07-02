@@ -6,6 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'dart:convert';
 import 'database_service.dart';
+import 'weather_service.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -16,6 +17,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static const int _dailyWateringNotificationId = 1;
+  static const int _weatherAlertNotificationId = 2;
 
   bool _initialized = false;
 
@@ -218,5 +220,148 @@ class NotificationService {
   /// 水やり通知をキャンセルする。
   Future<void> cancelDailyWateringReminder() async {
     await _plugin.cancel(id: _dailyWateringNotificationId);
+  }
+
+  /// 翌日の天気予報を確認し、屋外植物のケアアラートが必要な場合に通知を1件登録する
+  /// （Issue #176）。バックグラウンドIsolateとアプリ起動時の両方から呼び出す。
+  ///
+  /// 引数が null の場合は SharedPreferences から読み込む。
+  static Future<void> scheduleWeatherAlert({
+    bool? enabled,
+    double? latitude,
+    double? longitude,
+    int? hour,
+    int? minute,
+  }) async {
+    bool weatherEnabled = enabled ?? false;
+    double? lat = latitude;
+    double? lon = longitude;
+    int notifHour = hour ?? 9;
+    int notifMinute = minute ?? 0;
+
+    if (enabled == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final settingsJson = prefs.getString('app_settings');
+        if (settingsJson != null) {
+          final map = json.decode(settingsJson) as Map<String, dynamic>;
+          weatherEnabled = map['weatherAlertsEnabled'] as bool? ?? false;
+          lat = (map['weatherLatitude'] as num?)?.toDouble();
+          lon = (map['weatherLongitude'] as num?)?.toDouble();
+          notifHour = map['notificationHour'] as int? ?? 9;
+          notifMinute = map['notificationMinute'] as int? ?? 0;
+        }
+      } catch (e) {
+        debugPrint('NotificationService: failed to read weather prefs: $e');
+      }
+    }
+
+    final plugin = FlutterLocalNotificationsPlugin();
+    tz.initializeTimeZones();
+    try {
+      final tzInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
+    } catch (_) {}
+
+    const androidSettings =
+        AndroidInitializationSettings('@drawable/ic_notification');
+    const darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+    const initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: darwinSettings,
+      macOS: darwinSettings,
+    );
+    await plugin.initialize(settings: initSettings);
+
+    // 無効・座標未設定の場合は既存通知をキャンセルして終了
+    if (!weatherEnabled || lat == null || lon == null) {
+      await plugin.cancel(id: _weatherAlertNotificationId);
+      return;
+    }
+
+    // 屋外植物が1件もない場合はキャンセルして終了
+    List<String> alerts = [];
+    try {
+      final db = DatabaseService();
+      final plants = await db.getAllPlants();
+      final hasOutdoorPlants = plants.any((p) => p.isOutdoor);
+      if (!hasOutdoorPlants) {
+        await plugin.cancel(id: _weatherAlertNotificationId);
+        return;
+      }
+
+      alerts = await WeatherService.checkTomorrowAlerts(
+        latitude: lat,
+        longitude: lon,
+      );
+    } catch (e) {
+      debugPrint('NotificationService: weather alert check failed: $e');
+      // 通信・DBエラー時は通知を変更せず既存の状態を維持する
+      return;
+    }
+
+    if (alerts.isEmpty) {
+      await plugin.cancel(id: _weatherAlertNotificationId);
+      return;
+    }
+
+    final location = tz.local;
+    final now = tz.TZDateTime.now(location);
+    final scheduledDate = tz.TZDateTime(
+      location,
+      now.year,
+      now.month,
+      now.day + 1,
+      notifHour,
+      notifMinute,
+    );
+
+    const androidDetails = AndroidNotificationDetails(
+      'weather_alert',
+      '天気連動ケアアラート',
+      channelDescription: '屋外植物のケアに関わる天気の注意喚起を通知します',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@drawable/ic_notification',
+    );
+    const darwinDetails = DarwinNotificationDetails(
+      categoryIdentifier: 'weather_alert',
+    );
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    AndroidScheduleMode scheduleMode = AndroidScheduleMode.inexact;
+    final androidImpl = plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      final hasExact = await androidImpl.canScheduleExactNotifications();
+      if (hasExact ?? false) {
+        scheduleMode = AndroidScheduleMode.exactAllowWhileIdle;
+      }
+    }
+
+    await plugin.zonedSchedule(
+      id: _weatherAlertNotificationId,
+      title: '🌤 明日の天気に注意',
+      body: alerts.join(' '),
+      scheduledDate: scheduledDate,
+      notificationDetails: details,
+      androidScheduleMode: scheduleMode,
+    );
+
+    debugPrint('NotificationService: weather alert scheduled (${alerts.length}件)');
+  }
+
+  /// 天気連動ケアアラート通知をキャンセルする。
+  Future<void> cancelWeatherAlert() async {
+    await _plugin.cancel(id: _weatherAlertNotificationId);
   }
 }
