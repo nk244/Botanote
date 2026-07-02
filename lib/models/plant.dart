@@ -33,6 +33,13 @@ class Plant {
   /// 活力剤間隔（水やりN回に1回）。[vitalizerIntervalDays] と排他
   final int? vitalizerEveryNWaterings;
 
+  /// 冬季（12〜2月）の間隔延長を有効にするか
+  final bool seasonalAdjustmentEnabled;
+
+  /// 冬季の間隔倍率（例: 1.5 = 1.5倍に延長）。
+  /// [seasonalAdjustmentEnabled] が true でもこれが null の場合は調整されない。
+  final double? dormantSeasonIntervalMultiplier;
+
   /// 登録日時
   final DateTime createdAt;
 
@@ -51,6 +58,8 @@ class Plant {
     this.fertilizerEveryNWaterings,
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
+    this.seasonalAdjustmentEnabled = false,
+    this.dormantSeasonIntervalMultiplier,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -68,6 +77,8 @@ class Plant {
       'fertilizerEveryNWaterings': fertilizerEveryNWaterings,
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
+      'seasonalAdjustmentEnabled': seasonalAdjustmentEnabled ? 1 : 0,
+      'dormantSeasonIntervalMultiplier': dormantSeasonIntervalMultiplier,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -89,6 +100,9 @@ class Plant {
       fertilizerEveryNWaterings: map['fertilizerEveryNWaterings'] as int?,
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
+      seasonalAdjustmentEnabled: (map['seasonalAdjustmentEnabled'] as int?) == 1,
+      dormantSeasonIntervalMultiplier:
+          map['dormantSeasonIntervalMultiplier'] as double?,
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );
@@ -107,6 +121,8 @@ class Plant {
     Object? fertilizerEveryNWaterings = _sentinel,
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
+    bool? seasonalAdjustmentEnabled,
+    Object? dormantSeasonIntervalMultiplier = _sentinel,
     DateTime? updatedAt,
   }) {
     return Plant(
@@ -131,6 +147,11 @@ class Plant {
       vitalizerEveryNWaterings: vitalizerEveryNWaterings == _sentinel
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
+      seasonalAdjustmentEnabled:
+          seasonalAdjustmentEnabled ?? this.seasonalAdjustmentEnabled,
+      dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier == _sentinel
+          ? this.dormantSeasonIntervalMultiplier
+          : dormantSeasonIntervalMultiplier as double?,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

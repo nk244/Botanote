@@ -33,7 +33,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -90,6 +90,21 @@ class DatabaseService {
             )
           ''');
         }
+        if (oldVersion < 6) {
+          // plants テーブルに季節調整（冬季の間隔延長）カラムを追加
+          try {
+            await db.execute(
+                'ALTER TABLE plants ADD COLUMN seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+          try {
+            await db.execute(
+                'ALTER TABLE plants ADD COLUMN dormantSeasonIntervalMultiplier REAL');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+        }
       },
     );
   }
@@ -108,6 +123,8 @@ class DatabaseService {
         fertilizerEveryNWaterings INTEGER,
         vitalizerIntervalDays INTEGER,
         vitalizerEveryNWaterings INTEGER,
+        seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0,
+        dormantSeasonIntervalMultiplier REAL,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )
