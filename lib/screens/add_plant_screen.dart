@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'image_crop_screen.dart';
 import '../providers/plant_provider.dart';
+import '../providers/location_provider.dart';
 import '../models/plant.dart';
 import '../widgets/plant_image_widget.dart';
 
@@ -31,6 +32,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   int? _vitalizerEveryNWaterings;
   String? _imagePath;
   bool _isOutdoor = false;
+  String? _locationId;
   bool _isLoading = false;
   // 季節調整（Issue #173）: 冬季（12〜2月）の間隔延長
   bool _seasonalAdjustmentEnabled = false;
@@ -51,6 +53,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       _vitalizerEveryNWaterings = widget.plant!.vitalizerEveryNWaterings;
       _imagePath = widget.plant!.imagePath;
       _isOutdoor = widget.plant!.isOutdoor;
+      _locationId = widget.plant!.locationId;
       _seasonalAdjustmentEnabled = widget.plant!.seasonalAdjustmentEnabled;
       _dormantSeasonIntervalMultiplier =
           widget.plant!.dormantSeasonIntervalMultiplier ?? 1.5;
@@ -184,6 +187,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
           isOutdoor: _isOutdoor,
+          locationId: _locationId,
           seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
           dormantSeasonIntervalMultiplier:
               _seasonalAdjustmentEnabled ? _dormantSeasonIntervalMultiplier : null,
@@ -207,6 +211,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           vitalizerIntervalDays: _vitalizerIntervalDays,
           vitalizerEveryNWaterings: _vitalizerEveryNWaterings,
           isOutdoor: _isOutdoor,
+          locationId: _locationId,
           seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
           dormantSeasonIntervalMultiplier:
               _seasonalAdjustmentEnabled ? _dormantSeasonIntervalMultiplier : null,
@@ -394,6 +399,37 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               value: _isOutdoor,
               onChanged: (value) {
                 setState(() => _isOutdoor = value);
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // 置き場所（Issue #180）
+            Consumer<LocationProvider>(
+              builder: (context, locationProvider, _) {
+                final locations = locationProvider.locations;
+                final validValue =
+                    locations.any((l) => l.id == _locationId) ? _locationId : null;
+                return DropdownButtonFormField<String?>(
+                  initialValue: validValue,
+                  decoration: const InputDecoration(
+                    labelText: '置き場所（任意）',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.home_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('未設定'),
+                    ),
+                    ...locations.map((location) => DropdownMenuItem<String?>(
+                          value: location.id,
+                          child: Text(location.name),
+                        )),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _locationId = value);
+                  },
+                );
               },
             ),
             const SizedBox(height: 16),

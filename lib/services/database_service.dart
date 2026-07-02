@@ -5,6 +5,7 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
 import '../models/sensor_log.dart';
+import '../models/location.dart';
 
 /// SQLite データベースへのアクセスを担うサービス。
 ///
@@ -113,6 +114,22 @@ class DatabaseService {
           } catch (_) {
             // 既にカラムが存在する場合は無視
           }
+
+          // 置き場所（Location）テーブルを追加（Issue #180）
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS locations(
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              isOutdoor INTEGER NOT NULL DEFAULT 0,
+              createdAt TEXT NOT NULL,
+              updatedAt TEXT NOT NULL
+            )
+          ''');
+          try {
+            await db.execute('ALTER TABLE plants ADD COLUMN locationId TEXT');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
         }
       },
     );
@@ -133,8 +150,19 @@ class DatabaseService {
         vitalizerIntervalDays INTEGER,
         vitalizerEveryNWaterings INTEGER,
         isOutdoor INTEGER NOT NULL DEFAULT 0,
+        locationId TEXT,
         seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0,
         dormantSeasonIntervalMultiplier REAL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE locations(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        isOutdoor INTEGER NOT NULL DEFAULT 0,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )
@@ -212,7 +240,7 @@ class DatabaseService {
     final maps = await db.rawQuery(
       'SELECT id, name, variety, purchaseDate, purchaseLocation, '
       'wateringIntervalDays, fertilizerIntervalDays, fertilizerEveryNWaterings, '
-      'vitalizerIntervalDays, vitalizerEveryNWaterings, isOutdoor, '
+      'vitalizerIntervalDays, vitalizerEveryNWaterings, isOutdoor, locationId, '
       'seasonalAdjustmentEnabled, dormantSeasonIntervalMultiplier, createdAt, updatedAt '
       'FROM plants ORDER BY updatedAt DESC',
     );
@@ -314,6 +342,40 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  // ── Location CRUD（Issue #180） ─────────────────────────────
+
+  /// 置き場所を挿入する。
+  Future<void> insertLocation(Location location) async {
+    final db = await database;
+    await db.insert('locations', location.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// すべての置き場所を名前順で取得する。
+  Future<List<Location>> getAllLocations() async {
+    final db = await database;
+    final maps = await db.query('locations', orderBy: 'name ASC');
+    return maps.map(Location.fromMap).toList();
+  }
+
+  /// 置き場所情報を更新する。
+  Future<void> updateLocation(Location location) async {
+    final db = await database;
+    await db.update('locations', location.toMap(),
+        where: 'id = ?', whereArgs: [location.id]);
+  }
+
+  /// 指定IDの置き場所を削除し、その場所が設定されていた植物の
+  /// [Plant.locationId] を NULL にクリアする。
+  Future<void> deleteLocation(String id) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.update('plants', {'locationId': null},
+          where: 'locationId = ?', whereArgs: [id]);
+      await txn.delete('locations', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   // ── Notes CRUD ───────────────────────────────────────────────

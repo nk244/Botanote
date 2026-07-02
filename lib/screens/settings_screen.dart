@@ -7,6 +7,9 @@ import '../providers/sensor_log_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
+import 'light_meter_screen.dart';
+import 'care_stats_screen.dart';
+import 'location_list_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -160,6 +163,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('ZIP または JSON ファイルからデータを復元'),
             onTap: _isImporting ? null : () => _handleImport(context),
           ),
+          ListTile(
+            leading: const Icon(Icons.bar_chart),
+            title: const Text('ケア統計'),
+            subtitle: const Text('月別のケア件数・植物ごとの頻度を振り返る'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const CareStatsScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 植物管理
+          _buildSectionHeader(context, '植物管理'),
+          ListTile(
+            leading: const Icon(Icons.home_outlined),
+            title: const Text('置き場所管理'),
+            subtitle: const Text('リビング・ベランダ等の置き場所を登録・編集'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LocationListScreen(),
+              ),
+            ),
+          ),
           const Divider(),
 
           // 天気連動ケアアラート（Issue #176）
@@ -217,6 +246,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const IotSettingsScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 光量メーター（Issue #181）
+          _buildSectionHeader(context, '光量メーター'),
+          ListTile(
+            leading: const Icon(Icons.wb_sunny_outlined),
+            title: const Text('光量メーター'),
+            subtitle: const Text('カメラで置き場所の明るさの目安を測定'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LightMeterScreen(),
               ),
             ),
           ),

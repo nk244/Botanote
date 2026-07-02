@@ -34,7 +34,30 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- ホーム画面ウィジェットのタップから起動された場合の識別用（Issue #174） -->
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.LAUNCH"/>
+            </intent-filter>
         </activity>
+        <!-- ホーム画面ウィジェット: 今日の水やり予定表示（Issue #174） -->
+        <receiver
+            android:name=".TodayWateringWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/today_watering_widget_info"/>
+        </receiver>
+        <!-- home_widget: バックグラウンド処理用レシーバー -->
+        <receiver
+            android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND"/>
+            </intent-filter>
+        </receiver>
         <!-- flutter_local_notifications: 予約通知の配信レシーバー -->
         <receiver
             android:exported="false"

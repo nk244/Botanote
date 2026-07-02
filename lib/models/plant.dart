@@ -36,6 +36,9 @@ class Plant {
   /// 屋外の植物かどうか（天気連動ケアアラート対象、Issue #176）
   final bool isOutdoor;
 
+  /// 置き場所ID（[Location] への参照、Issue #180）
+  final String? locationId;
+
   /// 冬季（12〜2月）の間隔延長を有効にするか
   final bool seasonalAdjustmentEnabled;
 
@@ -62,6 +65,7 @@ class Plant {
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
     this.isOutdoor = false,
+    this.locationId,
     this.seasonalAdjustmentEnabled = false,
     this.dormantSeasonIntervalMultiplier,
     required this.createdAt,
@@ -82,6 +86,7 @@ class Plant {
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
       'isOutdoor': isOutdoor ? 1 : 0,
+      'locationId': locationId,
       'seasonalAdjustmentEnabled': seasonalAdjustmentEnabled ? 1 : 0,
       'dormantSeasonIntervalMultiplier': dormantSeasonIntervalMultiplier,
       'createdAt': createdAt.toIso8601String(),
@@ -106,6 +111,7 @@ class Plant {
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
       isOutdoor: (map['isOutdoor'] as int?) == 1,
+      locationId: map['locationId'] as String?,
       seasonalAdjustmentEnabled: (map['seasonalAdjustmentEnabled'] as int?) == 1,
       dormantSeasonIntervalMultiplier:
           map['dormantSeasonIntervalMultiplier'] as double?,
@@ -128,6 +134,7 @@ class Plant {
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
     bool? isOutdoor,
+    Object? locationId = _sentinel,
     bool? seasonalAdjustmentEnabled,
     Object? dormantSeasonIntervalMultiplier = _sentinel,
     DateTime? updatedAt,
@@ -155,6 +162,7 @@ class Plant {
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
       isOutdoor: isOutdoor ?? this.isOutdoor,
+      locationId: locationId == _sentinel ? this.locationId : locationId as String?,
       seasonalAdjustmentEnabled:
           seasonalAdjustmentEnabled ?? this.seasonalAdjustmentEnabled,
       dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier == _sentinel

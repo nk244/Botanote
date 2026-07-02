@@ -48,6 +48,7 @@ dependencies:
   # Image handling
   image_picker: ^1.0.7
   crop_your_image: ^1.0.0
+  image: ^4.8.0
   
   # Notifications
   flutter_local_notifications: ^20.1.0
@@ -74,6 +75,9 @@ dependencies:
   # IoTセンサー連携（HTTP通信・HMAC署名）
   http: ^1.2.0
   crypto: ^3.0.3
+
+  # ホーム画面ウィジェット（Issue #174）
+  home_widget: ^0.9.3
 
 dev_dependencies:
   flutter_test:
