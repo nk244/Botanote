@@ -7,6 +7,7 @@ import '../providers/sensor_log_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
+import 'light_meter_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -172,6 +173,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) => const IotSettingsScreen(),
+              ),
+            ),
+          ),
+          const Divider(),
+
+          // 光量メーター（Issue #181）
+          _buildSectionHeader(context, '光量メーター'),
+          ListTile(
+            leading: const Icon(Icons.wb_sunny_outlined),
+            title: const Text('光量メーター'),
+            subtitle: const Text('カメラで置き場所の明るさの目安を測定'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LightMeterScreen(),
               ),
             ),
           ),
