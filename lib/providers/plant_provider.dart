@@ -157,6 +157,7 @@ class PlantProvider with ChangeNotifier {
     int? fertilizerEveryNWaterings,
     int? vitalizerIntervalDays,
     int? vitalizerEveryNWaterings,
+    String? locationId,
     bool seasonalAdjustmentEnabled = false,
     double? dormantSeasonIntervalMultiplier,
   }) async {
@@ -173,6 +174,7 @@ class PlantProvider with ChangeNotifier {
       fertilizerEveryNWaterings: fertilizerEveryNWaterings,
       vitalizerIntervalDays: vitalizerIntervalDays,
       vitalizerEveryNWaterings: vitalizerEveryNWaterings,
+      locationId: locationId,
       seasonalAdjustmentEnabled: seasonalAdjustmentEnabled,
       dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier,
       createdAt: now,

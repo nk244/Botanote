@@ -33,6 +33,9 @@ class Plant {
   /// 活力剤間隔（水やりN回に1回）。[vitalizerIntervalDays] と排他
   final int? vitalizerEveryNWaterings;
 
+  /// 置き場所ID（[Location] への参照、Issue #180）
+  final String? locationId;
+
   /// 冬季（12〜2月）の間隔延長を有効にするか
   final bool seasonalAdjustmentEnabled;
 
@@ -58,6 +61,7 @@ class Plant {
     this.fertilizerEveryNWaterings,
     this.vitalizerIntervalDays,
     this.vitalizerEveryNWaterings,
+    this.locationId,
     this.seasonalAdjustmentEnabled = false,
     this.dormantSeasonIntervalMultiplier,
     required this.createdAt,
@@ -77,6 +81,7 @@ class Plant {
       'fertilizerEveryNWaterings': fertilizerEveryNWaterings,
       'vitalizerIntervalDays': vitalizerIntervalDays,
       'vitalizerEveryNWaterings': vitalizerEveryNWaterings,
+      'locationId': locationId,
       'seasonalAdjustmentEnabled': seasonalAdjustmentEnabled ? 1 : 0,
       'dormantSeasonIntervalMultiplier': dormantSeasonIntervalMultiplier,
       'createdAt': createdAt.toIso8601String(),
@@ -100,6 +105,7 @@ class Plant {
       fertilizerEveryNWaterings: map['fertilizerEveryNWaterings'] as int?,
       vitalizerIntervalDays: map['vitalizerIntervalDays'] as int?,
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
+      locationId: map['locationId'] as String?,
       seasonalAdjustmentEnabled: (map['seasonalAdjustmentEnabled'] as int?) == 1,
       dormantSeasonIntervalMultiplier:
           map['dormantSeasonIntervalMultiplier'] as double?,
@@ -121,6 +127,7 @@ class Plant {
     Object? fertilizerEveryNWaterings = _sentinel,
     Object? vitalizerIntervalDays = _sentinel,
     Object? vitalizerEveryNWaterings = _sentinel,
+    Object? locationId = _sentinel,
     bool? seasonalAdjustmentEnabled,
     Object? dormantSeasonIntervalMultiplier = _sentinel,
     DateTime? updatedAt,
@@ -147,6 +154,7 @@ class Plant {
       vitalizerEveryNWaterings: vitalizerEveryNWaterings == _sentinel
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
+      locationId: locationId == _sentinel ? this.locationId : locationId as String?,
       seasonalAdjustmentEnabled:
           seasonalAdjustmentEnabled ?? this.seasonalAdjustmentEnabled,
       dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier == _sentinel
