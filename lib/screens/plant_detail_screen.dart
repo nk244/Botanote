@@ -16,6 +16,7 @@ import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
 import 'iot_settings_screen.dart';
 import 'note_detail_screen.dart';
+import 'plant_growth_timeline_screen.dart';
 
 /// SliverPersistentHeaderDelegate: TabBarを固定表示するためのデリゲート
 class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
@@ -216,6 +217,15 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             forceElevated: innerBoxIsScrolled,
             actions: [
               if (widget.plant.imagePath != null)
+                _buildImageOverlayAction(
+                    Icons.auto_awesome_motion, _navigateToGrowthTimeline)
+              else
+                IconButton(
+                  icon: const Icon(Icons.auto_awesome_motion),
+                  tooltip: '成長タイムライン',
+                  onPressed: _navigateToGrowthTimeline,
+                ),
+              if (widget.plant.imagePath != null)
                 _buildImageOverlayAction(Icons.edit, _navigateToEdit)
               else
                 IconButton(
@@ -376,6 +386,15 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     if (mounted) {
       Navigator.of(context).pop(true);
     }
+  }
+
+  /// 成長タイムライン画面へ遷移する（Issue #179）。
+  void _navigateToGrowthTimeline() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => PlantGrowthTimelineScreen(plant: widget.plant),
+      ),
+    );
   }
 
   Widget _buildInfoTab() {

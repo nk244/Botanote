@@ -4,6 +4,8 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/app_settings.dart';
 import '../services/database_service.dart';
+import '../services/home_widget_service.dart';
+import '../utils/seasonal_interval_utils.dart';
 
 /// 植物データとログを管理する Provider。
 ///
@@ -50,6 +52,10 @@ class PlantProvider with ChangeNotifier {
       _logDatesCache = allLogs
           .map((l) => DateTime(l.date.year, l.date.month, l.date.day))
           .toSet();
+
+      // ホーム画面ウィジェットに今日の水やり予定を反映する（Issue #174）
+      await HomeWidgetService.updateTodayWateringWidget(
+          getPlantsNeedingWateringToday());
     } catch (e) {
       debugPrint('Error loading plants: $e');
     } finally {
@@ -57,6 +63,19 @@ class PlantProvider with ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     }
+  }
+
+  /// 今日水やりが必要な植物一覧を返す（ホーム画面ウィジェット用、Issue #174）。
+  /// 判定条件は [hasAnyWateringScheduledForToday] と同じ。
+  List<Plant> getPlantsNeedingWateringToday() {
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    return _plants.where((plant) {
+      final next = _nextWateringCache[plant.id];
+      if (next == null) return false;
+      final nextDate = DateTime(next.year, next.month, next.day);
+      return !nextDate.isAfter(todayDate);
+    }).toList();
   }
 
   /// ソート設定に従ってソートした植物一覧を返す。
@@ -138,6 +157,9 @@ class PlantProvider with ChangeNotifier {
     int? fertilizerEveryNWaterings,
     int? vitalizerIntervalDays,
     int? vitalizerEveryNWaterings,
+    String? locationId,
+    bool seasonalAdjustmentEnabled = false,
+    double? dormantSeasonIntervalMultiplier,
   }) async {
     final now = DateTime.now();
     final plant = Plant(
@@ -152,6 +174,9 @@ class PlantProvider with ChangeNotifier {
       fertilizerEveryNWaterings: fertilizerEveryNWaterings,
       vitalizerIntervalDays: vitalizerIntervalDays,
       vitalizerEveryNWaterings: vitalizerEveryNWaterings,
+      locationId: locationId,
+      seasonalAdjustmentEnabled: seasonalAdjustmentEnabled,
+      dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier,
       createdAt: now,
       updatedAt: now,
     );
@@ -280,6 +305,19 @@ class PlantProvider with ChangeNotifier {
     return false;
   }
 
+  /// [plant] の季節調整設定を踏まえた実効間隔日数を返す（Issue #173）。
+  ///
+  /// [referenceDate]（間隔の起算日）が休眠期（12〜2月）かつ季節調整が
+  /// 有効な場合、[baseIntervalDays] に倍率を乗じて延長する。
+  int _adjustedInterval(Plant plant, int baseIntervalDays, DateTime referenceDate) {
+    return applySeasonalAdjustment(
+      baseIntervalDays: baseIntervalDays,
+      seasonalAdjustmentEnabled: plant.seasonalAdjustmentEnabled,
+      dormantMultiplier: plant.dormantSeasonIntervalMultiplier,
+      referenceDate: referenceDate,
+    );
+  }
+
   /// 最終水やりログから次回水やり日を動的に計算する。
   /// 水やり間隔が未設定の場合は null を返す。
   // 動的に次回水やり日を計算（ログから算出）
@@ -293,13 +331,16 @@ class PlantProvider with ChangeNotifier {
     if (wateringLogs.isEmpty) {
       // ログなしの場合は購入日または登録日から計算
       final baseDate = plant.purchaseDate ?? plant.createdAt;
-      return baseDate.add(Duration(days: plant.wateringIntervalDays!));
+      return baseDate.add(Duration(
+          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate)));
     }
 
     // 最新のログから計算
     wateringLogs.sort((a, b) => b.date.compareTo(a.date));
     final lastWatering = wateringLogs.first;
-    return lastWatering.date.add(Duration(days: plant.wateringIntervalDays!));
+    return lastWatering.date.add(Duration(
+        days: _adjustedInterval(
+            plant, plant.wateringIntervalDays!, lastWatering.date)));
   }
 
   /// 最終肥料ログから次回肥料予定日を動的に計算する。
@@ -323,21 +364,25 @@ class PlantProvider with ChangeNotifier {
       if (fertLogs.isNotEmpty) {
         // 起算日1: 最後に肥料を与えた日
         final sorted = [...fertLogs]..sort((a, b) => b.date.compareTo(a.date));
-        return sorted.first.date
-            .add(Duration(days: plant.fertilizerIntervalDays!));
+        return sorted.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.fertilizerIntervalDays!, sorted.first.date)));
       }
       // 起算日2: 最後に水やりをした日
       final wateringLogs2 =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
       if (wateringLogs2.isNotEmpty) {
         final sorted2 = [...wateringLogs2]..sort((a, b) => b.date.compareTo(a.date));
-        return sorted2.first.date
-            .add(Duration(days: plant.fertilizerIntervalDays!));
+        return sorted2.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.fertilizerIntervalDays!, sorted2.first.date)));
       }
       // 起算日3: 次回水やり予定日
       final nextWatering = await calculateNextWateringDate(plantId);
       if (nextWatering != null) {
-        return nextWatering.add(Duration(days: plant.fertilizerIntervalDays!));
+        return nextWatering.add(Duration(
+            days:
+                _adjustedInterval(plant, plant.fertilizerIntervalDays!, nextWatering)));
       }
       return null;
     }
@@ -371,8 +416,9 @@ class PlantProvider with ChangeNotifier {
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
           : (lastFertDate ?? (await calculateNextWateringDate(plantId) ?? DateTime.now()));
-      return baseDate
-          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+      return baseDate.add(Duration(
+          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate) *
+              remaining));
     }
 
     return null;
@@ -397,21 +443,25 @@ class PlantProvider with ChangeNotifier {
       if (vitLogs.isNotEmpty) {
         // 起算日1: 最後に活力剤を与えた日
         final sorted = [...vitLogs]..sort((a, b) => b.date.compareTo(a.date));
-        return sorted.first.date
-            .add(Duration(days: plant.vitalizerIntervalDays!));
+        return sorted.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.vitalizerIntervalDays!, sorted.first.date)));
       }
       // 起算日2: 最後に水やりをした日
       final wateringLogs2 =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
       if (wateringLogs2.isNotEmpty) {
         final sorted2 = [...wateringLogs2]..sort((a, b) => b.date.compareTo(a.date));
-        return sorted2.first.date
-            .add(Duration(days: plant.vitalizerIntervalDays!));
+        return sorted2.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.vitalizerIntervalDays!, sorted2.first.date)));
       }
       // 起算日3: 次回水やり予定日
       final nextWatering = await calculateNextWateringDate(plantId);
       if (nextWatering != null) {
-        return nextWatering.add(Duration(days: plant.vitalizerIntervalDays!));
+        return nextWatering.add(Duration(
+            days:
+                _adjustedInterval(plant, plant.vitalizerIntervalDays!, nextWatering)));
       }
       return null;
     }
@@ -444,8 +494,9 @@ class PlantProvider with ChangeNotifier {
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
           : (lastVitDate ?? (await calculateNextWateringDate(plantId) ?? DateTime.now()));
-      return baseDate
-          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+      return baseDate.add(Duration(
+          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate) *
+              remaining));
     }
 
     return null;
@@ -514,6 +565,11 @@ class PlantProvider with ChangeNotifier {
     return _db.getLogsByPlant(plantId);
   }
 
+  /// 全植物・全種別のログを取得する（ケア統計画面用、Issue #182）。
+  Future<List<LogEntry>> getAllLogsAcrossPlants() async {
+    return _db.getAllLogs();
+  }
+
   /// ログリストから次回水やり日を計算する（DBアクセスなし・同期的）。
   ///
   /// [plant] の [wateringIntervalDays] が null の場合は null を返す。
@@ -525,10 +581,13 @@ class PlantProvider with ChangeNotifier {
     if (wateringLogs.isEmpty) {
       // ログなしの場合は購入日または登録日から計算
       final baseDate = plant.purchaseDate ?? plant.createdAt;
-      return baseDate.add(Duration(days: plant.wateringIntervalDays!));
+      return baseDate.add(Duration(
+          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate)));
     }
     final sorted = [...wateringLogs]..sort((a, b) => b.date.compareTo(a.date));
-    return sorted.first.date.add(Duration(days: plant.wateringIntervalDays!));
+    return sorted.first.date.add(Duration(
+        days:
+            _adjustedInterval(plant, plant.wateringIntervalDays!, sorted.first.date)));
   }
 
   /// ログリストから次回肥料予定日を計算する（DBアクセスなし・同期的）。
@@ -544,18 +603,21 @@ class PlantProvider with ChangeNotifier {
     if (plant.fertilizerIntervalDays != null) {
       if (fertLogs.isNotEmpty) {
         final sorted = [...fertLogs]..sort((a, b) => b.date.compareTo(a.date));
-        return sorted.first.date
-            .add(Duration(days: plant.fertilizerIntervalDays!));
+        return sorted.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.fertilizerIntervalDays!, sorted.first.date)));
       }
       if (wateringLogs.isNotEmpty) {
         final sorted = [...wateringLogs]
           ..sort((a, b) => b.date.compareTo(a.date));
-        return sorted.first.date
-            .add(Duration(days: plant.fertilizerIntervalDays!));
+        return sorted.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.fertilizerIntervalDays!, sorted.first.date)));
       }
       if (nextWateringDate != null) {
-        return nextWateringDate
-            .add(Duration(days: plant.fertilizerIntervalDays!));
+        return nextWateringDate.add(Duration(
+            days:
+                _adjustedInterval(plant, plant.fertilizerIntervalDays!, nextWateringDate)));
       }
       return null;
     }
@@ -579,8 +641,9 @@ class PlantProvider with ChangeNotifier {
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
           : (lastFertDate ?? (nextWateringDate ?? DateTime.now()));
-      return baseDate
-          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+      return baseDate.add(Duration(
+          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate) *
+              remaining));
     }
     return null;
   }
@@ -598,18 +661,21 @@ class PlantProvider with ChangeNotifier {
     if (plant.vitalizerIntervalDays != null) {
       if (vitLogs.isNotEmpty) {
         final sorted = [...vitLogs]..sort((a, b) => b.date.compareTo(a.date));
-        return sorted.first.date
-            .add(Duration(days: plant.vitalizerIntervalDays!));
+        return sorted.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.vitalizerIntervalDays!, sorted.first.date)));
       }
       if (wateringLogs.isNotEmpty) {
         final sorted = [...wateringLogs]
           ..sort((a, b) => b.date.compareTo(a.date));
-        return sorted.first.date
-            .add(Duration(days: plant.vitalizerIntervalDays!));
+        return sorted.first.date.add(Duration(
+            days: _adjustedInterval(
+                plant, plant.vitalizerIntervalDays!, sorted.first.date)));
       }
       if (nextWateringDate != null) {
-        return nextWateringDate
-            .add(Duration(days: plant.vitalizerIntervalDays!));
+        return nextWateringDate.add(Duration(
+            days:
+                _adjustedInterval(plant, plant.vitalizerIntervalDays!, nextWateringDate)));
       }
       return null;
     }
@@ -633,8 +699,9 @@ class PlantProvider with ChangeNotifier {
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
           : (lastVitDate ?? (nextWateringDate ?? DateTime.now()));
-      return baseDate
-          .add(Duration(days: plant.wateringIntervalDays! * remaining));
+      return baseDate.add(Duration(
+          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate) *
+              remaining));
     }
     return null;
   }
