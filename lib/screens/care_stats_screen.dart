@@ -40,6 +40,14 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
         return '肥料';
       case LogType.vitalizer:
         return '活力剤';
+      case LogType.repotting:
+        return '植え替え';
+      case LogType.pruning:
+        return '剪定';
+      case LogType.misting:
+        return '葉水';
+      case LogType.cleaning:
+        return '掃除';
     }
   }
 
@@ -51,6 +59,14 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
         return Icons.grass;
       case LogType.vitalizer:
         return Icons.favorite;
+      case LogType.repotting:
+        return Icons.yard;
+      case LogType.pruning:
+        return Icons.content_cut;
+      case LogType.misting:
+        return Icons.grain;
+      case LogType.cleaning:
+        return Icons.cleaning_services;
     }
   }
 
