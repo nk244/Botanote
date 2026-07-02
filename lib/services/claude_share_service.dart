@@ -14,4 +14,14 @@ class ClaudeShareService {
       subject: '植物の病害虫診断',
     );
   }
+
+  /// 植物名・品種の同定を依頼するプロンプト付きで画像を共有する。
+  static Future<void> shareForIdentification(String imagePath) async {
+    await Share.shareXFiles(
+      [XFile(imagePath)],
+      text: 'この植物の写真から、植物の一般的な名前（和名または流通名）と、'
+          '分かる場合は品種名を教えてください。',
+      subject: '植物名の同定',
+    );
+  }
 }

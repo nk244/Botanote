@@ -297,6 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+
   /// 水やり間隔を一括設定するダイアログ
   /// 天気連動ケアアラートの観測地点（緯度・経度）を入力するダイアログ（Issue #176）。
   Future<void> _showWeatherLocationDialog(

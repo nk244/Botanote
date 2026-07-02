@@ -5,6 +5,7 @@ import 'image_crop_screen.dart';
 import '../providers/plant_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/plant.dart';
+import '../services/claude_share_service.dart';
 import '../widgets/plant_image_widget.dart';
 
 class AddPlantScreen extends StatefulWidget {
@@ -156,6 +157,29 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
+
+  /// 登録済みの写真を同定依頼文とともにClaudeアプリへ共有する（Issue #178）。
+  ///
+  /// Anthropic APIを直接呼び出す従量課金方式は使わず、OSの共有シート経由で
+  /// Claudeアプリ（無料プラン・Proプランいずれでも利用可能）に画像と質問文を渡す。
+  /// 応答はClaudeアプリ上で確認し、植物名・品種名欄に手動で入力する。
+  Future<void> _shareImageForIdentification() async {
+    if (_imagePath == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ClaudeShareService.shareForIdentification(_imagePath!);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Claudeアプリでの推定結果を植物名・品種名欄に入力してください'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: $e')));
+    }
+  }
 
   Future<void> _savePlant() async {
     if (!_formKey.currentState!.validate()) return;
@@ -313,6 +337,14 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                 ),
               ),
             ),
+            if (_imagePath != null)
+              Center(
+                child: TextButton.icon(
+                  onPressed: _shareImageForIdentification,
+                  icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                  label: const Text('Claudeで植物名を推定'),
+                ),
+              ),
             const SizedBox(height: 24),
 
             // Plant name
