@@ -18,7 +18,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
-  bool _obscureAiApiKey = true;
 
   @override
   Widget build(BuildContext context) {
@@ -178,22 +177,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const Divider(),
 
-          // AI診断・同定機能（Issue #177/#178）
-          _buildSectionHeader(context, 'AI診断・同定'),
-          Consumer<SettingsProvider>(
-            builder: (context, settings, _) {
-              final hasKey = settings.settings.aiApiKey.trim().isNotEmpty;
-              return ListTile(
-                leading: const Icon(Icons.auto_awesome_outlined),
-                title: const Text('Anthropic APIキー'),
-                subtitle: Text(hasKey ? '設定済み（写真診断・植物名推定で使用）' : '未設定'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showAiApiKeyDialog(context, settings),
-              );
-            },
-          ),
-          const Divider(),
-
           // About
           _buildSectionHeader(context, 'アプリについて'),
           const ListTile(
@@ -225,59 +208,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// AI診断・同定機能用のAPIキーを入力するダイアログ（Issue #177/#178）。
-  Future<void> _showAiApiKeyDialog(
-    BuildContext context,
-    SettingsProvider settings,
-  ) async {
-    final controller = TextEditingController(text: settings.settings.aiApiKey);
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Anthropic APIキー'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('写真からの病害虫診断・植物名推定に使用します。'
-                  'APIキーはconsole.anthropic.comで発行できます。'),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                obscureText: _obscureAiApiKey,
-                decoration: InputDecoration(
-                  labelText: 'APIキー',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureAiApiKey
-                        ? Icons.visibility_off
-                        : Icons.visibility),
-                    onPressed: () => setDialogState(
-                        () => _obscureAiApiKey = !_obscureAiApiKey),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == null) return;
-    await settings.updateAiApiKey(result);
-  }
 
   /// 水やり間隔を一括設定するダイアログ
   Future<void> _showBulkSetIntervalDialog(BuildContext context) async {
