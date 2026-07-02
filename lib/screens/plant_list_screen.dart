@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
 import '../models/plant.dart';
 import '../widgets/plant_image_widget.dart';
 import 'add_plant_screen.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
+
+/// 「未設定」（置き場所なし）フィルタを表す特別な値（Issue #180）
+const String _unassignedLocationFilter = '__unassigned__';
 
 class PlantListScreen extends StatefulWidget {
   const PlantListScreen({super.key});
@@ -20,13 +24,72 @@ class _PlantListScreenState extends State<PlantListScreen> {
   /// true = グリッド表示、false = リスト表示
   bool _isGridView = false;
 
+  /// 選択中の置き場所フィルタ。null = すべて表示（Issue #180）
+  String? _selectedLocationId;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!context.mounted) return;
       context.read<PlantProvider>().loadPlants();
+      context.read<LocationProvider>().loadLocations();
     });
+  }
+
+  /// 置き場所フィルタチップ行を構築する。置き場所が1件も登録されていない場合は何も表示しない。
+  Widget _buildLocationFilterChips() {
+    return Consumer<LocationProvider>(
+      builder: (context, locationProvider, _) {
+        if (locationProvider.locations.isEmpty) return const SizedBox.shrink();
+
+        return SizedBox(
+          height: 44,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: FilterChip(
+                  label: const Text('すべて'),
+                  selected: _selectedLocationId == null,
+                  onSelected: (_) => setState(() => _selectedLocationId = null),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: FilterChip(
+                  label: const Text('未設定'),
+                  selected: _selectedLocationId == _unassignedLocationFilter,
+                  onSelected: (_) =>
+                      setState(() => _selectedLocationId = _unassignedLocationFilter),
+                ),
+              ),
+              for (final location in locationProvider.locations)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: FilterChip(
+                    label: Text(location.name),
+                    selected: _selectedLocationId == location.id,
+                    onSelected: (_) =>
+                        setState(() => _selectedLocationId = location.id),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 選択中の置き場所フィルタに従って植物リストを絞り込む。
+  List<Plant> _applyLocationFilter(List<Plant> plants) {
+    if (_selectedLocationId == null) return plants;
+    if (_selectedLocationId == _unassignedLocationFilter) {
+      return plants.where((p) => p.locationId == null).toList();
+    }
+    return plants.where((p) => p.locationId == _selectedLocationId).toList();
   }
 
   @override
@@ -107,57 +170,77 @@ class _PlantListScreenState extends State<PlantListScreen> {
           ),
         ],
       ),
-      body: Consumer<PlantProvider>(
-        builder: (context, plantProvider, _) {
-          if (plantProvider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          final isCustomSort = settings.plantSortOrder == PlantSortOrder.custom;
 
-          if (plantProvider.plants.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.eco_outlined,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '植物が登録されていません',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '右下のボタンから植物を追加しましょう',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
+          return Column(
+            children: [
+              // 置き場所フィルタはカスタム並び替え（ドラッグ）と併用すると並び順が
+              // 破損するため、カスタムソート中は表示・適用しない
+              if (!isCustomSort) _buildLocationFilterChips(),
+              Expanded(
+                child: Consumer<PlantProvider>(
+                  builder: (context, plantProvider, _) {
+                    if (plantProvider.isLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (plantProvider.plants.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.eco_outlined,
+                              size: 64,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              '植物が登録されていません',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '右下のボタンから植物を追加しましょう',
+                              style:
+                                  Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.6),
+                                      ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final sortedPlants = plantProvider.getSortedPlants(
+                      settings.plantSortOrder,
+                      settings.customSortOrder,
+                    );
+
+                    // カスタムソート中は全体順序を保つためフィルタを適用しない
+                    final displayedPlants =
+                        isCustomSort ? sortedPlants : _applyLocationFilter(sortedPlants);
+
+                    // グリッド表示（カスタムソート時はリスト優先）
+                    if (_isGridView && !isCustomSort) {
+                      return _buildGridView(displayedPlants);
+                    }
+
+                    return isCustomSort
+                        ? _buildReorderableListView(context, sortedPlants, settings)
+                        : _buildListView(displayedPlants);
+                  },
+                ),
               ),
-            );
-          }
-
-          return Consumer<SettingsProvider>(
-            builder: (context, settings, _) {
-              final sortedPlants = plantProvider.getSortedPlants(
-                settings.plantSortOrder,
-                settings.customSortOrder,
-              );
-              
-              final isCustomSort = settings.plantSortOrder == PlantSortOrder.custom;
-              
-              // グリッド表示（カスタムソート時はリスト優先）
-              if (_isGridView && !isCustomSort) {
-                return _buildGridView(sortedPlants);
-              }
-
-              return isCustomSort 
-                  ? _buildReorderableListView(context, sortedPlants, settings)
-                  : _buildListView(sortedPlants);
-            },
+            ],
           );
         },
       ),

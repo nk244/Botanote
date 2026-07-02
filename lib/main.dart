@@ -7,6 +7,7 @@ import 'providers/plant_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/note_provider.dart';
 import 'providers/sensor_log_provider.dart';
+import 'providers/location_provider.dart';
 import 'screens/home_screen.dart';
 import 'theme/app_themes.dart';
 import 'models/app_settings.dart';
@@ -24,6 +25,8 @@ void callbackDispatcher() {
         taskName == Workmanager.iOSBackgroundTask) {
       // 翌日の水やり予定をDBから確認し、予定があれば翌日に通知をスケジュール
       await NotificationService.scheduleSmartWateringReminder();
+      // 翌日の天気予報を確認し、屋外植物のケアアラートが必要ならスケジュール
+      await NotificationService.scheduleWeatherAlert();
     }
     return Future.value(true);
   });
@@ -70,6 +73,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SettingsProvider()..loadSettings()),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
         ChangeNotifierProvider(create: (_) => SensorLogProvider()),
+        ChangeNotifierProvider(create: (_) => LocationProvider()..loadLocations()),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settingsProvider, _) {
