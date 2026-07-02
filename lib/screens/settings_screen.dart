@@ -7,6 +7,7 @@ import '../providers/sensor_log_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
+import 'care_stats_screen.dart';
 import 'location_list_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -160,6 +161,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('データをインポート'),
             subtitle: const Text('ZIP または JSON ファイルからデータを復元'),
             onTap: _isImporting ? null : () => _handleImport(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.bar_chart),
+            title: const Text('ケア統計'),
+            subtitle: const Text('月別のケア件数・植物ごとの頻度を振り返る'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const CareStatsScreen(),
+              ),
+            ),
           ),
           const Divider(),
 
