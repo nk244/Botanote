@@ -4,6 +4,7 @@ import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
 import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/sensor_auto_fetch_service.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
 import 'notes_list_screen.dart';
@@ -35,38 +36,27 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  /// 自動取得間隔が経過していた場合にセンサーデータを一括取得して保存する
+  /// 自動取得間隔が経過していた場合にセンサーデータを一括取得して保存する。
+  ///
+  /// 実際の取得・間隔判定は [SensorAutoFetchService] に委譲する
+  /// （バックグラウンドタスクと共通のロジックを使用するため）。
   Future<void> _checkAndAutoFetch() async {
     final settingsProvider = context.read<SettingsProvider>();
-    final settings = settingsProvider.settings;
 
-    final intervalHours = settings.sensorFetchIntervalHours;
-    // 間隔が0（無効）またはマッピングが空の場合はスキップ
-    if (intervalHours <= 0 || settings.sensorDeviceMappings.isEmpty) return;
-
-    // 前回取得時刻を確認して間隔が経過しているか判定
-    final lastFetchStr = settings.lastSensorFetchAt;
-    if (lastFetchStr != null) {
-      final lastFetch = DateTime.tryParse(lastFetchStr);
-      if (lastFetch != null) {
-        final elapsed = DateTime.now().difference(lastFetch);
-        if (elapsed.inHours < intervalHours) return;
-      }
-    }
-
-    // 間隔が経過しているので取得を実行する
     try {
-      final sensorProvider = context.read<SensorLogProvider>();
-      final count = await sensorProvider.fetchAndSaveWithMappings(settings);
-      // 最終取得日時を更新
-      await settingsProvider.updateLastSensorFetchAt(DateTime.now());
+      final count = await SensorAutoFetchService.run(settingsProvider.settings);
+      if (!mounted) return;
+      // SensorAutoFetchService は SharedPreferences に直接保存するため、
+      // フォアグラウンドの Provider 状態にも最終取得日時等を反映させる
+      await settingsProvider.loadSettings();
 
       if (!mounted || count == 0) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('センサーデータを自動取得しました（$count件）')),
       );
-    } catch (_) {
-      // 起動時の自動取得エラーはサイレントに無視する
+    } catch (e) {
+      // エラーはサイレントに無視せずログに残す
+      debugPrint('起動時センサー自動取得エラー: $e');
     }
   }
 

@@ -12,6 +12,8 @@ import 'screens/home_screen.dart';
 import 'theme/app_themes.dart';
 import 'models/app_settings.dart';
 import 'services/notification_service.dart';
+import 'services/sensor_auto_fetch_service.dart';
+import 'services/settings_service.dart';
 
 /// バックグラウンドタスクのタスク名
 const _kSmartNotifyTask = 'smart_notify_task';
@@ -27,6 +29,16 @@ void callbackDispatcher() {
       await NotificationService.scheduleSmartWateringReminder();
       // 翌日の天気予報を確認し、屋外植物のケアアラートが必要ならスケジュール
       await NotificationService.scheduleWeatherAlert();
+    }
+    if (taskName == SensorAutoFetchService.taskName ||
+        taskName == Workmanager.iOSBackgroundTask) {
+      // センサーデータを自動取得してDBに保存する（取得間隔はWorkmanagerが管理）
+      try {
+        final settings = await SettingsService().loadSettings();
+        await SensorAutoFetchService.run(settings, forceRun: true);
+      } catch (e) {
+        debugPrint('バックグラウンドセンサー自動取得エラー: $e');
+      }
     }
     return Future.value(true);
   });
@@ -58,6 +70,15 @@ void main() async {
     // 既存タスクがあれば上書き
     existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
   );
+
+  // 保存済み設定に応じてセンサー自動取得のバックグラウンドタスクを登録する
+  // （アプリ起動時のみに依存せず、開かなくても定期的にデータを更新するため）
+  try {
+    final settings = await SettingsService().loadSettings();
+    await SensorAutoFetchService.reschedule(settings);
+  } catch (e) {
+    debugPrint('センサー自動取得タスクの登録に失敗しました: $e');
+  }
 
   runApp(const MyApp());
 }

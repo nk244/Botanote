@@ -192,6 +192,30 @@ class PlantProvider with ChangeNotifier {
     await loadPlants();
   }
 
+  /// 指定した管理場所に紐づく植物を一括で設定する。
+  ///
+  /// [plantIds] に含まれる植物は [locationId] を設定し、現在この場所に
+  /// 属しているが [plantIds] に含まれない植物は場所の紐づけを解除する。
+  Future<void> assignPlantsToLocation(
+      String locationId, Set<String> plantIds) async {
+    for (final plant in _plants) {
+      final shouldBelong = plantIds.contains(plant.id);
+      final currentlyBelongs = plant.locationId == locationId;
+      if (shouldBelong && !currentlyBelongs) {
+        await _db.updatePlant(plant.copyWith(
+          locationId: locationId,
+          updatedAt: DateTime.now(),
+        ));
+      } else if (!shouldBelong && currentlyBelongs) {
+        await _db.updatePlant(plant.copyWith(
+          locationId: null,
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
+    await loadPlants();
+  }
+
   Future<void> deletePlant(String id) async {
     await _db.deletePlant(id);
 
