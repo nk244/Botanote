@@ -30,6 +30,8 @@ class LocationListScreen extends StatelessWidget {
                   border: OutlineInputBorder(),
                   hintText: '例: リビング、ベランダ',
                 ),
+                // 保存ボタンの活性状態を即座に反映するため、入力のたびに再描画する
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
               SwitchListTile(
