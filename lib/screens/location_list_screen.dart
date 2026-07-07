@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/location.dart';
 import '../providers/location_provider.dart';
 import '../providers/plant_provider.dart';
+import '../providers/settings_provider.dart';
+import 'location_detail_screen.dart';
 
 /// 置き場所（Location）の一覧・追加・編集・削除画面（Issue #180）。
 class LocationListScreen extends StatelessWidget {
@@ -28,6 +30,8 @@ class LocationListScreen extends StatelessWidget {
                   border: OutlineInputBorder(),
                   hintText: '例: リビング、ベランダ',
                 ),
+                // 保存ボタンの活性状態を即座に反映するため、入力のたびに再描画する
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
               SwitchListTile(
@@ -71,6 +75,7 @@ class LocationListScreen extends StatelessWidget {
   Future<void> _confirmDelete(BuildContext context, Location location) async {
     final locationProvider = context.read<LocationProvider>();
     final plantProvider = context.read<PlantProvider>();
+    final settingsProvider = context.read<SettingsProvider>();
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -97,6 +102,7 @@ class LocationListScreen extends StatelessWidget {
     if (confirm == true) {
       await locationProvider.deleteLocation(location.id);
       await plantProvider.loadPlants();
+      await settingsProvider.clearLocationFromSensorMappings(location.id);
     }
   }
 
@@ -146,10 +152,23 @@ class LocationListScreen extends StatelessWidget {
                       location.isOutdoor ? Icons.deck : Icons.home),
                   title: Text(location.name),
                   subtitle: Text(location.isOutdoor ? '屋外' : '屋内'),
-                  onTap: () => _showEditDialog(context, location: location),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _confirmDelete(context, location),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LocationDetailScreen(location: location),
+                    ),
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _showEditDialog(context, location: location);
+                      } else if (value == 'delete') {
+                        _confirmDelete(context, location);
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'edit', child: Text('編集')),
+                      PopupMenuItem(value: 'delete', child: Text('削除')),
+                    ],
                   ),
                 ),
               );

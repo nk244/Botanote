@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/sensor_device_mapping.dart';
+import '../providers/location_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/iot_service.dart';
+import '../services/sensor_auto_fetch_service.dart';
 
 /// IoT連携APIキー・デバイスマッピング・自動取得間隔の設定画面
 class IotSettingsScreen extends StatefulWidget {
@@ -66,6 +68,8 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       );
       await provider.updateDeviceMappings(_mappings);
       await provider.updateSensorFetchInterval(_fetchIntervalHours);
+      // 間隔・マッピング変更をバックグラウンド定期タスクへ即座に反映する
+      await SensorAutoFetchService.reschedule(provider.settings);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('設定を保存しました')),
@@ -205,6 +209,44 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     }
   }
 
+  /// 管理場所に連動しているデバイスの連動解除を確認するダイアログを表示する
+  Future<void> _showLocationUnlinkDialog(SensorDeviceMapping mapping) async {
+    final locationName =
+        context.read<LocationProvider>().getLocationName(mapping.locationId) ??
+            '不明な場所';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('場所との連動を解除しますか？'),
+        content: Text(
+          '「${mapping.deviceName}」は現在「$locationName」に連動しており、'
+          'この場所に属する植物全員へ自動的にデータが紐づいています。\n'
+          '解除すると植物を個別に選択できるようになります。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('連動を解除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      final idx = _mappings.indexWhere((m) => m.deviceId == mapping.deviceId);
+      if (idx >= 0) {
+        _mappings[idx] = _mappings[idx].copyWith(locationId: null);
+      }
+    });
+  }
+
   /// デバイスに紐づける植物を複数選択するダイアログを表示する
   Future<void> _showPlantPickerDialog(SensorDeviceMapping mapping) async {
     final plantProvider = context.read<PlantProvider>();
@@ -271,12 +313,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     setState(() {
       final idx = _mappings.indexWhere((m) => m.deviceId == mapping.deviceId);
       if (idx >= 0) {
-        _mappings[idx] = SensorDeviceMapping(
-          deviceId: mapping.deviceId,
-          deviceName: mapping.deviceName,
-          source: mapping.source,
-          plantIds: selectedIds.toList(),
-        );
+        _mappings[idx] = _mappings[idx].copyWith(plantIds: selectedIds.toList());
       }
     });
   }
@@ -473,6 +510,21 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
 
   /// デバイス1件のマッピング行
   Widget _buildMappingTile(SensorDeviceMapping mapping) {
+    // 管理場所に連動している場合は場所名バッジを表示し、タップで連動解除ダイアログを開く
+    if (mapping.locationId != null) {
+      final locationName =
+          context.read<LocationProvider>().getLocationName(mapping.locationId) ??
+              '不明な場所';
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.device_hub),
+        title: Text(mapping.deviceName),
+        subtitle: Text('「$locationName」に連動中（植物は自動追従）'),
+        trailing: const Icon(Icons.link),
+        onTap: () => _showLocationUnlinkDialog(mapping),
+      );
+    }
+
     final plantProvider = context.read<PlantProvider>();
     final plants = plantProvider.plants;
 
@@ -518,14 +570,15 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '自動取得（アプリ起動時）',
+              '自動取得',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 4),
             Text(
-              'アプリ起動時に指定した間隔が経過していれば自動でデータを取得します。',
+              'アプリを開いていなくても、指定した間隔でバックグラウンドで自動取得します。'
+              '（OSの省電力設定により実行タイミングが多少ずれる場合があります）',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),

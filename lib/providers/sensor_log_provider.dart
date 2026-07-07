@@ -4,6 +4,7 @@ import '../models/app_settings.dart';
 import '../models/sensor_device_mapping.dart';
 import '../models/sensor_log.dart';
 import '../services/database_service.dart';
+import '../services/iot_fetch_service.dart';
 import '../services/iot_service.dart';
 
 /// センサーログの状態管理を担う Provider。
@@ -12,6 +13,7 @@ import '../services/iot_service.dart';
 class SensorLogProvider with ChangeNotifier {
   final DatabaseService _db = DatabaseService();
   final IotService _iot = IotService();
+  final IotFetchService _iotFetch = IotFetchService();
 
   List<SensorLog> _logs = [];
   bool _isLoading = false;
@@ -107,60 +109,10 @@ class SensorLogProvider with ChangeNotifier {
   /// 紐づく植物すべてにセンサーログを保存する。
   ///
   /// [settings] に API トークンと [SensorDeviceMapping] リストを含める。
+  /// 実処理は [IotFetchService]（Provider非依存）に委譲する。
   /// 戻り値: 保存に成功したログ件数。
   Future<int> fetchAndSaveWithMappings(AppSettings settings) async {
-    final mappings = settings.sensorDeviceMappings;
-    if (mappings.isEmpty) return 0;
-
-    int savedCount = 0;
-
-    // ソース別にデバイス一覧を取得（API呼び出しを最小化）
-    List<SensorData>? natureRemoDevices;
-    List<SensorData>? switchBotDevices;
-
-    for (final mapping in mappings) {
-      try {
-        final List<SensorData> devices;
-        if (mapping.source == SensorSource.natureRemo) {
-          natureRemoDevices ??=
-              await _iot.fetchNatureRemoData(settings.natureRemoToken);
-          devices = natureRemoDevices;
-        } else {
-          switchBotDevices ??= await _iot.fetchSwitchBotData(
-              settings.switchBotToken, settings.switchBotSecret);
-          devices = switchBotDevices;
-        }
-
-        // マッピングのデバイスIDに一致するデバイスを探す
-        final device = devices.firstWhere(
-          (d) => d.deviceId == mapping.deviceId,
-          orElse: () => throw StateError(
-              'デバイスが見つかりません: ${mapping.deviceName}'),
-        );
-
-        // 紐づく植物ごとにセンサーログを保存（loadLogs は後でまとめて実行）
-        for (final plantId in mapping.plantIds) {
-          final now = DateTime.now();
-          final log = SensorLog(
-            id: const Uuid().v4(),
-            plantId: plantId,
-            source: mapping.source,
-            deviceId: device.deviceId,
-            deviceName: device.deviceName,
-            temperature: device.temperature,
-            humidity: device.humidity,
-            recordedAt: now,
-            createdAt: now,
-          );
-          await _db.insertSensorLog(log);
-          savedCount++;
-        }
-      } catch (e) {
-        // 1デバイスのエラーで全体を止めない
-        debugPrint('マッピング取得エラー (${mapping.deviceName}): $e');
-      }
-    }
-
+    final savedCount = await _iotFetch.fetchAndSaveWithMappings(settings);
     if (savedCount > 0) {
       await loadLogs();
     }

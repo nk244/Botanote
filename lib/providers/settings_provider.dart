@@ -168,6 +168,46 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// 指定した管理場所に紐づくセンサーデバイスを一括で設定する。
+  ///
+  /// [deviceIds] に含まれるデバイスは [locationId] を設定し、現在この場所に
+  /// 紐づいているが [deviceIds] に含まれないデバイスは紐づけを解除する。
+  Future<void> assignSensorsToLocation(
+      String locationId, Set<String> deviceIds) async {
+    final updated = _settings.sensorDeviceMappings.map((mapping) {
+      final shouldBelong = deviceIds.contains(mapping.deviceId);
+      final currentlyBelongs = mapping.locationId == locationId;
+      if (shouldBelong && !currentlyBelongs) {
+        return mapping.copyWith(locationId: locationId);
+      } else if (!shouldBelong && currentlyBelongs) {
+        return mapping.copyWith(locationId: null);
+      }
+      return mapping;
+    }).toList();
+
+    _settings = _settings.copyWith(sensorDeviceMappings: updated);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
+  /// 管理場所削除時に、その場所を参照しているセンサーマッピングの
+  /// locationId をクリアする。
+  Future<void> clearLocationFromSensorMappings(String locationId) async {
+    final hasReference =
+        _settings.sensorDeviceMappings.any((m) => m.locationId == locationId);
+    if (!hasReference) return;
+
+    final updated = _settings.sensorDeviceMappings.map((mapping) {
+      return mapping.locationId == locationId
+          ? mapping.copyWith(locationId: null)
+          : mapping;
+    }).toList();
+
+    _settings = _settings.copyWith(sensorDeviceMappings: updated);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
+  }
+
   /// 天気連動ケアアラートの設定を更新し、再スケジュールする（Issue #176）。
   Future<void> updateWeatherAlertSettings({
     required bool enabled,
