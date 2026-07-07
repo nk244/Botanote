@@ -7,7 +7,7 @@ Issue対応の対応計画作成からPR発行までの一連の流れをSkill�
 ## 全体の流れ
 
 ```
-/feature-design <N>  →  /design-review <N>  →  /implement <N>  →  /test <N>
+/feature-design <N>  →  /design-review <N>  →  /implement <N>  →  /test <N>  →  （PRマージ後）/release
 ```
 
 ---
@@ -76,6 +76,19 @@ Issue対応の対応計画作成からPR発行までの一連の流れをSkill�
 
 1. GitHub上でPRをマージする（AIはマージしない）
 2. Issueのクローズを依頼する
+3. `/release` を実行し、リリースビルド（APK）を作成してGoogle Driveにアップロードする
+
+---
+
+## ステップ6: リリース
+
+```
+/release
+```
+
+- リリースビルド（APK）を作成し、Google Driveにアップロードする
+- PRがマージされ、`main` に変更が反映された後に実行する
+- ユーザーから明示的に「今回はリリース不要」の指示がない限り、PRマージ後の一連の流れとして実施する
 
 ---
 
@@ -88,3 +101,4 @@ Issue対応の対応計画作成からPR発行までの一連の流れをSkill�
 | `/implement <N>` | 実装・コミット・PR発行 |
 | `/ux-review <N>` | UI/UX・文言をユーザー視点でレビュー・修正 |
 | `/test <N>` | 静的解析・テスト・手動確認観点レポート |
+| `/release` | リリースビルド（APK）作成・Google Driveアップロード |
