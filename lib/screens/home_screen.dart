@@ -4,6 +4,7 @@ import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
 import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/notification_service.dart';
 import '../services/sensor_auto_fetch_service.dart';
 import 'today_watering_screen.dart';
 import 'plant_list_screen.dart';
@@ -33,7 +34,36 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // アプリ起動時にセンサー自動取得が必要か確認する
       _checkAndAutoFetch();
+      // 水やりリマインダーが有効なのに OS 通知権限が未許可の場合は権限をリクエストする
+      _ensureNotificationPermission();
     });
+  }
+
+  /// 水やりリマインダーが有効なのに OS の通知権限が未許可の場合、権限をリクエストする。
+  ///
+  /// リマインダーは初期状態で有効だが、ユーザーが設定画面でトグルを操作しない限り
+  /// 権限リクエストが発火せず、通知が一度も届かない不具合への対応（Issue #201）。
+  /// 権限が付与された場合はリマインダーを再スケジュールする。
+  Future<void> _ensureNotificationPermission() async {
+    final settings = context.read<SettingsProvider>().settings;
+    if (!settings.notificationEnabled) return;
+
+    try {
+      final service = NotificationService();
+      // 既に許可済みなら何もしない（毎回ダイアログを出さない）
+      if (await service.areNotificationsEnabled()) return;
+
+      final granted = await service.requestPermission();
+      if (granted) {
+        await NotificationService.scheduleSmartWateringReminder(
+          hour: settings.notificationHour,
+          minute: settings.notificationMinute,
+        );
+      }
+    } catch (e) {
+      // 権限リクエストの失敗はサイレントに無視せずログに残す
+      debugPrint('通知権限リクエストエラー: $e');
+    }
   }
 
   /// 自動取得間隔が経過していた場合にセンサーデータを一括取得して保存する。

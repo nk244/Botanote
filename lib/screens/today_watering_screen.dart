@@ -21,11 +21,16 @@ class TodayWateringScreen extends StatefulWidget {
   State<TodayWateringScreen> createState() => _TodayWateringScreenState();
 }
 
-class _TodayWateringScreenState extends State<TodayWateringScreen> {
+class _TodayWateringScreenState extends State<TodayWateringScreen>
+    with WidgetsBindingObserver {
   // 現在選択中の日付
   DateTime _selectedDate = AppDateUtils.getDateOnly(DateTime.now());
   DateTime _focusedDay = DateTime.now();
   bool _isCalendarView = false;
+
+  // この画面が基準としている「今日」。アプリを起動したまま日付を跨いだ場合に
+  // resume 時の再計算判定に使う（Issue #202）。
+  DateTime _knownToday = AppDateUtils.getDateOnly(DateTime.now());
 
   // PageView用コントローラー。中央値を初期ページとして対応日数小を計算する。
   static const int _initialPage = 10000;
@@ -55,6 +60,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pageController = PageController(initialPage: _initialPage);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await context.read<PlantProvider>().loadPlants();
@@ -71,9 +77,37 @@ class _TodayWateringScreenState extends State<TodayWateringScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     _listScrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.resumed) return;
+
+    // アプリを起動したまま日付を跨いだ場合、「今日」の表示や予定超過の判定が
+    // 古い日付のままになる不具合への対応（Issue #202）。
+    // resume 時に日付が変わっていれば表示を再計算する。
+    final newToday = AppDateUtils.getDateOnly(DateTime.now());
+    if (newToday == _knownToday) return;
+
+    // 「今日」を表示していたユーザーだけ新しい今日へ追従させる。
+    // 過去・未来の日付を明示的に選んでいた場合は選択日を維持する。
+    final wasViewingToday = _selectedDate == _knownToday;
+    _knownToday = newToday;
+    if (!mounted) return;
+    setState(() {
+      if (wasViewingToday) {
+        _selectedDate = newToday;
+        _focusedDay = DateTime.now();
+      }
+      // 予定超過表示など日付依存の表示を再計算させる。
+      _refreshKey++;
+    });
+    _loadSelectedDateFirst(_selectedDate).ignore();
   }
 
   @override
