@@ -82,6 +82,21 @@ class NotificationService {
     return false;
   }
 
+  /// OS レベルで通知が許可されているかを返す（Android 13+ の POST_NOTIFICATIONS）。
+  ///
+  /// 判定できないプラットフォーム（iOS/macOS 等）や不明な場合は true を返し、
+  /// 権限リクエストの要否判定を過剰に発火させない。
+  Future<bool> areNotificationsEnabled() async {
+    final androidImpl = _plugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      final enabled = await androidImpl.areNotificationsEnabled();
+      return enabled ?? true;
+    }
+    return true;
+  }
+
   /// 翌日の水やり予定をDBから直接確認し、予定がある場合のみ通知を1件登録する。
   ///
   /// バックグラウンドIsolateとアプリ起動時の両方から呼び出す共通ロジック。
