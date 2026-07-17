@@ -7,7 +7,7 @@ Issue対応の対応計画作成からPR発行までの一連の流れをSkill�
 ## 全体の流れ
 
 ```
-/feature-design <N>  →  /design-review <N>  →  /implement <N>  →  /test <N>  →  （PRマージ後）/release
+/feature-design <N>  →  /design-review <N>  →  /implement <N>  →  /test <N>  →  /pr-review <PR番号>  →  /release
 ```
 
 ---
@@ -72,15 +72,26 @@ Issue対応の対応計画作成からPR発行までの一連の流れをSkill�
 
 ---
 
-## PR マージ後
+## ステップ6: PRレビュー & マージ
 
-1. GitHub上でPRをマージする（AIはマージしない）
-2. Issueのクローズを依頼する
-3. `/release` を実行し、リリースビルド（APK）を作成してGoogle Driveにアップロードする
+```
+/pr-review <PR番号>
+```
+
+- PRの差分をレビューし、`flutter analyze` / `flutter test` / CI・コンフリクト状態を確認する
+- 全てのマージ前チェックを通過した場合のみ、AIがマージまで実施する（CLAUDE.md「マージはAIが行わない」の例外）
+- 🔴 必須修正がある場合はマージせず変更依頼し、修正後に `/pr-review <N>` を再実行する
 
 ---
 
-## ステップ6: リリース
+## PR マージ後
+
+1. Issueのクローズを確認する
+2. `/release` を実行し、リリースビルド（APK）を作成してGoogle Driveにアップロードする
+
+---
+
+## ステップ7: リリース
 
 ```
 /release
@@ -101,4 +112,5 @@ Issue対応の対応計画作成からPR発行までの一連の流れをSkill�
 | `/implement <N>` | 実装・コミット・PR発行 |
 | `/ux-review <N>` | UI/UX・文言をユーザー視点でレビュー・修正 |
 | `/test <N>` | 静的解析・テスト・手動確認観点レポート |
+| `/pr-review <PR番号>` | PR差分のレビュー・マージ前チェック・マージ |
 | `/release` | リリースビルド（APK）作成・Google Driveアップロード |
