@@ -40,8 +40,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   // FutureBuilderの再実行トリガー用カウンタ（インクリメントで全キャッシュを無効化）
   int _refreshKey = 0;
 
-  // PlantProviderのisLoading前回値。loadPlants()完了検知に使用する。
-  bool _wasLoading = false;
+  // PlantProviderのdataVersion前回値。loadPlants()完了検知に使用する（Issue #213）。
+  int? _prevDataVersion;
 
   // SettingsProviderのソート設定前回値。ソート変更検知に使用する。
   PlantSortOrder? _prevSortOrder;
@@ -119,17 +119,25 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // PlantProvider の loadPlants() 完了（isLoading: true → false）を検知して
-    // キャッシュをリセットし、最新の植物データで再プリロードする。
-    // 植物追加・削除・編集が他タブで行われた場合も自動的に反映される。
-    final isLoading = context.read<PlantProvider>().isLoading;
-    if (_wasLoading && !isLoading) {
+    // PlantProvider を listen: true で購読することで、他画面での植物追加・削除・
+    // 編集やインポート完了時にも didChangeDependencies が再実行される。
+    final plantProvider = Provider.of<PlantProvider>(context);
+
+    // loadPlants() の完了を dataVersion の変化で検知してキャッシュをリセットし、
+    // 最新の植物データで再プリロードする。
+    //
+    // 以前は isLoading の true→false 遷移で検知していたが、設定画面など別画面が
+    // push された状態で loadPlants() が始まって終わるとこの画面が遷移を観測できず、
+    // 古いキャッシュが残り続けていた（Issue #213: インポート後に
+    // 「今日は水やりの予定と記録がありません」のままになる不具合）。
+    final dataVersion = plantProvider.dataVersion;
+    if (_prevDataVersion != null && _prevDataVersion != dataVersion) {
       setState(() {
         _refreshKey++;
       });
       _loadSelectedDateFirst(_selectedDate).ignore();
     }
-    _wasLoading = isLoading;
+    _prevDataVersion = dataVersion;
 
     // SettingsProvider のソート設定変更（ソート順 or カスタム順の変化）を検知して
     // キャッシュをリセットし、新しいソート順で再プリロードする。

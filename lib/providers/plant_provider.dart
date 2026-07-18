@@ -21,6 +21,12 @@ class PlantProvider with ChangeNotifier {
   /// 初回起動時の「空リスト一瞬表示」を防ぐために使用する。
   bool _isInitialized = false;
 
+  /// loadPlants() が完了するたびに増加するデータ世代カウンタ。
+  ///
+  /// 画面側がこの値を監視することで、他画面での植物追加・削除・編集や
+  /// バックアップからのインポート後にも自前のキャッシュを破棄できる（Issue #213）。
+  int _dataVersion = 0;
+
   final Map<String, DateTime?> _nextWateringCache = {};
 
   /// カレンダー表示用：ログが存在する日付のセット（時刻なし）
@@ -32,6 +38,9 @@ class PlantProvider with ChangeNotifier {
   /// loadPlants() が一度以上正常完了した場合 true。
   /// 初回起動ローディング中は false のままになる。
   bool get isInitialized => _isInitialized;
+
+  /// loadPlants() の完了回数。値が変わったらデータが入れ替わったことを示す。
+  int get dataVersion => _dataVersion;
 
   Set<DateTime> get logDates => _logDatesCache;
 
@@ -61,6 +70,7 @@ class PlantProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       _isInitialized = true;
+      _dataVersion++;
       notifyListeners();
     }
   }

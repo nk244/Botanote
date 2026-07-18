@@ -210,6 +210,31 @@ class DatabaseService {
     ''');
   }
 
+  // ── 一括投入（インポート用） ─────────────────────────────────
+
+  /// 複数テーブルのレコードを1つのトランザクションでまとめて投入する。
+  ///
+  /// [rowsByTable] はテーブル名をキーに、そのテーブルへ挿入する行のリストを持つ。
+  /// キーの順序どおりに挿入するため、外部キー参照のある表は参照先を先に並べること。
+  ///
+  /// 1件ずつ [insertPlant] 等を await すると件数分の暗黙トランザクションが発生し、
+  /// 数千件の復元に数十秒〜数分かかる。バッチ化して大幅に短縮する（Issue #214）。
+  Future<void> insertRowsInBatch(
+    Map<String, List<Map<String, dynamic>>> rowsByTable,
+  ) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      for (final entry in rowsByTable.entries) {
+        for (final row in entry.value) {
+          batch.insert(entry.key, row,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
   // ── Plant CRUD ───────────────────────────────────────────────
 
   /// 植物を挙録（同一IDが存在する場合は上書き）する。
