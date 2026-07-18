@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive_io.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -17,7 +18,7 @@ import 'database_service.dart';
 ///
 /// 画像を含む ZIP アーカイブとして保存・復元する。
 /// ZIP 構成:
-///   botanote_backup_XXXXXX.zip
+///   botanote_backup_yyyyMMdd_HHmm.zip
 ///   ├── data.json          # Plants / Logs / Notes (imagePath は ZIP 内相対パス)
 ///   └── images/
 ///       ├── plants/`plant_id`.jpg
@@ -35,7 +36,10 @@ class ExportService {
   ///
   /// キャンセル時は null を返す。
   Future<String?> exportToFile() async {
-    final ts = DateTime.now().millisecondsSinceEpoch;
+    // ファイル名から取得日時が読み取れるようにする（Issue #216）。
+    // エポックミリ秒だと、ファイルピッカーで名前が省略表示された際に
+    // 複数世代のバックアップを判別できない。
+    final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
     final fileName = 'botanote_backup_$ts.zip';
 
     // ZIP バイト列を生成して一時ファイルに書き出す
