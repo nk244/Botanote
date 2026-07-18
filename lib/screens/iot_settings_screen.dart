@@ -84,6 +84,15 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     }
   }
 
+  /// 例外オブジェクトをユーザー向けの文言に変換する。
+  ///
+  /// `Exception: ...` の接頭辞を取り除き、メッセージ本体のみを返す。
+  String _describeError(Object e) {
+    final text = e.toString();
+    const prefix = 'Exception: ';
+    return text.startsWith(prefix) ? text.substring(prefix.length) : text;
+  }
+
   Future<void> _testNatureRemo() async {
     final token = _natureRemoController.text.trim();
     if (token.isEmpty) {
@@ -107,7 +116,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接続失敗: $e')),
+        SnackBar(content: Text('接続失敗: ${_describeError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isTestingNatureRemo = false);
@@ -138,7 +147,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接続失敗: $e')),
+        SnackBar(content: Text('接続失敗: ${_describeError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isTestingSwitchBot = false);
@@ -162,13 +171,16 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     try {
       final iot = IotService();
       final allDevices = <SensorData>[];
+      // 各サービスの取得失敗理由を収集する。片方が失敗しても続行するが、
+      // エラーをサイレントに握り潰さず、後でユーザーに提示する。
+      final errors = <String>[];
 
       if (natureRemoToken.isNotEmpty) {
         try {
           final devices = await iot.fetchNatureRemoData(natureRemoToken);
           allDevices.addAll(devices);
         } catch (e) {
-          // NatureRemoが失敗しても SwitchBot の取得を続行
+          errors.add(_describeError(e));
         }
       }
       if (switchBotToken.isNotEmpty && switchBotSecret.isNotEmpty) {
@@ -177,17 +189,31 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
               await iot.fetchSwitchBotData(switchBotToken, switchBotSecret);
           allDevices.addAll(devices);
         } catch (e) {
-          // SwitchBotが失敗しても続行
+          errors.add(_describeError(e));
         }
       }
 
       if (!mounted) return;
 
       if (allDevices.isEmpty) {
+        // 取得0件でも、エラーがあれば「見つからない」ではなく実際の原因を出す。
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('デバイスが見つかりませんでした')),
+          SnackBar(
+            content: Text(errors.isEmpty
+                ? 'デバイスが見つかりませんでした'
+                : '取得に失敗しました: ${errors.join(' / ')}'),
+          ),
         );
         return;
+      }
+
+      // 一部のサービスだけ成功した場合は、成功分を反映しつつ失敗も知らせる。
+      if (errors.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('一部の取得に失敗しました: ${errors.join(' / ')}'),
+          ),
+        );
       }
 
       setState(() {
