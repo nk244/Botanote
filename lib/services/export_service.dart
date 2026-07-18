@@ -265,14 +265,23 @@ class ExportService {
     int noteCount = 0;
     int locationCount = 0;
 
+    // 復元対象の行をテーブルごとに組み立て、最後に1トランザクションで投入する
+    // （1件ずつ insert すると数千件で数十秒〜数分かかるため。Issue #214）。
+    // 外部キー参照のある表より参照先が先に来るよう、挿入順に並べる。
+    final locationRows = <Map<String, dynamic>>[];
+    final plantRows = <Map<String, dynamic>>[];
+    final logRows = <Map<String, dynamic>>[];
+    final noteRows = <Map<String, dynamic>>[];
+    final sensorLogRows = <Map<String, dynamic>>[];
+
     // 置き場所をインポート（植物が locationId で参照するため植物より先に復元する）
     // version 4 以降のバックアップにのみ含まれる。
     final locationsJson = data['locations'] as List<dynamic>?;
     final hasLocations = locationsJson != null;
     if (hasLocations) {
       for (final l0 in locationsJson) {
-        await _db.insertLocation(
-          Location.fromMap(Map<String, dynamic>.from(l0 as Map)),
+        locationRows.add(
+          Location.fromMap(Map<String, dynamic>.from(l0 as Map)).toMap(),
         );
         locationCount++;
       }
@@ -292,7 +301,7 @@ class ExportService {
       if (!hasLocations) {
         map['locationId'] = null;
       }
-      await _db.insertPlant(Plant.fromMap(map));
+      plantRows.add(Plant.fromMap(map).toMap());
       plantCount++;
     }
 
@@ -300,7 +309,7 @@ class ExportService {
     final logsJson = data['logs'] as List<dynamic>? ?? [];
     for (final l in logsJson) {
       final log = LogEntry.fromMap(Map<String, dynamic>.from(l as Map));
-      await _db.insertLog(log);
+      logRows.add(log.toMap());
       logCount++;
     }
 
@@ -317,7 +326,7 @@ class ExportService {
             .toList();
         map['imagePaths'] = absPaths.join('|');
       }
-      await _db.insertNote(Note.fromMap(map));
+      noteRows.add(Note.fromMap(map).toMap());
       noteCount++;
     }
 
@@ -326,9 +335,18 @@ class ExportService {
     final sensorLogsJson = data['sensorLogs'] as List<dynamic>? ?? [];
     for (final s in sensorLogsJson) {
       final log = SensorLog.fromMap(Map<String, dynamic>.from(s as Map));
-      await _db.insertSensorLog(log);
+      sensorLogRows.add(log.toMap());
       sensorLogCount++;
     }
+
+    // 参照先（locations → plants）を先に投入する順序で一括コミットする
+    await _db.insertRowsInBatch({
+      'locations': locationRows,
+      'plants': plantRows,
+      'logs': logRows,
+      'notes': noteRows,
+      'sensor_logs': sensorLogRows,
+    });
 
     return ImportResult(
       plantCount: plantCount,
