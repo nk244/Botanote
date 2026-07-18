@@ -272,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const ListTile(
             leading: Icon(Icons.info),
             title: Text('バージョン'),
-            subtitle: Text('1.2.0'),
+            subtitle: Text('1.3.0'),
           ),
           ListTile(
             leading: const Icon(Icons.code),
@@ -282,7 +282,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               showAboutDialog(
                 context: context,
                 applicationName: 'Botanote',
-                applicationVersion: '1.2.0',
+                applicationVersion: '1.3.0',
                 applicationIcon: const Icon(Icons.eco, size: 48),
                 children: const [
                   Text('植物の水やりを管理するためのアプリです。'),
