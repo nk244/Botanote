@@ -41,6 +41,26 @@ class IotService {
 
   static const Duration _timeout = Duration(seconds: 10);
 
+  /// HTTPステータスコードをユーザー向けのエラーメッセージに変換する。
+  ///
+  /// [service] はサービス名（例: 'Nature Remo'）。認証エラーなど原因が分かる
+  /// コードは具体的な文言にし、それ以外は汎用の HTTP エラー文言を返す。
+  static String _httpErrorMessage(String service, int statusCode) {
+    switch (statusCode) {
+      case 401:
+      case 403:
+        return '$service のAPIトークンが正しくありません（HTTP $statusCode）';
+      case 429:
+        return '$service へのリクエストが多すぎます。しばらく待ってから再試行してください（HTTP $statusCode）';
+      case 500:
+      case 502:
+      case 503:
+        return '$service のサーバーが一時的に応答していません（HTTP $statusCode）';
+      default:
+        return '$service APIエラー: HTTP $statusCode';
+    }
+  }
+
   // ── Nature Remo ──────────────────────────────────────────────
 
   /// Nature Remo からすべてのデバイスのセンサーデータを取得する。
@@ -57,8 +77,7 @@ class IotService {
     ).timeout(_timeout);
 
     if (response.statusCode != 200) {
-      throw Exception(
-          'Nature Remo APIエラー: HTTP ${response.statusCode}');
+      throw Exception(_httpErrorMessage('Nature Remo', response.statusCode));
     }
 
     final List<dynamic> devices =
@@ -112,7 +131,7 @@ class IotService {
 
     if (deviceListResponse.statusCode != 200) {
       throw Exception(
-          'SwitchBot APIエラー: HTTP ${deviceListResponse.statusCode}');
+          _httpErrorMessage('SwitchBot', deviceListResponse.statusCode));
     }
 
     final deviceListBody =
