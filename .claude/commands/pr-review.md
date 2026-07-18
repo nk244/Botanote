@@ -4,8 +4,7 @@ PR のコード差分をレビューし、問題があればコメントして�
 
 - 引数（$ARGUMENTS）にPR番号を指定する。例: `/pr-review 170`
 - `gh` CLI が使用可能であること
-- **マージ権限について**: CLAUDE.md の「マージはAIが行わず、必ずユーザーが確認してからマージする」は、
-  **このスキルの実行中に限り例外とする**。ユーザーが `/pr-review <N>` を実行した時点でマージが承認されたものとみなし、
+- **マージ権限について**: CLAUDE.md の「マージは原則AIが行わず、ユーザーが確認してからマージする」の**例外を、このスキルの実行中に限り適用する**。ユーザーが `/pr-review <N>` を実行した時点でマージが承認されたものとみなし、
   レビューで問題がなければ AI がマージまで実施してよい。
   ただし「マージ前チェックリスト」（ステップ4）を全て満たすことが条件。1つでも満たさない場合はマージせずユーザーに報告する。
 
@@ -66,7 +65,7 @@ PR のタイトル・本文・ブランチ名・変更ファイル一覧を確�
 以下を**実際にコマンドを実行して**確認する。結果は報告に含めること。
 
 ```bash
-# 静的解析（エラーが1件でもあればマージ不可）
+# 静的解析（error / warning が1件でもあればマージ不可。info は対象外）
 flutter analyze
 
 # テスト（失敗が1件でもあればマージ不可）
@@ -78,7 +77,7 @@ gh pr view <N> --json mergeable,mergeStateStatus,statusCheckRollup,reviewDecisio
 
 | # | 条件 | 満たさない場合 |
 |---|---|---|
-| 1 | `flutter analyze` に error が無い | マージ不可 |
+| 1 | `flutter analyze` に error / warning が無い（info は除く） | マージ不可 |
 | 2 | `flutter test` が全て成功 | マージ不可 |
 | 3 | `mergeable` が `CONFLICTING` でない | マージ不可（rebase を案内） |
 | 4 | CI（statusCheckRollup）に失敗が無い | マージ不可 |
@@ -97,7 +96,7 @@ gh pr merge <N> --merge --subject "<PRタイトル>" --delete-branch
 マージ後にユーザーへ報告する:
 ```
 PR #<N> をマージしました。
-- flutter analyze: エラーなし
+- flutter analyze: error / warning なし
 - flutter test: 全<N>件成功
 - CI: 成功 / コンフリクト: なし
 ブランチ feat/xxx は削除されました。
