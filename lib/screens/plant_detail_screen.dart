@@ -7,6 +7,7 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/sensor_log.dart';
 import '../providers/plant_provider.dart';
+import '../providers/location_provider.dart';
 import '../providers/note_provider.dart';
 import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
@@ -449,8 +450,23 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           ),
         if (widget.plant.purchaseLocation != null)
           _InfoRow(label: '購入先', value: widget.plant.purchaseLocation!),
+        // 登録・編集画面で設定した置き場所を確認できるようにする（Issue #215）
+        if (_locationName != null)
+          _InfoRow(label: '置き場所', value: _locationName!),
+        if (widget.plant.isOutdoor) const _InfoRow(label: '設置', value: '屋外'),
       ],
     );
+  }
+
+  /// 植物に紐づく置き場所の名前を返す。未設定・削除済みの場合は null。
+  String? get _locationName {
+    final locationId = widget.plant.locationId;
+    if (locationId == null) return null;
+    final locations = context.watch<LocationProvider>().locations;
+    for (final location in locations) {
+      if (location.id == locationId) return location.name;
+    }
+    return null;
   }
 
   Widget _buildWateringInfoCard() {
