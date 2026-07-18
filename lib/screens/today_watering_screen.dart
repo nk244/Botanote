@@ -13,6 +13,7 @@ import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
+import 'add_plant_screen.dart';
 
 class TodayWateringScreen extends StatefulWidget {
   const TodayWateringScreen({super.key});
@@ -1139,6 +1140,34 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     );
   }
 
+  /// 植物が未登録のときに、植物登録を促すダイアログを表示する。
+  ///
+  /// 「登録する」を選ぶと植物追加画面へ遷移する。
+  Future<void> _showNoPlantsDialog() async {
+    final goToAdd = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('植物が登録されていません'),
+        content: const Text('水やりを記録するには、まず植物を登録してください。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('植物を登録'),
+          ),
+        ],
+      ),
+    );
+    if (goToAdd == true && mounted) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => const AddPlantScreen()),
+      );
+    }
+  }
+
   Future<void> _showUnscheduledWateringDialog() async {
     final plantProvider = context.read<PlantProvider>();
     final settings = context.read<SettingsProvider>();
@@ -1154,11 +1183,19 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       data.nextWateringDateCache, data.nextFertilizerDateCache, data.nextVitalizerDateCache,
     ).toSet();
 
+    // 植物が1件も登録されていない場合は、未予定判定より先に案内する。
+    // 初回起動直後の唯一の導線を押したときに手詰まりにならないようにする（Issue #208）。
+    if (sortedPlants.isEmpty) {
+      if (!context.mounted) return;
+      await _showNoPlantsDialog();
+      return;
+    }
+
     // ソート順を保持したまま未予定植物を抽出する
     final unscheduledPlants = sortedPlants
         .where((plant) => !plantsForDate.contains(plant))
         .toList();
-    
+
     if (unscheduledPlants.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
