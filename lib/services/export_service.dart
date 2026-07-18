@@ -10,6 +10,7 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
 import '../models/sensor_log.dart';
+import '../models/location.dart';
 import 'database_service.dart';
 
 /// データのエクスポート / インポートを担うサービス
@@ -135,14 +136,20 @@ class ExportService {
     // ── センサーログを収集 ──
     final sensorLogs = await _db.getAllSensorLogs();
 
+    // ── 置き場所を収集 ──
+    // 植物が locationId で参照するため、これを含めないと復元時に置き場所が
+    // 全消失し、植物側の locationId が孤児参照になる（Issue #206）。
+    final locations = await _db.getAllLocations();
+
     // ── data.json を生成 ──
     final data = {
-      'version': 3,
+      'version': 4,
       'exportedAt': DateTime.now().toIso8601String(),
       'plants': plantMaps,
       'logs': allLogs.map((l) => l.toMap()).toList(),
       'notes': noteMaps,
       'sensorLogs': sensorLogs.map((s) => s.toMap()).toList(),
+      'locations': locations.map((l) => l.toMap()).toList(),
     };
     final jsonBytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
     archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
@@ -215,7 +222,7 @@ class ExportService {
         jsonDecode(jsonStr) as Map<String, dynamic>;
 
     final version = data['version'] as int? ?? 1;
-    if (version > 3) {
+    if (version > 4) {
       throw FormatException('未対応のバックアップバージョン: $version');
     }
 
@@ -242,7 +249,7 @@ class ExportService {
     final Map<String, dynamic> data =
         jsonDecode(jsonStr) as Map<String, dynamic>;
     final version = data['version'] as int? ?? 1;
-    if (version > 3) {
+    if (version > 4) {
       throw FormatException('未対応のバックアップバージョン: $version');
     }
     return _importData(data, const {});
@@ -256,6 +263,20 @@ class ExportService {
     int plantCount = 0;
     int logCount = 0;
     int noteCount = 0;
+    int locationCount = 0;
+
+    // 置き場所をインポート（植物が locationId で参照するため植物より先に復元する）
+    // version 4 以降のバックアップにのみ含まれる。
+    final locationsJson = data['locations'] as List<dynamic>?;
+    final hasLocations = locationsJson != null;
+    if (hasLocations) {
+      for (final l0 in locationsJson) {
+        await _db.insertLocation(
+          Location.fromMap(Map<String, dynamic>.from(l0 as Map)),
+        );
+        locationCount++;
+      }
+    }
 
     // 植物をインポート
     final plantsJson = data['plants'] as List<dynamic>? ?? [];
@@ -265,6 +286,11 @@ class ExportService {
       if (map['imagePath'] != null) {
         final rel = map['imagePath'] as String;
         map['imagePath'] = pathMap[rel] ?? map['imagePath'];
+      }
+      // 置き場所を含まない旧バックアップ（version <= 3）は、植物が持つ
+      // locationId の参照先が存在しないため、孤児参照を避けてクリアする。
+      if (!hasLocations) {
+        map['locationId'] = null;
       }
       await _db.insertPlant(Plant.fromMap(map));
       plantCount++;
@@ -309,6 +335,7 @@ class ExportService {
       logCount: logCount,
       noteCount: noteCount,
       sensorLogCount: sensorLogCount,
+      locationCount: locationCount,
     );
   }
 }
@@ -319,12 +346,14 @@ class ImportResult {
   final int logCount;
   final int noteCount;
   final int sensorLogCount;
+  final int locationCount;
 
   const ImportResult({
     required this.plantCount,
     required this.logCount,
     required this.noteCount,
     this.sensorLogCount = 0,
+    this.locationCount = 0,
   });
 
   @override
@@ -335,6 +364,7 @@ class ImportResult {
       'ノート: $noteCount件',
     ];
     if (sensorLogCount > 0) parts.add('センサーログ: $sensorLogCount件');
+    if (locationCount > 0) parts.add('置き場所: $locationCount件');
     return parts.join('、');
   }
 }
