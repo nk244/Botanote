@@ -4,6 +4,7 @@ import '../providers/settings_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
 import '../providers/sensor_log_provider.dart';
+import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
 import '../services/export_service.dart';
 import 'iot_settings_screen.dart';
@@ -580,6 +581,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await context.read<NoteProvider>().loadNotes();
       if (!context.mounted) return;
       await context.read<SensorLogProvider>().loadLogs();
+      if (!context.mounted) return;
+      await context.read<LocationProvider>().loadLocations();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('インポートしました（$result）')),
