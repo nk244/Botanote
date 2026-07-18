@@ -79,6 +79,9 @@ dependencies:
   # ホーム画面ウィジェット（Issue #174）
   home_widget: ^0.9.3
 
+  # アプリバージョンの実行時取得（Issue #221: バージョンの二重管理を防ぐ）
+  package_info_plus: ^8.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

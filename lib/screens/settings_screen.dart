@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/settings_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/note_provider.dart';
@@ -22,6 +23,37 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
+
+  /// pubspec.yaml のバージョンを実行時に取得した表示用文字列（例: '1.3.0 (6)'）。
+  /// 取得完了までは null で、その間はバージョン行を控えめに「取得中」と表示する。
+  String? _appVersion;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  /// アプリのバージョンを取得して表示用に整形する（Issue #221）。
+  ///
+  /// 以前は画面側にバージョンをハードコードしていたため pubspec.yaml と
+  /// 食い違い、配布APKで実際と異なるバージョンが表示されていた。
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _appVersion = '${info.version} (${info.buildNumber})';
+      });
+    } catch (e) {
+      // 取得に失敗しても設定画面自体は使えるため、表示のみフォールバックする
+      debugPrint('Error loading package info: $e');
+      if (!mounted) return;
+      setState(() {
+        _appVersion = '不明';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -269,10 +301,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // About
           _buildSectionHeader(context, 'アプリについて'),
-          const ListTile(
-            leading: Icon(Icons.info),
-            title: Text('バージョン'),
-            subtitle: Text('1.3.0'),
+          ListTile(
+            leading: const Icon(Icons.info),
+            title: const Text('バージョン'),
+            subtitle: Text(_appVersion ?? '取得中…'),
           ),
           ListTile(
             leading: const Icon(Icons.code),
@@ -282,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               showAboutDialog(
                 context: context,
                 applicationName: 'Botanote',
-                applicationVersion: '1.3.0',
+                applicationVersion: _appVersion ?? '',
                 applicationIcon: const Icon(Icons.eco, size: 48),
                 children: const [
                   Text('植物の水やりを管理するためのアプリです。'),
