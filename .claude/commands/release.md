@@ -133,14 +133,36 @@ rclone lsd gdrive:
 
 いずれか失敗した場合は初回セットアップを案内して停止する。
 
-### ステップ2: バージョン番号の確認
+### ステップ2: バージョン番号の更新（必須）
 
-`pubspec.yaml` の `version:` を確認し、ユーザーに現在のバージョンを伝える。
-必要であればビルド前にバージョンを更新する（例: `1.0.0+1` → `1.0.1+2`）。
+> ⚠️ **バージョンの更新は任意ではなく必須**。過去に同じ versionName `1.3.0` で3回リリースされ、
+> ファイル名の日付でしか世代を区別できない状態になった（Issue #221）。
+> 不具合報告を受けた際にどのビルドか特定できなくなるため、必ず実施する。
+
+**1. 既存リリースと重複していないか確認する**
+
+```bash
+grep '^version:' pubspec.yaml
+rclone ls "gdrive:Botanote/releases/"
+git tag --sort=-creatordate | head -5
+```
+
+**2. `pubspec.yaml` の `version:` を必ずインクリメントする**
 
 バージョン形式: `<versionName>+<versionCode>`
-- versionName: ユーザー向け表示（例: `1.2.0`）
-- versionCode: Google Play 用の整数、毎回インクリメント（例: `3`）
+- versionName: ユーザー向け表示。バグ修正のみなら patch（`1.3.0` → `1.3.1`）、機能追加なら minor（`1.3.0` → `1.4.0`）
+- versionCode: 整数。**毎回必ず +1**（例: `6` → `7`）
+
+**3. 更新をコミットする**
+
+```bash
+git add pubspec.yaml
+git commit -m "chore: バージョンを <新バージョン> に更新"
+git push
+```
+
+> バージョン表示は `package_info_plus` で pubspec から実行時に取得しているため、
+> 画面側のコード修正は不要（Issue #221 対応済み）。
 
 ### ステップ3: リリース APK をビルドする
 
@@ -178,7 +200,21 @@ rclone ls "gdrive:Botanote/releases/"
 
 アップロード成功を確認したら、Google Drive の Web UI でファイルの共有リンクを取得してユーザーに報告する。
 
-### ステップ6: 完了報告
+### ステップ6: git tag を打つ（必須）
+
+配布した APK とソースコードを対応付けられるようにする（Issue #221）。
+不具合報告を受けた際、「どのコミットのビルドか」を tag から特定できる。
+
+```bash
+VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+git tag -a "v${VERSION}" -m "Release v${VERSION}"
+git push origin "v${VERSION}"
+```
+
+> 同名の tag が既に存在する場合はバージョンの更新漏れ（ステップ2）なので、
+> リリースを中止してバージョンを上げ直す。
+
+### ステップ7: 完了報告
 
 以下の形式でユーザーに報告する:
 
@@ -189,6 +225,7 @@ rclone ls "gdrive:Botanote/releases/"
 - ファイル名: botanote_<version>_<date>.apk
 - ファイルサイズ: XX MB
 - アップロード先: Google Drive / Botanote / releases /
+- git tag: v<versionName>
 - ビルド日時: <日時>
 
 Google Drive の Web UI からファイルを選択して共有リンクを取得してください。
