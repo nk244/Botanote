@@ -6,6 +6,7 @@ import '../models/log_entry.dart';
 import '../models/note.dart';
 import '../models/sensor_log.dart';
 import '../models/location.dart';
+import '../utils/seasonal_interval_utils.dart';
 
 /// SQLite データベースへのアクセスを担うサービス。
 ///
@@ -435,6 +436,9 @@ class DatabaseService {
   /// バックグラウンドIsolateから直接呼び出すためのメソッド。
   /// 各植物の最終水やりログと [wateringIntervalDays] から次回予定日を計算し、
   /// [targetDate] 以前になっている植物のみを返す。
+  ///
+  /// 間隔には季節調整（休眠期の延長）を適用する。適用しないと通知だけが
+  /// 素の間隔で発火し、画面表示の「次回予定」より早く通知が届く（Issue #223）。
   Future<List<Plant>> getPlantsDueOn(DateTime targetDate) async {
     // 全植物と全水やりログを取得
     final plants = await getAllPlants();
@@ -464,11 +468,19 @@ class DatabaseService {
         baseDate = logs.first.date;
       }
 
+      // 起算日が休眠期なら間隔を延長する（画面表示側と同じ計算に揃える）
+      final intervalDays = applySeasonalAdjustment(
+        baseIntervalDays: plant.wateringIntervalDays!,
+        seasonalAdjustmentEnabled: plant.seasonalAdjustmentEnabled,
+        dormantMultiplier: plant.dormantSeasonIntervalMultiplier,
+        referenceDate: baseDate,
+      );
+
       final nextDate = DateTime(
         baseDate.year,
         baseDate.month,
         baseDate.day,
-      ).add(Duration(days: plant.wateringIntervalDays!));
+      ).add(Duration(days: intervalDays));
 
       // 次回予定日がtargetDay以前であれば対象
       if (!nextDate.isAfter(targetDay)) {

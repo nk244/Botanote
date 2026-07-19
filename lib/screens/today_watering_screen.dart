@@ -445,6 +445,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           ),
           IconButton(
             icon: const Icon(Icons.settings),
+            tooltip: '設定',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(

@@ -190,7 +190,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('削除の確認'),
-        content: Text('「${widget.plant.name}」を削除してもよろしいですか？\nすべてのログとノートも削除されます。'),
+        // ノートは削除せず紐付けを解除するだけなので、実挙動どおりに説明する（Issue #224）
+        content: Text('「${widget.plant.name}」を削除してもよろしいですか？\n'
+            'すべてのケアログも削除されます。\n'
+            'ノートは残りますが、この植物との紐付けは解除されます。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

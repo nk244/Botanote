@@ -584,17 +584,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!context.mounted) return;
       await context.read<LocationProvider>().loadLocations();
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('インポートしました（$result）')),
+      // 復元結果は見逃すと影響が大きいため、SnackBar ではなくダイアログで示す（Issue #225）
+      await _showImportResultDialog(
+        context,
+        title: 'インポートが完了しました',
+        message: '以下のデータを復元しました。\n\n$result',
       );
     } catch (e) {
+      debugPrint('インポートに失敗: $e');
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('インポートに失敗しました: $e')),
+      await _showImportResultDialog(
+        context,
+        title: 'インポートできませんでした',
+        message: 'バックアップファイルが壊れているか、このバージョンでは'
+            '対応していない形式の可能性があります。\n\n'
+            '既存のデータは変更されていません。'
+            '別のバックアップファイルでお試しください。',
       );
     } finally {
       if (context.mounted) setState(() => _isImporting = false);
     }
+  }
+
+  /// インポートの成否をダイアログで通知する（Issue #225）。
+  ///
+  /// バックアップ復元の結果は見逃すと影響が大きいため、
+  /// 自動で消える SnackBar ではなくユーザーが閉じるまで残す。
+  Future<void> _showImportResultDialog(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSectionHeader(BuildContext context, String title) {
