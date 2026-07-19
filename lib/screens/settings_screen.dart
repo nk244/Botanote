@@ -584,6 +584,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!context.mounted) return;
       await context.read<LocationProvider>().loadLocations();
       if (!context.mounted) return;
+      // ダイアログ表示中もスピナーが回り続けないよう、先に読み込み状態を解除する
+      setState(() => _isImporting = false);
       // 復元結果は見逃すと影響が大きいため、SnackBar ではなくダイアログで示す（Issue #225）
       await _showImportResultDialog(
         context,
@@ -593,6 +595,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       debugPrint('インポートに失敗: $e');
       if (!context.mounted) return;
+      setState(() => _isImporting = false);
       await _showImportResultDialog(
         context,
         title: 'インポートできませんでした',
