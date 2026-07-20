@@ -160,6 +160,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.settings),
+            tooltip: '設定',
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -245,6 +246,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: '植物を追加',
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(
