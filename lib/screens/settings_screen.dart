@@ -351,6 +351,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('観測地点を設定'),
         content: Form(
           key: formKey,
+          // 入力を修正した時点でエラー表示を再評価し、赤枠・エラーメッセージを残さない
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,6 +427,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('水やり間隔を一括設定'),
         content: Form(
           key: formKey,
+          // 入力を修正した時点でエラー表示を再評価し、赤枠・エラーメッセージを残さない
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
