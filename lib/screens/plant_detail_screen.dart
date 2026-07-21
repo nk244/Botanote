@@ -566,7 +566,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '「記録」ボタンから水やり・肝料・活力剤を記録できます',
+                    '「記録」ボタンから水やり・肥料・活力剤を記録できます',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
