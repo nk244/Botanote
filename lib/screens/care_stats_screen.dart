@@ -167,6 +167,19 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
     );
   }
 
+  /// 月別グラフの横軸ラベルを組み立てる（Issue #236）。
+  ///
+  /// 直近6ヶ月が年を跨ぐと「1月」だけでは何年か分からないため、
+  /// 先頭の月と、年の変わり目（1月）には西暦下2桁を添える。
+  String _monthLabel(DateTime month, DateTime? previous) {
+    final isYearBoundary = previous == null || month.year != previous.year;
+    if (isYearBoundary) {
+      final yy = (month.year % 100).toString().padLeft(2, '0');
+      return "'$yy/${month.month}月";
+    }
+    return '${month.month}月';
+  }
+
   Widget _buildMonthlyChart(BuildContext context) {
     final monthly = _monthlyCounts();
     final maxCount = monthly.map((e) => e.value).fold(0, (a, b) => a > b ? a : b);
@@ -176,7 +189,10 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
       height: chartHeight + 40,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
-        children: monthly.map((entry) {
+        children: monthly.asMap().entries.map((indexed) {
+          final i = indexed.key;
+          final entry = indexed.value;
+          final prevMonth = i > 0 ? monthly[i - 1].key : null;
           final barHeight =
               maxCount == 0 ? 0.0 : chartHeight * entry.value / maxCount;
           return Expanded(
@@ -198,7 +214,7 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${entry.key.month}月',
+                  _monthLabel(entry.key, prevMonth),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

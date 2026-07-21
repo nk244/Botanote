@@ -647,6 +647,17 @@ class _WateringIntervalDialogState extends State<_WateringIntervalDialog> {
     _days = widget.initialValue ?? 3;
   }
 
+  /// 水やり間隔の下限・上限（日）。上限は多肉・サボテン等の長い間隔にも対応（Issue #235）。
+  static const int _minDays = 1;
+  static const int _maxDays = 90;
+
+  /// 日数を範囲内に丸めて更新する。
+  void _setDays(int value) {
+    setState(() {
+      _days = value.clamp(_minDays, _maxDays);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -654,18 +665,38 @@ class _WateringIntervalDialogState extends State<_WateringIntervalDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$_days日ごと', style: Theme.of(context).textTheme.headlineSmall),
+          // ステッパーで厳密に日数を指定できるようにする（スライダーだけでは
+          // 狙った日数に合わせにくいため。Issue #235）。
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.remove_circle_outline),
+                tooltip: '1日減らす',
+                onPressed: _days > _minDays ? () => _setDays(_days - 1) : null,
+              ),
+              SizedBox(
+                width: 120,
+                child: Text(
+                  '$_days日ごと',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                tooltip: '1日増やす',
+                onPressed: _days < _maxDays ? () => _setDays(_days + 1) : null,
+              ),
+            ],
+          ),
           Slider(
             value: _days.toDouble(),
-            min: 1,
-            max: 30,
-            divisions: 29,
+            min: _minDays.toDouble(),
+            max: _maxDays.toDouble(),
+            divisions: _maxDays - _minDays,
             label: '$_days日',
-            onChanged: (value) {
-              setState(() {
-                _days = value.toInt();
-              });
-            },
+            onChanged: (value) => _setDays(value.toInt()),
           ),
         ],
       ),
