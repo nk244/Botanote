@@ -291,6 +291,8 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       ),
       body: Form(
         key: _formKey,
+        // 入力を修正した時点でエラー表示を再評価し、赤枠・エラーメッセージを残さない
+        autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
