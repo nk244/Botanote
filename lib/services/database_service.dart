@@ -35,7 +35,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -131,6 +131,14 @@ class DatabaseService {
           } catch (_) {
             // 既にカラムが存在する場合は無視
           }
+        }
+        if (oldVersion < 8) {
+          // sqflite は既定で PRAGMA foreign_keys=ON を設定しないため、logs テーブルの
+          // `ON DELETE CASCADE` が効かず、植物を削除してもそのログが孤児として
+          // 残り続けていた（DB肥大・カレンダーの幽霊ログ日付・バックアップ汚染）。
+          // 参照先の植物が存在しない孤児ログをここで一括削除する。
+          await db.execute(
+              'DELETE FROM logs WHERE plantId NOT IN (SELECT id FROM plants)');
         }
       },
     );
@@ -300,11 +308,13 @@ class DatabaseService {
   /// 指定IDの植物を削除する（関連ログは CASCADE で自動削除）。
   Future<void> deletePlant(String id) async {
     final db = await database;
-    await db.delete(
-      'plants',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    // logs テーブルには `ON DELETE CASCADE` が宣言されているが、sqflite は既定で
+    // PRAGMA foreign_keys=ON を設定しないためカスケードが発火しない。植物削除時に
+    // ログが孤児として残らないよう、同一トランザクションで明示的に削除する。
+    await db.transaction((txn) async {
+      await txn.delete('logs', where: 'plantId = ?', whereArgs: [id]);
+      await txn.delete('plants', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   // ── Log CRUD ─────────────────────────────────────────────────
