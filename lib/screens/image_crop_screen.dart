@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import '../utils/error_utils.dart';
 
 /// トリミング結果のファイルパスを保持するクラス。
 class CropResult {
@@ -47,7 +48,7 @@ class _ImageCropScreenState extends State<ImageCropScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
+            .showSnackBar(SnackBar(content: Text('保存に失敗しました: ${describeError(e)}')));
       }
     } finally {
       if (mounted) setState(() => _isCropping = false);

@@ -18,6 +18,7 @@ import 'add_edit_note_screen.dart';
 import 'iot_settings_screen.dart';
 import 'note_detail_screen.dart';
 import 'plant_growth_timeline_screen.dart';
+import '../utils/error_utils.dart';
 
 /// SliverPersistentHeaderDelegate: TabBarを固定表示するためのデリゲート
 class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
@@ -619,7 +620,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('記録に失敗しました: $e')),
+          SnackBar(content: Text('記録に失敗しました: ${describeError(e)}')),
         );
       }
     }
@@ -1038,7 +1039,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取得エラー: $e')),
+        SnackBar(content: Text('取得エラー: ${describeError(e)}')),
       );
     } finally {
       if (mounted) {

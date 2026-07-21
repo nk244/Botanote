@@ -6,6 +6,7 @@ import '../models/sensor_log.dart';
 import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
 import 'iot_settings_screen.dart';
+import '../utils/error_utils.dart';
 
 /// センサー環境ダッシュボード画面
 ///
@@ -50,7 +51,7 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取得に失敗しました: $e')),
+        SnackBar(content: Text('取得に失敗しました: ${describeError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isFetching = false);
