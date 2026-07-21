@@ -467,8 +467,13 @@ class PlantProvider with ChangeNotifier {
       // 現在のグループ内の残り回数を計算（N回ごとの次の区切りを求める）
       // 例: N=3, 水やり7回の場合 → 7%3=1 → 残り2回（次の区切りは9回目）
       final completedInCurrentGroup = wateringsAfter.length % n;
+      // completedInCurrentGroup == 0 は 2 パターンある:
+      //   ・水やり実績なし（起算後まだ0回）→ 次のN回目が期限（remaining = n）
+      //   ・水やりが N の倍数に到達済み（例: N=3 で3回）→ 施肥期限に到達済みで
+      //     期限は最後の水やり日（remaining = 0）。ここを n にすると施肥忘れが
+      //     Nサイクル先に飛び、超過状態が隠れてしまう。
       final remaining = completedInCurrentGroup == 0
-          ? n // ちょうど区切り済み → 次のN回目
+          ? (wateringsAfter.isEmpty ? n : 0)
           : n - completedInCurrentGroup;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
@@ -545,8 +550,13 @@ class PlantProvider with ChangeNotifier {
       // 現在のグループ内の残り回数を計算（N回ごとの次の区切りを求める）
       // 例: N=3, 水やり7回の場合 → 7%3=1 → 残り2回（次の区切りは9回目）
       final completedInCurrentGroup = wateringsAfter.length % n;
+      // completedInCurrentGroup == 0 は 2 パターンある:
+      //   ・水やり実績なし（起算後まだ0回）→ 次のN回目が期限（remaining = n）
+      //   ・水やりが N の倍数に到達済み（例: N=3 で3回）→ 期限に到達済みで
+      //     期限は最後の水やり日（remaining = 0）。ここを n にすると付与忘れが
+      //     Nサイクル先に飛び、超過状態が隠れてしまう。
       final remaining = completedInCurrentGroup == 0
-          ? n // ちょうど区切り済み → 次のN回目
+          ? (wateringsAfter.isEmpty ? n : 0)
           : n - completedInCurrentGroup;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
