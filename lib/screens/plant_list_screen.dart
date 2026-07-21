@@ -5,6 +5,7 @@ import '../providers/settings_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
 import '../models/plant.dart';
+import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
 import 'add_plant_screen.dart';
 import 'plant_detail_screen.dart';
@@ -326,10 +327,25 @@ class _PlantListScreenState extends State<PlantListScreen> {
       child: ListTile(
         leading: PlantImageWidget(plant: plant),
         title: Text(plant.name),
-        subtitle: plant.variety != null ? Text(plant.variety!) : null,
+        subtitle: _buildListSubtitle(plant),
         trailing: const Icon(Icons.drag_handle),
         onTap: () => _navigateToDetail(plant),
       ),
+    );
+  }
+
+  /// 一覧行の subtitle（品種名＋水やり状態）を組み立てる（Issue #233）。
+  ///
+  /// 品種名・水やり状態のどちらも無い場合は null を返す。
+  Widget? _buildListSubtitle(Plant plant) {
+    final rows = <Widget>[
+      if (plant.variety != null) Text(plant.variety!),
+      _WateringStatusText(plant: plant),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: rows,
     );
   }
 
@@ -414,9 +430,14 @@ class _PlantListTile extends StatelessWidget {
       child: ListTile(
         leading: PlantImageWidget(plant: plant),
         title: Text(plant.name),
-        subtitle: plant.variety != null
-            ? Text(plant.variety!)
-            : null,
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (plant.variety != null) Text(plant.variety!),
+            _WateringStatusText(plant: plant),
+          ],
+        ),
         onTap: () => _navigateToDetail(context, plant),
       ),
     );
@@ -493,6 +514,8 @@ class _PlantGridCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
+                    const SizedBox(height: 2),
+                    _WateringStatusText(plant: plant),
                   ],
                 ),
               ),
@@ -500,6 +523,46 @@ class _PlantGridCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 植物の次回水やり状態を表す小さなテキスト（Issue #233）。
+///
+/// 水やり間隔が未設定などで予定日を算出できない植物では何も表示しない。
+/// 予定超過（今日以前）の場合は error 色で強調する。
+class _WateringStatusText extends StatelessWidget {
+  final Plant plant;
+
+  const _WateringStatusText({required this.plant});
+
+  @override
+  Widget build(BuildContext context) {
+    // 次回水やり日は loadPlants() 完了後にキャッシュ済みのため read で十分。
+    final next = context.read<PlantProvider>().cachedNextWateringDate(plant.id);
+    if (next == null) return const SizedBox.shrink();
+
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    final nextDay = AppDateUtils.getDateOnly(next);
+    final isOverdue = !nextDay.isAfter(today);
+    final color = isOverdue
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.primary;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.water_drop, size: 13, color: color),
+        const SizedBox(width: 2),
+        Flexible(
+          child: Text(
+            AppDateUtils.formatDateDifference(next),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

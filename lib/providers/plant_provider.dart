@@ -44,6 +44,24 @@ class PlantProvider with ChangeNotifier {
 
   Set<DateTime> get logDates => _logDatesCache;
 
+  /// 指定した植物の次回水やり予定日をキャッシュから返す（同期・DBアクセスなし）。
+  ///
+  /// [loadPlants] 完了後に有効。間隔未設定などで算出できない場合は null。
+  /// 一覧画面などで各植物の水やり状態をまとめて表示する用途に使う（Issue #233）。
+  DateTime? cachedNextWateringDate(String plantId) => _nextWateringCache[plantId];
+
+  /// 未来を含む「いずれかの植物の次回水やり予定日」の集合を返す（時刻なし）。
+  ///
+  /// カレンダーで予定日にマーカーを出す用途に使う（Issue #234）。
+  Set<DateTime> get scheduledWateringDates {
+    final result = <DateTime>{};
+    for (final next in _nextWateringCache.values) {
+      if (next == null) continue;
+      result.add(DateTime(next.year, next.month, next.day));
+    }
+    return result;
+  }
+
   /// 植物一覧をストレージから再読み込み、キャッシュを更新する。
   Future<void> loadPlants() async {
     _isLoading = true;

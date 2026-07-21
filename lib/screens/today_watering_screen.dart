@@ -580,6 +580,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
         final logDates = plantProvider.logDates;
+        // 未来を含む水やり予定日（Issue #234）。過去ログのドットとは色を分けて表示する。
+        final scheduledDates = plantProvider.scheduledWateringDates;
+        final today = AppDateUtils.getDateOnly(DateTime.now());
 
         return Column(
           children: [
@@ -602,15 +605,32 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                   _focusedDay = focusedDay;
                 });
               },
-              eventLoader: (day) {
-                final d = DateTime(day.year, day.month, day.day);
-                return logDates.contains(d) ? [true] : [];
-              },
+              calendarBuilders: CalendarBuilders(
+                // 過去ログのある日（primary）と、未来の水やり予定日（secondary）で
+                // マーカーを塗り分ける。両方に該当する場合は実績（過去ログ）を優先。
+                markerBuilder: (context, day, events) {
+                  final d = AppDateUtils.getDateOnly(day);
+                  final hasLog = logDates.contains(d);
+                  // 予定日マーカーは「今日より後」だけに出す。今日以前は実績側で扱う。
+                  final isScheduled =
+                      d.isAfter(today) && scheduledDates.contains(d);
+                  if (!hasLog && !isScheduled) return null;
+                  final color = hasLog
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.tertiary;
+                  return Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      decoration:
+                          BoxDecoration(color: color, shape: BoxShape.circle),
+                    ),
+                  );
+                },
+              ),
               calendarStyle: CalendarStyle(
-                markerDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
                 selectedDecoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
@@ -625,6 +645,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 titleCentered: true,
               ),
               locale: 'ja_JP',
+            ),
+            // 凡例：実績（過去ログ）と予定（未来の水やり）の色を説明する
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _CalendarLegendDot(
+                      color: Theme.of(context).colorScheme.primary, label: '記録'),
+                  const SizedBox(width: 16),
+                  _CalendarLegendDot(
+                      color: Theme.of(context).colorScheme.tertiary, label: '予定'),
+                ],
+              ),
             ),
             const Divider(height: 1),
             Expanded(
@@ -1727,6 +1761,30 @@ class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> 
                 },
           child: const Text('記録する'),
         ),
+      ],
+    );
+  }
+}
+
+/// カレンダー凡例の1項目（色付きドット＋ラベル）。Issue #234。
+class _CalendarLegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _CalendarLegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }
