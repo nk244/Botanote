@@ -7,6 +7,7 @@ import '../providers/settings_provider.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
 import '../services/claude_share_service.dart';
+import '../utils/error_utils.dart';
 
 class AddEditNoteScreen extends StatefulWidget {
   final Note? note;
@@ -264,7 +265,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')));
     }
   }
 

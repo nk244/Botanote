@@ -6,6 +6,7 @@ import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/iot_service.dart';
 import '../services/sensor_auto_fetch_service.dart';
+import '../utils/error_utils.dart';
 
 /// IoT連携APIキー・デバイスマッピング・自動取得間隔の設定画面
 class IotSettingsScreen extends StatefulWidget {
@@ -77,20 +78,11 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存に失敗しました: $e')),
+        SnackBar(content: Text('保存に失敗しました: ${describeError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
-  }
-
-  /// 例外オブジェクトをユーザー向けの文言に変換する。
-  ///
-  /// `Exception: ...` の接頭辞を取り除き、メッセージ本体のみを返す。
-  String _describeError(Object e) {
-    final text = e.toString();
-    const prefix = 'Exception: ';
-    return text.startsWith(prefix) ? text.substring(prefix.length) : text;
   }
 
   Future<void> _testNatureRemo() async {
@@ -116,7 +108,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接続失敗: ${_describeError(e)}')),
+        SnackBar(content: Text('接続失敗: ${describeError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isTestingNatureRemo = false);
@@ -147,7 +139,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接続失敗: ${_describeError(e)}')),
+        SnackBar(content: Text('接続失敗: ${describeError(e)}')),
       );
     } finally {
       if (mounted) setState(() => _isTestingSwitchBot = false);
@@ -180,7 +172,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           final devices = await iot.fetchNatureRemoData(natureRemoToken);
           allDevices.addAll(devices);
         } catch (e) {
-          errors.add(_describeError(e));
+          errors.add(describeError(e));
         }
       }
       if (switchBotToken.isNotEmpty && switchBotSecret.isNotEmpty) {
@@ -189,7 +181,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
               await iot.fetchSwitchBotData(switchBotToken, switchBotSecret);
           allDevices.addAll(devices);
         } catch (e) {
-          errors.add(_describeError(e));
+          errors.add(describeError(e));
         }
       }
 

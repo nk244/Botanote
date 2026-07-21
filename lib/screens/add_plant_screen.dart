@@ -7,6 +7,7 @@ import '../providers/location_provider.dart';
 import '../models/plant.dart';
 import '../services/claude_share_service.dart';
 import '../widgets/plant_image_widget.dart';
+import '../utils/error_utils.dart';
 
 class AddPlantScreen extends StatefulWidget {
   final Plant? plant;
@@ -131,7 +132,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       setState(() => _imagePath = cropResult.filePath);
     } catch (e) {
       scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('画像の取得に失敗しました: $e')),
+        SnackBar(content: Text('画像の取得に失敗しました: ${describeError(e)}')),
       );
     }
   }
@@ -151,7 +152,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('再トリミングに失敗しました: $e')),
+          SnackBar(content: Text('再トリミングに失敗しました: ${describeError(e)}')),
         );
       }
     }
@@ -177,7 +178,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')));
     }
   }
 
@@ -249,7 +250,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('エラーが発生しました: $e')),
+          SnackBar(content: Text('エラーが発生しました: ${describeError(e)}')),
         );
       }
     } finally {

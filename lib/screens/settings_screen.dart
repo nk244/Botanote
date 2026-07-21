@@ -12,6 +12,7 @@ import 'iot_settings_screen.dart';
 import 'light_meter_screen.dart';
 import 'care_stats_screen.dart';
 import 'location_list_screen.dart';
+import '../utils/error_utils.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -481,7 +482,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新に失敗しました: $e')),
+        SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
       );
     }
   }
@@ -550,7 +551,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新に失敗しました: $e')),
+        SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
       );
     }
   }
@@ -571,7 +572,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('エクスポートに失敗しました: $e')),
+        SnackBar(content: Text('エクスポートに失敗しました: ${describeError(e)}')),
       );
     } finally {
       if (context.mounted) setState(() => _isExporting = false);

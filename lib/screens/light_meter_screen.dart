@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/light_meter_service.dart';
+import '../utils/error_utils.dart';
 
 /// カメラで撮影した写真から明るさの目安を測定する画面（Issue #181）。
 class LightMeterScreen extends StatefulWidget {
@@ -38,7 +39,7 @@ class _LightMeterScreenState extends State<LightMeterScreen> {
       }
       setState(() => _result = result);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('撮影に失敗しました: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('撮影に失敗しました: ${describeError(e)}')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
