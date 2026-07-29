@@ -97,6 +97,22 @@ class NotificationService {
     return true;
   }
 
+  /// 水やりリマインダーの本文を組み立てる。
+  ///
+  /// 対象植物が分かっている場合は名前を載せる。多い場合は先頭の名前＋残り件数に
+  /// 丸めて、通知本文が長くなりすぎないようにする（Issue #245）。
+  /// [duePlantNames] が空の場合は従来どおりの汎用文言を返す。
+  static String buildWateringReminderBody(List<String> duePlantNames) {
+    if (duePlantNames.isEmpty) return '水やりが必要な植物を確認しましょう';
+    if (duePlantNames.length == 1) {
+      return '${duePlantNames.first}に水やりをしましょう';
+    }
+    if (duePlantNames.length == 2) {
+      return '${duePlantNames[0]}と${duePlantNames[1]}に水やりをしましょう';
+    }
+    return '${duePlantNames.first} ほか${duePlantNames.length - 1}件に水やりをしましょう';
+  }
+
   /// 翌日の水やり予定をDBから直接確認し、予定がある場合のみ通知を1件登録する。
   ///
   /// バックグラウンドIsolateとアプリ起動時の両方から呼び出す共通ロジック。
@@ -132,10 +148,13 @@ class NotificationService {
     // 翌日の水やり予定をDBから確認
     final tomorrow = DateTime.now().add(const Duration(days: 1));
     bool hasDuePlants = false;
+    // 通知本文に載せる対象植物名（DBエラー時は空のまま汎用文言にフォールバック）
+    var duePlantNames = <String>[];
     try {
       final db = DatabaseService();
       final duePlants = await db.getPlantsDueOn(tomorrow);
       hasDuePlants = duePlants.isNotEmpty;
+      duePlantNames = duePlants.map((p) => p.name).toList();
       debugPrint(
           'NotificationService: plants due tomorrow = ${duePlants.length}');
     } catch (e) {
@@ -222,7 +241,7 @@ class NotificationService {
     await plugin.zonedSchedule(
       id: _dailyWateringNotificationId,
       title: '💧 水やりの時間です',
-      body: '水やりが必要な植物を確認しましょう',
+      body: buildWateringReminderBody(duePlantNames),
       scheduledDate: scheduledDate,
       notificationDetails: details,
       androidScheduleMode: scheduleMode,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:uuid/uuid.dart';
 import '../models/plant.dart';
@@ -5,6 +7,7 @@ import '../models/log_entry.dart';
 import '../models/app_settings.dart';
 import '../services/database_service.dart';
 import '../services/home_widget_service.dart';
+import '../services/notification_service.dart';
 import '../utils/seasonal_interval_utils.dart';
 
 /// 植物データとログを管理する Provider。
@@ -62,6 +65,36 @@ class PlantProvider with ChangeNotifier {
     return result;
   }
 
+  /// 通知の再スケジュールをまとめるためのタイマー（Issue #246）。
+  ///
+  /// 一括記録などで loadPlants() が連続して走ると通知登録も連続してしまうため、
+  /// 短時間の変更をまとめて最後の1回だけ実行する。
+  Timer? _reminderDebounce;
+
+  /// 通知再スケジュールのまとめ待ち時間。
+  static const _reminderDebounceDuration = Duration(milliseconds: 500);
+
+  /// 水やりリマインダーを張り直す（デバウンス付き）。
+  ///
+  /// 通知設定は [NotificationService] 側が SharedPreferences から読むため、
+  /// 通知が無効なら内部でスキップされる。
+  void _scheduleWateringReminder() {
+    _reminderDebounce?.cancel();
+    _reminderDebounce = Timer(_reminderDebounceDuration, () async {
+      try {
+        await NotificationService.scheduleSmartWateringReminder();
+      } catch (e) {
+        debugPrint('水やりリマインダーの再スケジュールに失敗: $e');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _reminderDebounce?.cancel();
+    super.dispose();
+  }
+
   /// 植物一覧をストレージから再読み込み、キャッシュを更新する。
   Future<void> loadPlants() async {
     _isLoading = true;
@@ -83,6 +116,11 @@ class PlantProvider with ChangeNotifier {
       // ホーム画面ウィジェットに今日の水やり予定を反映する（Issue #174）
       await HomeWidgetService.updateTodayWateringWidget(
           getPlantsNeedingWateringToday());
+
+      // 植物やログの変更で次回予定日が変わるため、通知を張り直す（Issue #246）。
+      // 植物の追加・編集・削除もログの記録・取り消しも loadPlants() を通るため、
+      // ここに集約することで呼び忘れを防ぐ。
+      _scheduleWateringReminder();
     } catch (e) {
       debugPrint('Error loading plants: $e');
     } finally {
