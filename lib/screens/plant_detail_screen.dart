@@ -16,6 +16,7 @@ import '../utils/date_utils.dart';
 import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
 import 'iot_settings_screen.dart';
+import 'light_meter_screen.dart';
 import 'note_detail_screen.dart';
 import 'plant_growth_timeline_screen.dart';
 import '../utils/error_utils.dart';
@@ -63,7 +64,10 @@ class PlantDetailScreen extends StatefulWidget {
 
 class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
+
+  /// 表示中の植物。編集画面から戻った際に最新の内容へ差し替える（Issue #243）。
+  late Plant _plant;
+
   List<LogEntry> _wateringLogs = [];
   List<LogEntry> _fertilizerLogs = [];
   List<LogEntry> _vitalizerLogs = [];
@@ -83,6 +87,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   @override
   void initState() {
     super.initState();
+    _plant = widget.plant;
     _tabController = TabController(
       length: 4,
       vsync: this,
@@ -105,7 +110,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
   Future<void> _loadSensorLogs() async {
     final logs = await context.read<SensorLogProvider>()
-        .getLogsForPlant(widget.plant.id);
+        .getLogsForPlant(_plant.id);
     if (mounted) {
       setState(() {
         _sensorLogs = logs;
@@ -116,11 +121,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   Future<void> _loadLogs() async {
     final provider = context.read<PlantProvider>();
     final logs = await Future.wait([
-      provider.getAllLogsForPlantAndType(widget.plant.id, LogType.watering),
-      provider.getAllLogsForPlantAndType(widget.plant.id, LogType.fertilizer),
-      provider.getAllLogsForPlantAndType(widget.plant.id, LogType.vitalizer),
+      provider.getAllLogsForPlantAndType(_plant.id, LogType.watering),
+      provider.getAllLogsForPlantAndType(_plant.id, LogType.fertilizer),
+      provider.getAllLogsForPlantAndType(_plant.id, LogType.vitalizer),
       for (final type in _otherCareTypes)
-        provider.getAllLogsForPlantAndType(widget.plant.id, type),
+        provider.getAllLogsForPlantAndType(_plant.id, type),
     ]);
 
     if (mounted) {
@@ -135,7 +140,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
   Future<void> _loadNextWateringDate() async {
     final nextDate = await context.read<PlantProvider>()
-        .calculateNextWateringDate(widget.plant.id);
+        .calculateNextWateringDate(_plant.id);
     if (mounted) {
       setState(() {
         _nextWateringDate = nextDate;
@@ -192,7 +197,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       builder: (context) => AlertDialog(
         title: const Text('削除の確認'),
         // ノートは削除せず紐付けを解除するだけなので、実挙動どおりに説明する（Issue #224）
-        content: Text('「${widget.plant.name}」を削除してもよろしいですか？\n'
+        content: Text('「${_plant.name}」を削除してもよろしいですか？\n'
             'すべてのケアログも削除されます。\n'
             'ノートは残りますが、この植物との紐付けは解除されます。'),
         actions: [
@@ -212,7 +217,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
 
     if (confirm == true) {
-      await plantProvider.deletePlant(widget.plant.id);
+      await plantProvider.deletePlant(_plant.id);
       if (!context.mounted) return;
       navigator.pop();
     }
@@ -236,12 +241,12 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         headerSliverBuilder: (context, innerBoxIsScrolled) => [
           // 植物画像を背景に持つ SliverAppBar
           SliverAppBar(
-            expandedHeight: widget.plant.imagePath != null ? 260.0 : 160.0,
+            expandedHeight: _plant.imagePath != null ? 260.0 : 160.0,
             pinned: true,
             floating: false,
             forceElevated: innerBoxIsScrolled,
             actions: [
-              if (widget.plant.imagePath != null)
+              if (_plant.imagePath != null)
                 _buildImageOverlayAction(
                     Icons.auto_awesome_motion, _navigateToGrowthTimeline)
               else
@@ -250,14 +255,14 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   tooltip: '成長タイムライン',
                   onPressed: _navigateToGrowthTimeline,
                 ),
-              if (widget.plant.imagePath != null)
+              if (_plant.imagePath != null)
                 _buildImageOverlayAction(Icons.edit, _navigateToEdit)
               else
                 IconButton(
                   icon: const Icon(Icons.edit),
                   onPressed: _navigateToEdit,
                 ),
-              if (widget.plant.imagePath != null)
+              if (_plant.imagePath != null)
                 _buildImageOverlayAction(Icons.delete, _deletePlant)
               else
                 IconButton(
@@ -281,7 +286,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   child: Text(
-                    widget.plant.name,
+                    _plant.name,
                     style: const TextStyle(color: Colors.white),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -314,7 +319,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
   /// SliverAppBar の背景ウィジェットを構築する
   Widget _buildHeaderBackground(BuildContext context) {
-    if (widget.plant.imagePath != null) {
+    if (_plant.imagePath != null) {
       // 画像あり: 植物画像を全画面背景として表示
       return Stack(
         fit: StackFit.expand,
@@ -360,7 +365,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
   /// 植物画像を表示する
   Widget _buildFullImage() {
-    final path = widget.plant.imagePath!;
+    final path = _plant.imagePath!;
 
     // Base64 data URL の場合はメモリから表示する（レガシーデータ互換）
     if (path.startsWith('data:')) {
@@ -402,22 +407,32 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   Future<void> _navigateToEdit() async {
-    await Navigator.of(context).push(
+    final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (context) => AddPlantScreen(plant: widget.plant),
+        builder: (context) => AddPlantScreen(plant: _plant),
       ),
     );
-    // 編集後は前の画面にデータ変更があったことを通知する
-    if (mounted) {
-      Navigator.of(context).pop(true);
-    }
+    if (!mounted) return;
+    // キャンセル時は何もしない（この画面に留まる）
+    if (saved != true) return;
+
+    // 保存された場合は最新の内容へ差し替えて再読み込みする。
+    // 一覧側は PlantProvider を watch しているため自動的に更新される。
+    final plantProvider = context.read<PlantProvider>();
+    final updated = plantProvider.plants
+        .where((p) => p.id == _plant.id)
+        .firstOrNull;
+    setState(() {
+      if (updated != null) _plant = updated;
+    });
+    await _loadData();
   }
 
   /// 成長タイムライン画面へ遷移する（Issue #179）。
   void _navigateToGrowthTimeline() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => PlantGrowthTimelineScreen(plant: widget.plant),
+        builder: (context) => PlantGrowthTimelineScreen(plant: _plant),
       ),
     );
   }
@@ -427,12 +442,16 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       padding: const EdgeInsets.all(16),
       children: [
         _buildBasicInfoCard(),
-        const SizedBox(height: 16),
-        _buildWateringInfoCard(),
-        if (widget.plant.fertilizerIntervalDays != null ||
-            widget.plant.fertilizerEveryNWaterings != null ||
-            widget.plant.vitalizerIntervalDays != null ||
-            widget.plant.vitalizerEveryNWaterings != null) ...[
+        // 水やり間隔も次回予定も無い場合は見出しだけの空カードになるため表示しない
+        if (_plant.wateringIntervalDays != null ||
+            _nextWateringDate != null) ...[
+          const SizedBox(height: 16),
+          _buildWateringInfoCard(),
+        ],
+        if (_plant.fertilizerIntervalDays != null ||
+            _plant.fertilizerEveryNWaterings != null ||
+            _plant.vitalizerIntervalDays != null ||
+            _plant.vitalizerEveryNWaterings != null) ...[
           const SizedBox(height: 16),
           _buildFertilizerInfoCard(),
         ],
@@ -444,27 +463,27 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     return _InfoCard(
       title: '基本情報',
       children: [
-        _InfoRow(label: '植物名', value: widget.plant.name),
-        if (widget.plant.variety != null)
-          _InfoRow(label: '品種名', value: widget.plant.variety!),
-        if (widget.plant.purchaseDate != null)
+        _InfoRow(label: '植物名', value: _plant.name),
+        if (_plant.variety != null)
+          _InfoRow(label: '品種名', value: _plant.variety!),
+        if (_plant.purchaseDate != null)
           _InfoRow(
             label: '購入日',
-            value: DateFormat('yyyy年MM月dd日').format(widget.plant.purchaseDate!),
+            value: DateFormat('yyyy年MM月dd日').format(_plant.purchaseDate!),
           ),
-        if (widget.plant.purchaseLocation != null)
-          _InfoRow(label: '購入先', value: widget.plant.purchaseLocation!),
+        if (_plant.purchaseLocation != null)
+          _InfoRow(label: '購入先', value: _plant.purchaseLocation!),
         // 登録・編集画面で設定した置き場所を確認できるようにする（Issue #215）
         if (_locationName != null)
           _InfoRow(label: '置き場所', value: _locationName!),
-        if (widget.plant.isOutdoor) const _InfoRow(label: '設置', value: '屋外'),
+        if (_plant.isOutdoor) const _InfoRow(label: '設置', value: '屋外'),
       ],
     );
   }
 
   /// 植物に紐づく置き場所の名前を返す。未設定・削除済みの場合は null。
   String? get _locationName {
-    final locationId = widget.plant.locationId;
+    final locationId = _plant.locationId;
     if (locationId == null) return null;
     final locations = context.watch<LocationProvider>().locations;
     for (final location in locations) {
@@ -477,10 +496,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     return _InfoCard(
       title: '水やり情報',
       children: [
-        if (widget.plant.wateringIntervalDays != null)
+        if (_plant.wateringIntervalDays != null)
           _InfoRow(
             label: '間隔',
-            value: '${widget.plant.wateringIntervalDays}日ごと',
+            value: '${_plant.wateringIntervalDays}日ごと',
           ),
         if (_nextWateringDate != null)
           _InfoRow(
@@ -504,21 +523,21 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     return _InfoCard(
       title: '施肥情報',
       children: [
-        if (widget.plant.fertilizerIntervalDays != null ||
-            widget.plant.fertilizerEveryNWaterings != null)
+        if (_plant.fertilizerIntervalDays != null ||
+            _plant.fertilizerEveryNWaterings != null)
           _InfoRow(
             label: '肥料間隔',
             value: intervalText(
-                widget.plant.fertilizerIntervalDays,
-                widget.plant.fertilizerEveryNWaterings),
+                _plant.fertilizerIntervalDays,
+                _plant.fertilizerEveryNWaterings),
           ),
-        if (widget.plant.vitalizerIntervalDays != null ||
-            widget.plant.vitalizerEveryNWaterings != null)
+        if (_plant.vitalizerIntervalDays != null ||
+            _plant.vitalizerEveryNWaterings != null)
           _InfoRow(
             label: '活力剤間隔',
             value: intervalText(
-                widget.plant.vitalizerIntervalDays,
-                widget.plant.vitalizerEveryNWaterings),
+                _plant.vitalizerIntervalDays,
+                _plant.vitalizerEveryNWaterings),
           ),
       ],
     );
@@ -611,7 +630,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
     try {
       await plantProvider.recordCareLog(
-        widget.plant.id,
+        _plant.id,
         result.type,
         result.date,
         result.note,
@@ -630,7 +649,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     return Consumer<NoteProvider>(
       builder: (context, noteProvider, _) {
         final plantNotes = noteProvider.notes
-            .where((n) => n.plantIds.contains(widget.plant.id))
+            .where((n) => n.plantIds.contains(_plant.id))
             .toList()
           ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
@@ -654,7 +673,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => AddEditNoteScreen(
-                        initialPlantId: widget.plant.id,
+                        initialPlantId: _plant.id,
                       ),
                     ),
                   ).then((_) {
@@ -714,6 +733,20 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           children: [
             _buildLatestSensorCard(),
             const SizedBox(height: 16),
+            // 光量メーターは設定画面の奥にあり見つけにくいため、
+            // 「この植物の置き場所の明るさを測る」文脈からも開けるようにする（Issue #248）
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const LightMeterScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.wb_sunny_outlined),
+                label: const Text('置き場所の明るさを測る'),
+              ),
+            ),
             if (!hasAnyIot)
               _buildIotSetupPrompt()
             else ...[
@@ -976,7 +1009,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     try {
       // マッピング設定でこの植物に紐づくデバイスを検索
       final mappedDevice = settings.sensorDeviceMappings.where(
-        (m) => m.source == source && m.plantIds.contains(widget.plant.id),
+        (m) => m.source == source && m.plantIds.contains(_plant.id),
       ).firstOrNull;
 
       final List<SensorData> devices;
@@ -1027,7 +1060,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       await sensorProvider.saveSensorLog( // ignore: use_build_context_synchronously
         data: selected,
         source: source,
-        plantId: widget.plant.id,
+        plantId: _plant.id,
       );
 
       if (!mounted) return;

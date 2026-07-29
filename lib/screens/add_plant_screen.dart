@@ -245,7 +245,8 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       }
 
       if (mounted) {
-        Navigator.of(context).pop();
+        // 保存されたことを呼び出し元に伝える（キャンセル時は null が返る）
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
