@@ -25,7 +25,8 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   List<String> _selectedPlantIds = [];
   List<String> _selectedImagePaths = [];
 
-  /// 新規作成時のみ使用する作成日（デフォルト=今日）
+  /// 新規作成時のみ使用する作成日時（デフォルト=現在時刻）。
+  /// 一覧では時刻も表示するため、日付だけに丸めず時刻を保持する（Issue #242）。
   late DateTime _selectedDate;
 
   @override
@@ -36,10 +37,8 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
     _selectedPlantIds = widget.note?.plantIds ??
         (widget.initialPlantId != null ? [widget.initialPlantId!] : []);
     _selectedImagePaths = widget.note?.imagePaths ?? [];
-    // 新規作成時：今日を初期値、編集時：既存のcreatedAt
-    final now = DateTime.now();
-    _selectedDate = widget.note?.createdAt ??
-        DateTime(now.year, now.month, now.day);
+    // 新規作成時：現在日時を初期値、編集時：既存のcreatedAt
+    _selectedDate = widget.note?.createdAt ?? DateTime.now();
   }
 
   @override
@@ -67,7 +66,20 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
             locale: locale,
             helpText: '作成日を選択',
           );
-          if (picked != null) setState(() => _selectedDate = picked);
+          // 日付ピッカーは 00:00 の DateTime を返すため、元の時刻を引き継ぐ
+          if (picked != null) {
+            setState(() {
+              _selectedDate = DateTime(
+                picked.year,
+                picked.month,
+                picked.day,
+                _selectedDate.hour,
+                _selectedDate.minute,
+                _selectedDate.second,
+                _selectedDate.millisecond,
+              );
+            });
+          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
