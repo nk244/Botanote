@@ -4,10 +4,12 @@ import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
+import '../models/location.dart';
 import '../models/plant.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
 import 'add_plant_screen.dart';
+import 'location_list_screen.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
 
@@ -38,45 +40,87 @@ class _PlantListScreenState extends State<PlantListScreen> {
     });
   }
 
-  /// 置き場所フィルタチップ行を構築する。置き場所が1件も登録されていない場合は何も表示しない。
-  Widget _buildLocationFilterChips() {
-    return Consumer<LocationProvider>(
-      builder: (context, locationProvider, _) {
-        if (locationProvider.locations.isEmpty) return const SizedBox.shrink();
+  /// 置き場所での絞り込みをボトムシートで選ばせる（Issue #251）。
+  Future<void> _showLocationFilterSheet(
+      BuildContext context, List<Location> locations) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        Widget option(String label, String? value) {
+          return ListTile(
+            title: Text(label),
+            trailing: _selectedLocationId == value
+                ? Icon(Icons.check,
+                    color: Theme.of(sheetContext).colorScheme.primary)
+                : null,
+            onTap: () {
+              setState(() => _selectedLocationId = value);
+              Navigator.of(sheetContext).pop();
+            },
+          );
+        }
 
-        return SizedBox(
-          height: 44,
+        return SafeArea(
           child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            shrinkWrap: true,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: FilterChip(
-                  label: const Text('すべて'),
-                  selected: _selectedLocationId == null,
-                  onSelected: (_) => setState(() => _selectedLocationId = null),
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('置き場所で絞り込む',
+                    style: Theme.of(sheetContext).textTheme.titleMedium),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: FilterChip(
-                  label: const Text('未設定'),
-                  selected: _selectedLocationId == _unassignedLocationFilter,
-                  onSelected: (_) =>
-                      setState(() => _selectedLocationId = _unassignedLocationFilter),
-                ),
+              option('すべて', null),
+              option('未設定', _unassignedLocationFilter),
+              for (final location in locations)
+                option(location.name, location.id),
+              const Divider(),
+              // 置き場所の管理画面は設定の奥にあるため、ここからも開けるようにする
+              // （Issue #248）
+              ListTile(
+                leading: const Icon(Icons.home_outlined),
+                title: const Text('置き場所を編集'),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LocationListScreen(),
+                    ),
+                  );
+                },
               ),
-              for (final location in locationProvider.locations)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FilterChip(
-                    label: Text(location.name),
-                    selected: _selectedLocationId == location.id,
-                    onSelected: (_) =>
-                        setState(() => _selectedLocationId = location.id),
-                  ),
-                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// 絞り込み中であることを示すバー。解除操作もここから行える。
+  Widget _buildActiveLocationFilterBar() {
+    if (_selectedLocationId == null) return const SizedBox.shrink();
+
+    return Consumer<LocationProvider>(
+      builder: (context, locationProvider, _) {
+        final name = _selectedLocationId == _unassignedLocationFilter
+            ? '未設定'
+            : locationProvider.locations
+                    .where((l) => l.id == _selectedLocationId)
+                    .firstOrNull
+                    ?.name ??
+                '不明な置き場所';
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          child: Row(
+            children: [
+              const Icon(Icons.filter_alt, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text('置き場所: $name')),
+              TextButton(
+                onPressed: () => setState(() => _selectedLocationId = null),
+                child: const Text('解除'),
+              ),
             ],
           ),
         );
@@ -97,8 +141,30 @@ class _PlantListScreenState extends State<PlantListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Botanote'),
+        title: const Text('植物一覧'),
         actions: [
+          // 置き場所での絞り込み（Issue #251）。
+          // 一覧本体にチップ行を出すと、置き場所の登録有無でリストの位置が
+          // ずれてしまうため、ノートタブと同じく AppBar に寄せる。
+          Consumer2<LocationProvider, SettingsProvider>(
+            builder: (context, locationProvider, settings, _) {
+              // カスタム並び替え（ドラッグ）と併用すると並び順が破損するため無効化する
+              final isCustomSort =
+                  settings.plantSortOrder == PlantSortOrder.custom;
+              final hasLocations = locationProvider.locations.isNotEmpty;
+              return IconButton(
+                icon: Badge(
+                  isLabelVisible: _selectedLocationId != null,
+                  child: const Icon(Icons.filter_list),
+                ),
+                tooltip: '置き場所で絞り込む',
+                onPressed: (!hasLocations || isCustomSort)
+                    ? null
+                    : () => _showLocationFilterSheet(
+                        context, locationProvider.locations),
+              );
+            },
+          ),
           // グリッド/リスト表示切り替えボタン
           IconButton(
             icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
@@ -180,7 +246,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
             children: [
               // 置き場所フィルタはカスタム並び替え（ドラッグ）と併用すると並び順が
               // 破損するため、カスタムソート中は表示・適用しない
-              if (!isCustomSort) _buildLocationFilterChips(),
+              if (!isCustomSort) _buildActiveLocationFilterBar(),
               Expanded(
                 child: Consumer<PlantProvider>(
                   builder: (context, plantProvider, _) {
