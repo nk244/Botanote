@@ -441,6 +441,29 @@ class DatabaseService {
     await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 
+  /// 種別 [type] のログについて、植物IDごとの最終記録日を1クエリで取得する。
+  ///
+  /// 「最終水やり日」だけが必要な処理でログを全件読み込むとログ件数に比例して
+  /// 遅くなるため、SQL の集約関数で1行に畳んでから返す（Issue #252）。
+  Future<Map<String, DateTime>> _getLastLogDateByPlant(LogType type) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT plantId, MAX(date) AS lastDate FROM logs '
+      'WHERE type = ? GROUP BY plantId',
+      [type.name],
+    );
+
+    final result = <String, DateTime>{};
+    for (final row in rows) {
+      final plantId = row['plantId'] as String?;
+      final lastDate = row['lastDate'] as String?;
+      if (plantId == null || lastDate == null) continue;
+      final parsed = DateTime.tryParse(lastDate);
+      if (parsed != null) result[plantId] = parsed;
+    }
+    return result;
+  }
+
   /// 指定日に水やり予定がある植物リストを取得する。
   ///
   /// バックグラウンドIsolateから直接呼び出すためのメソッド。
@@ -450,7 +473,6 @@ class DatabaseService {
   /// 間隔には季節調整（休眠期の延長）を適用する。適用しないと通知だけが
   /// 素の間隔で発火し、画面表示の「次回予定」より早く通知が届く（Issue #223）。
   Future<List<Plant>> getPlantsDueOn(DateTime targetDate) async {
-    // 全植物と全水やりログを取得
     final plants = await getAllPlants();
     if (plants.isEmpty) return [];
 
@@ -460,23 +482,20 @@ class DatabaseService {
       targetDate.day,
     );
 
+    // 必要なのは植物ごとの「最終水やり日」1件だけなので、
+    // ログを全件取得せず SQL 側で集約する（Issue #252）。
+    final lastWateredByPlantId = await _getLastLogDateByPlant(LogType.watering);
+
     final duePlants = <Plant>[];
 
     for (final plant in plants) {
       // 水やり間隔が未設定の植物はスキップ
       if (plant.wateringIntervalDays == null) continue;
 
-      final logs = await getLogsByPlantAndType(plant.id, LogType.watering);
-
-      final DateTime baseDate;
-      if (logs.isEmpty) {
-        // ログなし: 購入日または登録日を起算日とする
-        baseDate = plant.purchaseDate ?? plant.createdAt;
-      } else {
-        // 最終水やりログ日を起算日とする
-        logs.sort((a, b) => b.date.compareTo(a.date));
-        baseDate = logs.first.date;
-      }
+      // 最終水やりログ日を起算日とする。ログが無ければ購入日または登録日。
+      final baseDate = lastWateredByPlantId[plant.id] ??
+          plant.purchaseDate ??
+          plant.createdAt;
 
       // 起算日が休眠期なら間隔を延長する（画面表示側と同じ計算に揃える）
       final intervalDays = applySeasonalAdjustment(

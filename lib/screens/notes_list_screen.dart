@@ -225,7 +225,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
                   Text('まだノートがありません',
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  Text('右下の ＋ ボタンから記録しましょう',
+                  Text('右下のボタンから記録しましょう',
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
@@ -295,6 +295,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: 'ノートを作成',
         onPressed: () {
           final noteProvider = context.read<NoteProvider>();
           Navigator.of(context)

@@ -11,6 +11,7 @@ import '../models/daily_log_status.dart';
 import '../models/app_settings.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
+import 'care_stats_screen.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
 import 'add_plant_screen.dart';
@@ -50,6 +51,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   // 日付ページデータのキャッシュ。キーは '${date.ms}_$_refreshKey'。
   // _refreshKey が変わるとキーが変わり、古いエントリは自然に参照されなくなる。
   final Map<String, _DatePageData> _pageDataCache = {};
+
+  // FutureBuilder に渡す Future のキャッシュ。キーは _pageDataCache と同一。
+  // build のたびに `_loadDatePageData()` を直接呼ぶと毎回別の Future になり、
+  // FutureBuilder が再描画のたびに待ち直してスピナーがちらつくため、
+  // キーが同じ間は同じ Future を使い回す（Issue #252）。
+  final Map<String, Future<_DatePageData>> _pageFutureCache = {};
 
   // キャッシュエントリ数の上限（±2日×5日分＋余裕分）
   static const int _cacheMaxSize = 20;
@@ -179,20 +186,28 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
   /// キャッシュサイズが上限を超えた場合に古いエントリを削除する。
   void _evictOldCacheEntries() {
-    if (_pageDataCache.length <= _cacheMaxSize) return;
     // 現在の_refreshKeyに属さないエントリを優先的に削除する
     final currentKeySuffix = '_$_refreshKey';
+    // データが未確定でも Future だけ残ることがあるため、先に古い世代を掃除する
+    _pageFutureCache.removeWhere((k, _) => !k.endsWith(currentKeySuffix));
+    if (_pageDataCache.length <= _cacheMaxSize) return;
     final oldKeys = _pageDataCache.keys
         .where((k) => !k.endsWith(currentKeySuffix))
         .toList();
     for (final key in oldKeys) {
-      _pageDataCache.remove(key);
+      _removeCacheEntry(key);
       if (_pageDataCache.length <= _cacheMaxSize) return;
     }
     // それでも超えている場合は先頭から削除
     while (_pageDataCache.length > _cacheMaxSize) {
-      _pageDataCache.remove(_pageDataCache.keys.first);
+      _removeCacheEntry(_pageDataCache.keys.first);
     }
+  }
+
+  /// データと Future のキャッシュを同じキーで揃えて破棄する。
+  void _removeCacheEntry(String key) {
+    _pageDataCache.remove(key);
+    _pageFutureCache.remove(key);
   }
 
   /// 指定日に表示すべき植物リストを決定する
@@ -443,6 +458,19 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             tooltip: _isCalendarView ? 'リスト表示' : 'カレンダー表示',
             onPressed: () => setState(() => _isCalendarView = !_isCalendarView),
           ),
+          // ケア統計は「設定」ではなく振り返り機能なので、ログ画面からも開けるようにする
+          // （Issue #248）。設定画面からの導線も従来どおり残している。
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'ケア統計',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const CareStatsScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: '設定',
@@ -457,10 +485,32 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         ],
       ),
       body: _isCalendarView ? _buildCalendarView() : _buildPagedLogList(),
-      floatingActionButton: _selectedPlantIds.isNotEmpty
-          ? Column(
+    );
+  }
+
+  /// 一括記録バー。選択中の植物がある場合に画面下部へ表示する。
+  ///
+  /// FloatingActionButton として浮かせると、下部の「その他の植物に水やり」ボタンや
+  /// カレンダー表示時の植物カードに重なってしまうため、レイアウト上の領域を
+  /// 占める通常のウィジェットとして配置する（Issue #240）。
+  Widget _buildBulkActionBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: SafeArea(
+        top: false,
+        child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Log type selection chips
                 Container(
@@ -565,14 +615,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 ),
                 const SizedBox(height: 8),
                 // Action button
-                FloatingActionButton.extended(
+                FilledButton.icon(
                   onPressed: _bulkLog,
                   icon: const Icon(Icons.check),
                   label: Text('${_selectedPlantIds.length}件登録'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    minimumSize: const Size(double.infinity, 48),
+                  ),
                 ),
               ],
-            )
-          : null,
+        ),
+      ),
     );
   }
 
@@ -697,9 +751,22 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   }
 
   /// 指定日のログデータをDBから取得する。キャッシュヒット時は即座に返す。
+  /// 指定日のページデータ取得 Future を返す。
+  ///
+  /// build のたびに `_loadDatePageData()` を直接呼ぶと毎回別の Future になり、
+  /// FutureBuilder が再描画のたびに待ち直してしまうため、
+  /// キーが同じ間は同じ Future を返す（Issue #252）。
+  Future<_DatePageData> _datePageFuture(DateTime date) {
+    final cacheKey = _pageCacheKey(date);
+    return _pageFutureCache[cacheKey] ??= _loadDatePageData(date);
+  }
+
+  /// 日付ページのキャッシュキー。
+  String _pageCacheKey(DateTime date) =>
+      '${AppDateUtils.getDateOnly(date).millisecondsSinceEpoch}_$_refreshKey';
+
   Future<_DatePageData> _loadDatePageData(DateTime date) async {
-    final cacheKey =
-        '${AppDateUtils.getDateOnly(date).millisecondsSinceEpoch}_$_refreshKey';
+    final cacheKey = _pageCacheKey(date);
     // キャッシュヒット時はDBアクセスをスキップ
     if (_pageDataCache.containsKey(cacheKey)) {
       return _pageDataCache[cacheKey]!;
@@ -787,9 +854,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
         return FutureBuilder<_DatePageData>(
-          // _refreshKeyが変化するたびにFutureが再実行される
-          key: ValueKey('${date.millisecondsSinceEpoch}_$_refreshKey'),
-          future: _loadDatePageData(date),
+          // _refreshKey が変化するとキャッシュキーが変わり Future が再実行される
+          future: _datePageFuture(date),
           builder: (context, snapshot) {
             // 未初期化中（初回loadPlants完了前）またはデータ待ちはスピナー表示
             // isInitialized を先に評価することで、_loadDatePageData が未初期化中に
@@ -1026,7 +1092,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             },
           ),
         ),
-        _buildAddUnscheduledWateringButton(hasPlants: true),
+        // 選択中は一括記録バーへ切り替える（両方を同時に出すと重なるため）
+        if (_selectedPlantIds.isNotEmpty)
+          _buildBulkActionBar()
+        else
+          _buildAddUnscheduledWateringButton(hasPlants: true),
       ],
     );
   }
@@ -1372,15 +1442,21 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     bool isDateDue(DateTime? d) =>
         d != null && !AppDateUtils.getDateOnly(d).isAfter(today);
 
+    // 次回予定は「今日」からの相対表示のため、過去日を見ているときに出すと
+    // その日の状態と誤解される（4/22 を見ているのに「2日後」と出る）。
+    // 過去日ではその日の記録だけを示す（Issue #249）。
+    final isPastDate = selectedDay.isBefore(today);
+
     // 水やり・肥料・活力剤の予定を横並び1行でまとめて表示する (#125)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (plant.variety != null) Text(plant.variety!),
         // 予定がある項目を Wrap で横並びにまとめる
-        if (nextWateringDate != null ||
-            nextFertilizerDate != null ||
-            nextVitalizerDate != null)
+        if (!isPastDate &&
+            (nextWateringDate != null ||
+                nextFertilizerDate != null ||
+                nextVitalizerDate != null))
           Wrap(
             spacing: 8,
             runSpacing: 2,

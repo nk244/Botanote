@@ -11,8 +11,10 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/note.dart';
 import '../models/sensor_log.dart';
+import '../models/app_settings.dart';
 import '../models/location.dart';
 import 'database_service.dart';
+import 'settings_service.dart';
 
 /// データのエクスポート / インポートを担うサービス
 ///
@@ -29,6 +31,29 @@ class ExportService {
   ExportService._internal();
 
   final _db = DatabaseService();
+  final _settingsService = SettingsService();
+
+  /// 書き出すバックアップのバージョン。
+  /// 5 でアプリ設定（`settings`）を含めるようになった（Issue #239）。
+  static const int _backupVersion = 5;
+
+  /// バックアップに含めないアプリ設定のキー。
+  ///
+  /// バックアップ ZIP は OS の共有シートで外部サービスへ送られるため、
+  /// IoT サービスの認証情報は書き出さない（復元時も端末側の値を保持する）。
+  static const Set<String> _secretSettingKeys = {
+    'natureRemoToken',
+    'switchBotToken',
+    'switchBotSecret',
+  };
+
+  /// エクスポート対象のアプリ設定を返す（認証情報は除外する）。
+  Future<Map<String, dynamic>> _exportableSettingsMap() async {
+    final settings = await _settingsService.loadSettings();
+    final map = settings.toMap();
+    map.removeWhere((key, _) => _secretSettingKeys.contains(key));
+    return map;
+  }
 
   // ── エクスポート ──────────────────────────────────────────
 
@@ -145,15 +170,20 @@ class ExportService {
     // 全消失し、植物側の locationId が孤児参照になる（Issue #206）。
     final locations = await _db.getAllLocations();
 
+    // ── アプリ設定を収集（Issue #239） ──
+    // 通知時刻やテーマを含めないと機種変更で設定だけが初期値に戻る。
+    final settingsMap = await _exportableSettingsMap();
+
     // ── data.json を生成 ──
     final data = {
-      'version': 4,
+      'version': _backupVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'plants': plantMaps,
       'logs': allLogs.map((l) => l.toMap()).toList(),
       'notes': noteMaps,
       'sensorLogs': sensorLogs.map((s) => s.toMap()).toList(),
       'locations': locations.map((l) => l.toMap()).toList(),
+      'settings': settingsMap,
     };
     final jsonBytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
     archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
@@ -226,7 +256,7 @@ class ExportService {
         jsonDecode(jsonStr) as Map<String, dynamic>;
 
     final version = data['version'] as int? ?? 1;
-    if (version > 4) {
+    if (version > _backupVersion) {
       throw FormatException('未対応のバックアップバージョン: $version');
     }
 
@@ -253,7 +283,7 @@ class ExportService {
     final Map<String, dynamic> data =
         jsonDecode(jsonStr) as Map<String, dynamic>;
     final version = data['version'] as int? ?? 1;
-    if (version > 4) {
+    if (version > _backupVersion) {
       throw FormatException('未対応のバックアップバージョン: $version');
     }
     return _importData(data, const {});
@@ -268,6 +298,7 @@ class ExportService {
     int logCount = 0;
     int noteCount = 0;
     int locationCount = 0;
+    bool settingsRestored = false;
 
     // 復元対象の行をテーブルごとに組み立て、最後に1トランザクションで投入する
     // （1件ずつ insert すると数千件で数十秒〜数分かかるため。Issue #214）。
@@ -343,6 +374,23 @@ class ExportService {
       sensorLogCount++;
     }
 
+    // アプリ設定を復元する（version 5 以降のバックアップにのみ含まれる。Issue #239）。
+    // 認証情報はバックアップに含めないため、端末側の現在値をそのまま引き継ぐ。
+    final settingsJson = data['settings'];
+    if (settingsJson is Map) {
+      try {
+        final current = await _settingsService.loadSettings();
+        final merged = Map<String, dynamic>.from(current.toMap())
+          ..addAll(Map<String, dynamic>.from(settingsJson)
+            ..removeWhere((key, _) => _secretSettingKeys.contains(key)));
+        await _settingsService.saveSettings(AppSettings.fromMap(merged));
+        settingsRestored = true;
+      } catch (e) {
+        // 設定の復元に失敗してもデータ本体の復元は続行する
+        settingsRestored = false;
+      }
+    }
+
     // 参照先（locations → plants）を先に投入する順序で一括コミットする
     await _db.insertRowsInBatch({
       'locations': locationRows,
@@ -358,6 +406,7 @@ class ExportService {
       noteCount: noteCount,
       sensorLogCount: sensorLogCount,
       locationCount: locationCount,
+      settingsRestored: settingsRestored,
     );
   }
 }
@@ -370,12 +419,17 @@ class ImportResult {
   final int sensorLogCount;
   final int locationCount;
 
+  /// アプリ設定（通知時刻・テーマ等）を復元したかどうか。
+  /// version 4 以前のバックアップには設定が含まれないため false になる。
+  final bool settingsRestored;
+
   const ImportResult({
     required this.plantCount,
     required this.logCount,
     required this.noteCount,
     this.sensorLogCount = 0,
     this.locationCount = 0,
+    this.settingsRestored = false,
   });
 
   @override
@@ -387,6 +441,7 @@ class ImportResult {
     ];
     if (sensorLogCount > 0) parts.add('センサーログ: $sensorLogCount件');
     if (locationCount > 0) parts.add('置き場所: $locationCount件');
+    if (settingsRestored) parts.add('アプリ設定');
     return parts.join('、');
   }
 }

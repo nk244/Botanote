@@ -621,6 +621,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!context.mounted) return;
       await context.read<LocationProvider>().loadLocations();
       if (!context.mounted) return;
+      // 復元したアプリ設定（通知時刻・テーマ等）を画面と通知に反映する（Issue #239）
+      if (result.settingsRestored) {
+        await context.read<SettingsProvider>().loadSettings();
+        if (!context.mounted) return;
+      }
       // ダイアログ表示中もスピナーが回り続けないよう、先に読み込み状態を解除する
       setState(() => _isImporting = false);
       // 復元結果は見逃すと影響が大きいため、SnackBar ではなくダイアログで示す（Issue #225）
