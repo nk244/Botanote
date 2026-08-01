@@ -6,6 +6,12 @@ class Plant {
   /// 植物名（必須）
   final String name;
 
+  /// 植物名の読み仮名（任意）。五十音順の並び替えに使う（Issue #257）。
+  ///
+  /// 漢字の和名は読みを機械的に導けないため、正しく五十音順に並べたい
+  /// ユーザーが任意で入力する。未入力の場合は [name] を代わりに使う。
+  final String? nameReading;
+
   /// 品種名
   final String? variety;
 
@@ -55,6 +61,7 @@ class Plant {
   const Plant({
     required this.id,
     required this.name,
+    this.nameReading,
     this.variety,
     this.purchaseDate,
     this.purchaseLocation,
@@ -76,6 +83,7 @@ class Plant {
     return {
       'id': id,
       'name': name,
+      'nameReading': nameReading,
       'variety': variety,
       'purchaseDate': purchaseDate?.toIso8601String(),
       'purchaseLocation': purchaseLocation,
@@ -99,6 +107,7 @@ class Plant {
     return Plant(
       id: map['id'] as String,
       name: map['name'] as String,
+      nameReading: map['nameReading'] as String?,
       variety: map['variety'] as String?,
       purchaseDate: map['purchaseDate'] != null
           ? DateTime.parse(map['purchaseDate'] as String)
@@ -124,6 +133,7 @@ class Plant {
   /// nullable フィールドを明示的に null にしたい場合は sentinel パターンを使用する。
   Plant copyWith({
     String? name,
+    Object? nameReading = _sentinel,
     Object? variety = _sentinel,
     Object? purchaseDate = _sentinel,
     Object? purchaseLocation = _sentinel,
@@ -142,6 +152,8 @@ class Plant {
     return Plant(
       id: id,
       name: name ?? this.name,
+      nameReading:
+          nameReading == _sentinel ? this.nameReading : nameReading as String?,
       variety: variety == _sentinel ? this.variety : variety as String?,
       purchaseDate: purchaseDate == _sentinel ? this.purchaseDate : purchaseDate as DateTime?,
       purchaseLocation: purchaseLocation == _sentinel ? this.purchaseLocation : purchaseLocation as String?,
