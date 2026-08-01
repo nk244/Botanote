@@ -13,6 +13,7 @@ import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/iot_service.dart';
 import '../utils/date_utils.dart';
+import '../utils/seasonal_interval_utils.dart';
 import 'add_plant_screen.dart';
 import 'add_edit_note_screen.dart';
 import 'iot_settings_screen.dart';
@@ -492,14 +493,49 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     return null;
   }
 
+  /// 次回予定日の起算日（最終水やり日。ログが無ければ購入日または登録日）。
+  ///
+  /// 季節調整が効いているかの判定に使うため、`PlantProvider` の
+  /// `calcNextWateringDateFromLogs` と同じ基準で求める。
+  DateTime get _wateringBaseDate {
+    if (_wateringLogs.isEmpty) {
+      return _plant.purchaseDate ?? _plant.createdAt;
+    }
+    final sorted = [..._wateringLogs]..sort((a, b) => b.date.compareTo(a.date));
+    return sorted.first.date;
+  }
+
+  /// 季節調整を反映した実効の水やり間隔（日数）。
+  int? get _effectiveWateringIntervalDays {
+    final base = _plant.wateringIntervalDays;
+    if (base == null) return null;
+    return applySeasonalAdjustment(
+      baseIntervalDays: base,
+      seasonalAdjustmentEnabled: _plant.seasonalAdjustmentEnabled,
+      dormantMultiplier: _plant.dormantSeasonIntervalMultiplier,
+      referenceDate: _wateringBaseDate,
+    );
+  }
+
   Widget _buildWateringInfoCard() {
+    final base = _plant.wateringIntervalDays;
+    final effective = _effectiveWateringIntervalDays;
+    // 休眠期は間隔が延長されるため、素の間隔だけを出すと
+    // 「14日ごと」なのに次回が28日後、という矛盾に見える（Issue #255）
+    final isExtended = base != null && effective != null && effective != base;
+
     return _InfoCard(
       title: '水やり情報',
       children: [
-        if (_plant.wateringIntervalDays != null)
+        if (base != null)
           _InfoRow(
             label: '間隔',
-            value: '${_plant.wateringIntervalDays}日ごと',
+            value: isExtended ? '$effective日ごと' : '$base日ごと',
+          ),
+        if (isExtended)
+          _InfoRow(
+            label: '季節調整',
+            value: '休眠期のため $base日 → $effective日',
           ),
         if (_nextWateringDate != null)
           _InfoRow(
