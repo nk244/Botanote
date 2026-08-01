@@ -6,6 +6,7 @@ import '../providers/plant_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/plant.dart';
 import '../services/claude_share_service.dart';
+import '../widgets/claude_share_hint_dialog.dart';
 import '../widgets/plant_image_widget.dart';
 import '../utils/error_utils.dart';
 
@@ -21,6 +22,7 @@ class AddPlantScreen extends StatefulWidget {
 class _AddPlantScreenState extends State<AddPlantScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _nameReadingController = TextEditingController();
   final _varietyController = TextEditingController();
   final _purchaseLocationController = TextEditingController();
   
@@ -45,6 +47,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     super.initState();
     if (widget.plant != null) {
       _nameController.text = widget.plant!.name;
+      _nameReadingController.text = widget.plant!.nameReading ?? '';
       _varietyController.text = widget.plant!.variety ?? '';
       _purchaseLocationController.text = widget.plant!.purchaseLocation ?? '';
       _purchaseDate = widget.plant!.purchaseDate;
@@ -65,6 +68,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nameReadingController.dispose();
     _varietyController.dispose();
     _purchaseLocationController.dispose();
     super.dispose();
@@ -167,6 +171,10 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   Future<void> _shareImageForIdentification() async {
     if (_imagePath == null) return;
 
+    // 共有シートが開くことを初回だけ説明する（Issue #261）
+    if (!await confirmClaudeShare(context)) return;
+    if (!mounted) return;
+
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ClaudeShareService.shareForIdentification(_imagePath!);
@@ -198,8 +206,11 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
         // Add new plant
         await plantProvider.addPlant(
           name: _nameController.text.trim(),
-          variety: _varietyController.text.trim().isEmpty 
-              ? null 
+          nameReading: _nameReadingController.text.trim().isEmpty
+              ? null
+              : _nameReadingController.text.trim(),
+          variety: _varietyController.text.trim().isEmpty
+              ? null
               : _varietyController.text.trim(),
           purchaseDate: _purchaseDate,
           purchaseLocation: _purchaseLocationController.text.trim().isEmpty
@@ -222,6 +233,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
         // sentinel パターンを用いて copyWith を呼び出す。
         final updatedPlant = widget.plant!.copyWith(
           name: _nameController.text.trim(),
+          nameReading: _nameReadingController.text.trim().isEmpty
+              ? null
+              : _nameReadingController.text.trim(),
           variety: _varietyController.text.trim().isEmpty
               ? null  // sentinel により null として保存される
               : _varietyController.text.trim(),
@@ -346,7 +360,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                 child: TextButton.icon(
                   onPressed: _shareImageForIdentification,
                   icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                  label: const Text('Claudeで植物名を推定'),
+                  label: const Text('Claudeに送って推定'),
                 ),
               ),
             const SizedBox(height: 24),
@@ -367,7 +381,19 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               },
             ),
             const SizedBox(height: 16),
-            
+
+            // 読み仮名（五十音順の並び替え用、Issue #257）
+            TextFormField(
+              controller: _nameReadingController,
+              decoration: const InputDecoration(
+                labelText: '読み仮名（任意）',
+                helperText: '入力すると「名前（あ→ん）」で五十音順に並びます',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.sort_by_alpha),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Variety
             TextFormField(
               controller: _varietyController,
@@ -742,10 +768,53 @@ class _LogIntervalDialog extends StatefulWidget {
 }
 
 class _LogIntervalDialogState extends State<_LogIntervalDialog> {
+  static const int _minDays = 1;
+  static const int _maxDays = 60;
+  static const int _minEveryN = 1;
+  static const int _maxEveryN = 10;
+
   // 0 = 日数指定, 1 = 水やりN回に1回
   late int _modeIndex;
   late int _days;
   late int _everyN;
+
+  /// −/+ ボタン付きのステッパーを構築する（Issue #260）。
+  ///
+  /// スライダーだけでは狙った値に合わせにくいため、水やり間隔ダイアログ
+  /// （Issue #235 で対応済み）と同じ操作方法に揃える。
+  Widget _buildStepper({
+    required String label,
+    required int value,
+    required int min,
+    required int max,
+    required String decrementTooltip,
+    required String incrementTooltip,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.remove_circle_outline),
+          tooltip: decrementTooltip,
+          onPressed: value > min ? () => onChanged(value - 1) : null,
+        ),
+        SizedBox(
+          width: 150,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add_circle_outline),
+          tooltip: incrementTooltip,
+          onPressed: value < max ? () => onChanged(value + 1) : null,
+        ),
+      ],
+    );
+  }
 
   @override
   void initState() {
@@ -789,24 +858,39 @@ class _LogIntervalDialogState extends State<_LogIntervalDialog> {
             ),
           const SizedBox(height: 16),
           if (_modeIndex == 0) ...[
-            Text('$_days日ごと',
-                style: Theme.of(context).textTheme.headlineSmall),
+            // 水やり間隔ダイアログと操作を揃える（Issue #260）
+            _buildStepper(
+              label: '$_days日ごと',
+              value: _days,
+              min: _minDays,
+              max: _maxDays,
+              decrementTooltip: '1日減らす',
+              incrementTooltip: '1日増やす',
+              onChanged: (v) => setState(() => _days = v),
+            ),
             Slider(
               value: _days.toDouble(),
-              min: 1,
-              max: 60,
-              divisions: 59,
+              min: _minDays.toDouble(),
+              max: _maxDays.toDouble(),
+              divisions: _maxDays - _minDays,
               label: '$_days日',
               onChanged: (v) => setState(() => _days = v.toInt()),
             ),
           ] else ...[
-            Text('水やり$_everyN回に1回',
-                style: Theme.of(context).textTheme.headlineSmall),
+            _buildStepper(
+              label: '水やり$_everyN回に1回',
+              value: _everyN,
+              min: _minEveryN,
+              max: _maxEveryN,
+              decrementTooltip: '1回減らす',
+              incrementTooltip: '1回増やす',
+              onChanged: (v) => setState(() => _everyN = v),
+            ),
             Slider(
               value: _everyN.toDouble(),
-              min: 1,
-              max: 10,
-              divisions: 9,
+              min: _minEveryN.toDouble(),
+              max: _maxEveryN.toDouble(),
+              divisions: _maxEveryN - _minEveryN,
               label: '$_everyN回に1回',
               onChanged: (v) => setState(() => _everyN = v.toInt()),
             ),
