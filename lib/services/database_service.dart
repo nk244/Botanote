@@ -35,7 +35,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 8,
+      version: 9,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -140,6 +140,15 @@ class DatabaseService {
           await db.execute(
               'DELETE FROM logs WHERE plantId NOT IN (SELECT id FROM plants)');
         }
+        if (oldVersion < 9) {
+          // 名前順の並び替えを五十音順にするための読み仮名（Issue #257）。
+          // 任意入力のため NOT NULL にはしない。
+          try {
+            await db.execute('ALTER TABLE plants ADD COLUMN nameReading TEXT');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+        }
       },
     );
   }
@@ -149,6 +158,7 @@ class DatabaseService {
       CREATE TABLE plants(
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        nameReading TEXT,
         variety TEXT,
         purchaseDate TEXT,
         purchaseLocation TEXT,

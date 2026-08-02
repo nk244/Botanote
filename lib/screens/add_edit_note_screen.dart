@@ -7,6 +7,7 @@ import '../providers/settings_provider.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
 import '../services/claude_share_service.dart';
+import '../widgets/claude_share_hint_dialog.dart';
 import '../utils/error_utils.dart';
 
 class AddEditNoteScreen extends StatefulWidget {
@@ -236,7 +237,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
                   TextButton.icon(
                     onPressed: _shareFirstImageForDiagnosis,
                     icon: const Icon(Icons.health_and_safety_outlined, size: 18),
-                    label: const Text('Claudeで診断'),
+                    label: const Text('Claudeに送って診断'),
                   ),
                 TextButton.icon(
                   onPressed: _showImageSourceOptions,
@@ -265,6 +266,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   /// 応答はClaudeアプリ上で確認し、内容欄に手動で貼り付ける。
   Future<void> _shareFirstImageForDiagnosis() async {
     if (_selectedImagePaths.isEmpty) return;
+
+    // 共有シートが開くことを初回だけ説明する（Issue #261）
+    if (!await confirmClaudeShare(context)) return;
+    if (!mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
     try {

@@ -177,6 +177,7 @@ class LocationListScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: '置き場所を追加',
         onPressed: () => _showEditDialog(context),
         child: const Icon(Icons.add),
       ),

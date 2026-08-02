@@ -153,9 +153,11 @@ class _PlantListScreenState extends State<PlantListScreen> {
                   settings.plantSortOrder == PlantSortOrder.custom;
               final hasLocations = locationProvider.locations.isNotEmpty;
               return IconButton(
+                // 並び順の Icons.sort と形が似て見分けづらいため、
+                // 「置き場所」だと分かる家アイコンにする（Issue #259）
                 icon: Badge(
                   isLabelVisible: _selectedLocationId != null,
-                  child: const Icon(Icons.filter_list),
+                  child: const Icon(Icons.home_outlined),
                 ),
                 tooltip: '置き場所で絞り込む',
                 onPressed: (!hasLocations || isCustomSort)
@@ -326,9 +328,12 @@ class _PlantListScreenState extends State<PlantListScreen> {
     );
   }
 
+  /// 「植物を追加」FAB に最後の項目が隠れないよう確保する下部余白（Issue #262）。
+  static const double _fabBottomInset = 80;
+
   Widget _buildListView(List<Plant> plants) {
     return ListView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, _fabBottomInset),
       itemCount: plants.length,
       itemBuilder: (context, index) {
         return _PlantListTile(plant: plants[index]);
@@ -339,7 +344,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
   /// グリッド（カード）表示ビューを構築する
   Widget _buildGridView(List<Plant> plants) {
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, _fabBottomInset),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 12,
@@ -359,7 +364,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
     SettingsProvider settings,
   ) {
     return ReorderableListView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, _fabBottomInset),
       itemCount: plants.length,
       onReorder: (oldIndex, newIndex) {
         _onReorder(context, plants, oldIndex, newIndex, settings);
@@ -502,6 +507,9 @@ class _PlantListTile extends StatelessWidget {
           children: [
             if (plant.variety != null) Text(plant.variety!),
             _WateringStatusText(plant: plant),
+            // 鉢数と置き場所が増えると一覧では所在が分からなくなるため、
+            // 置き場所を設定している植物にはバッジを出す（Issue #258）
+            _LocationBadge(locationId: plant.locationId),
           ],
         ),
         onTap: () => _navigateToDetail(context, plant),
@@ -597,6 +605,47 @@ class _PlantGridCard extends StatelessWidget {
 ///
 /// 水やり間隔が未設定などで予定日を算出できない植物では何も表示しない。
 /// 予定超過（今日以前）の場合は error 色で強調する。
+/// 植物カードに置き場所を表示するバッジ（Issue #258）。
+///
+/// 置き場所が未設定、または参照先が削除済みの場合は何も表示しない。
+class _LocationBadge extends StatelessWidget {
+  final String? locationId;
+
+  const _LocationBadge({required this.locationId});
+
+  @override
+  Widget build(BuildContext context) {
+    final id = locationId;
+    if (id == null) return const SizedBox.shrink();
+
+    final locations = context.watch<LocationProvider>().locations;
+    final name = locations.where((l) => l.id == id).firstOrNull?.name;
+    if (name == null) return const SizedBox.shrink();
+
+    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6);
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.home_outlined, size: 13, color: color),
+          const SizedBox(width: 2),
+          Flexible(
+            child: Text(
+              name,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WateringStatusText extends StatelessWidget {
   final Plant plant;
 

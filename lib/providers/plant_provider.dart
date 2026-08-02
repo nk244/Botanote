@@ -8,6 +8,7 @@ import '../models/app_settings.dart';
 import '../services/database_service.dart';
 import '../services/home_widget_service.dart';
 import '../services/notification_service.dart';
+import '../utils/japanese_sort_utils.dart';
 import '../utils/seasonal_interval_utils.dart';
 
 /// 植物データとログを管理する Provider。
@@ -149,11 +150,15 @@ class PlantProvider with ChangeNotifier {
     final plantsCopy = List<Plant>.from(_plants);
     
     switch (sortOrder) {
+      // 単純な compareTo だとコードポイント順になり和名が読み順に並ばないため、
+      // 読み仮名とかな正規化を考慮して比較する（Issue #257）
       case PlantSortOrder.nameAsc:
-        plantsCopy.sort((a, b) => a.name.compareTo(b.name));
+        plantsCopy.sort((a, b) =>
+            compareJapanese(a.name, a.nameReading, b.name, b.nameReading));
         break;
       case PlantSortOrder.nameDesc:
-        plantsCopy.sort((a, b) => b.name.compareTo(a.name));
+        plantsCopy.sort((a, b) =>
+            compareJapanese(b.name, b.nameReading, a.name, a.nameReading));
         break;
       case PlantSortOrder.purchaseDateDesc:
         plantsCopy.sort((a, b) {
@@ -214,6 +219,7 @@ class PlantProvider with ChangeNotifier {
 
   Future<void> addPlant({
     required String name,
+    String? nameReading,
     String? variety,
     DateTime? purchaseDate,
     String? purchaseLocation,
@@ -232,6 +238,7 @@ class PlantProvider with ChangeNotifier {
     final plant = Plant(
       id: const Uuid().v4(),
       name: name,
+      nameReading: nameReading,
       variety: variety,
       purchaseDate: purchaseDate,
       purchaseLocation: purchaseLocation,
