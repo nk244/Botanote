@@ -20,10 +20,21 @@ class SettingsProvider with ChangeNotifier {
   PlantSortOrder get plantSortOrder => _settings.plantSortOrder;
   List<String> get customSortOrder => _settings.customSortOrder;
 
+  /// 初回起動時のオンボーディングを完了済みか（Issue #277）。
+  bool get onboardingCompleted => _settings.onboardingCompleted;
+
+  /// 設定の初回読み込みが完了したか。
+  ///
+  /// 読み込み前に「オンボーディング未完了」と判定してしまうと、既存ユーザーに
+  /// 一瞬オンボーディングが表示されてしまうため、完了を待ってから判定する。
+  bool get isLoaded => _isLoaded;
+  bool _isLoaded = false;
+
   /// 保存済み設定を読み込む。
   /// 通知が有効な場合はアプリ起動時に再スケジュールする。
   Future<void> loadSettings() async {
     _settings = await _settingsService.loadSettings();
+    _isLoaded = true;
     notifyListeners();
     // アプリ起動時に通知設定が有効ならスマートスケジュールを実行する
     // （OSが再起動するとスケジュール済み通知が消えるため）
@@ -43,6 +54,13 @@ class SettingsProvider with ChangeNotifier {
         minute: _settings.notificationMinute,
       );
     }
+  }
+
+  /// オンボーディングの完了状態を保存する（Issue #277）。
+  Future<void> setOnboardingCompleted(bool completed) async {
+    _settings = _settings.copyWith(onboardingCompleted: completed);
+    await _settingsService.saveSettings(_settings);
+    notifyListeners();
   }
 
   /// 表示モードを変更する。

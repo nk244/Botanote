@@ -127,6 +127,9 @@ class AppSettings {
   /// 天気予報取得地点の経度
   final double? weatherLongitude;
 
+  /// 初回起動時のオンボーディングを完了したか（Issue #277）
+  final bool onboardingCompleted;
+
   AppSettings({
     this.viewMode = ViewMode.card,
     this.theme = AppTheme.green,
@@ -146,6 +149,7 @@ class AppSettings {
     this.weatherAlertsEnabled = false,
     this.weatherLatitude,
     this.weatherLongitude,
+    this.onboardingCompleted = false,
   }) : logTypeColors = logTypeColors ?? LogTypeColors();
 
   Map<String, dynamic> toMap() {
@@ -169,6 +173,7 @@ class AppSettings {
       'weatherAlertsEnabled': weatherAlertsEnabled,
       'weatherLatitude': weatherLatitude,
       'weatherLongitude': weatherLongitude,
+      'onboardingCompleted': onboardingCompleted,
     };
   }
 
@@ -215,6 +220,7 @@ class AppSettings {
       weatherAlertsEnabled: map['weatherAlertsEnabled'] as bool? ?? false,
       weatherLatitude: (map['weatherLatitude'] as num?)?.toDouble(),
       weatherLongitude: (map['weatherLongitude'] as num?)?.toDouble(),
+      onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
     );
   }
 
@@ -237,6 +243,7 @@ class AppSettings {
     bool? weatherAlertsEnabled,
     Object? weatherLatitude = _sentinel,
     Object? weatherLongitude = _sentinel,
+    bool? onboardingCompleted,
   }) {
     return AppSettings(
       viewMode: viewMode ?? this.viewMode,
@@ -264,6 +271,7 @@ class AppSettings {
       weatherLongitude: weatherLongitude == _sentinel
           ? this.weatherLongitude
           : weatherLongitude as double?,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
     );
   }
 }

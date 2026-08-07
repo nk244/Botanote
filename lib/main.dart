@@ -9,6 +9,7 @@ import 'providers/note_provider.dart';
 import 'providers/sensor_log_provider.dart';
 import 'providers/location_provider.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'theme/app_themes.dart';
 import 'models/app_settings.dart';
 import 'services/notification_service.dart';
@@ -124,7 +125,15 @@ class MyApp extends StatelessWidget {
             theme: AppThemes.getLightTheme(settingsProvider.theme),
             darkTheme: AppThemes.getDarkTheme(settingsProvider.theme),
             themeMode: mode,
-            home: const HomeScreen(),
+            // 初回起動時はオンボーディングを挟む（Issue #277）。
+            // 設定の読み込み完了前に判定すると既存ユーザーにも一瞬表示されて
+            // しまうため、読み込みが終わるまではローディングを出す。
+            home: !settingsProvider.isLoaded
+                ? const Scaffold(
+                    body: Center(child: CircularProgressIndicator()))
+                : settingsProvider.onboardingCompleted
+                    ? const HomeScreen()
+                    : const OnboardingScreen(),
             debugShowCheckedModeBanner: false,
           );
         },

@@ -1221,29 +1221,60 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   }
 
   Widget _buildEmptyState(bool isToday) {
+    // 植物が1件も無いうちは「予定がありません」より先に登録を促す（Issue #277）
+    final hasNoPlants = context.read<PlantProvider>().plants.isEmpty;
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.eco_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            isToday ? '今日は水やりの予定と記録がありません' : 'この日は水やりの予定と記録がありません',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _showUnscheduledWateringDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('水やり記録をつける'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.eco_outlined,
+              size: 64,
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hasNoPlants
+                  ? 'まずは植物を登録しましょう'
+                  : isToday
+                      ? '今日は水やりの予定と記録がありません'
+                      : 'この日は水やりの予定と記録がありません',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (hasNoPlants) ...[
+              const SizedBox(height: 8),
+              Text(
+                '植物を登録すると、水やりの予定日と記録を管理できます。',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: hasNoPlants
+                  ? _navigateToAddPlant
+                  : _showUnscheduledWateringDialog,
+              icon: const Icon(Icons.add),
+              label: Text(hasNoPlants ? '植物を登録' : '水やり記録をつける'),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  /// 植物の追加画面へ遷移する（Issue #277 の空状態導線）。
+  Future<void> _navigateToAddPlant() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AddPlantScreen()),
+    );
+    if (!mounted) return;
+    await context.read<PlantProvider>().loadPlants();
   }
 
   Widget _buildDivider() {
