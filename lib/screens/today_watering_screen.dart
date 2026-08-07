@@ -911,6 +911,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
+            tooltip: '前の日',
             onPressed: () {
               if (_isCalendarView) {
                 final prev = AppDateUtils.getDateOnly(
@@ -950,6 +951,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
+            tooltip: '次の日',
             onPressed: () {
               if (_isCalendarView) {
                 final next = AppDateUtils.getDateOnly(

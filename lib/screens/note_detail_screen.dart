@@ -100,12 +100,14 @@ class NoteDetailScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
+            tooltip: '編集',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => AddEditNoteScreen(note: note)),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.delete),
+            tooltip: '削除',
             onPressed: () async {
               final confirmed = await showDialog<bool>(
                 context: context,

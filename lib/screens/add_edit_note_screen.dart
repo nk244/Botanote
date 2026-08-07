@@ -140,7 +140,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
       appBar: AppBar(
         title: Text(widget.note == null ? 'ノート作成' : 'ノート編集'),
         actions: [
-          IconButton(onPressed: _save, icon: const Icon(Icons.save)),
+          IconButton(
+              onPressed: _save,
+              icon: const Icon(Icons.save),
+              tooltip: '保存'),
         ],
       ),
       body: Form(

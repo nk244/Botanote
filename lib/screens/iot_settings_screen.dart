@@ -398,6 +398,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                   icon: Icon(_obscureNatureRemo
                       ? Icons.visibility_off
                       : Icons.visibility),
+                  tooltip: _obscureNatureRemo ? 'トークンを表示' : 'トークンを隠す',
                   onPressed: () => setState(
                       () => _obscureNatureRemo = !_obscureNatureRemo),
                 ),
@@ -445,6 +446,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                   icon: Icon(_obscureSwitchBotToken
                       ? Icons.visibility_off
                       : Icons.visibility),
+                  tooltip: _obscureSwitchBotToken ? 'トークンを表示' : 'トークンを隠す',
                   onPressed: () => setState(() =>
                       _obscureSwitchBotToken = !_obscureSwitchBotToken),
                 ),
@@ -461,6 +463,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                   icon: Icon(_obscureSwitchBotSecret
                       ? Icons.visibility_off
                       : Icons.visibility),
+                  tooltip: _obscureSwitchBotSecret ? 'シークレットを表示' : 'シークレットを隠す',
                   onPressed: () => setState(() =>
                       _obscureSwitchBotSecret = !_obscureSwitchBotSecret),
                 ),
