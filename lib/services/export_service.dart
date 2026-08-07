@@ -36,10 +36,11 @@ class ExportService {
   /// 書き出すバックアップのバージョン。
   /// 5 でアプリ設定（`settings`）を含めるようになった（Issue #239）。
   /// 6 で植物に読み仮名（`nameReading`）が加わった（Issue #257）。
+  /// 7 でノートにタグ（`tags`）が加わった（Issue #278）。
   ///
   /// 旧バージョンのアプリが新しい形式を取り込むと、DB に存在しない列を
   /// insert しようとして失敗するため、版数を上げて明示的に弾く。
-  static const int _backupVersion = 6;
+  static const int _backupVersion = 7;
 
   /// バックアップに含めないアプリ設定のキー。
   ///

@@ -15,6 +15,9 @@ class Note {
   /// 関連する植物IDリスト
   final List<String> plantIds;
 
+  /// タグ（`#` は含めない素の文字列。例: `発根管理`）（Issue #278）
+  final List<String> tags;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -24,6 +27,7 @@ class Note {
     this.content,
     this.imagePaths = const [],
     this.plantIds = const [],
+    this.tags = const [],
     required this.createdAt,
     required this.updatedAt,
   });
@@ -37,6 +41,7 @@ class Note {
       'content': content,
       'imagePaths': jsonEncode(imagePaths),
       'plantIds': jsonEncode(plantIds),
+      'tags': jsonEncode(tags),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -65,6 +70,7 @@ class Note {
       content: map['content'] as String?,
       imagePaths: parseList(map['imagePaths']),
       plantIds: parseList(map['plantIds']),
+      tags: parseList(map['tags']),
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
     );
@@ -78,6 +84,7 @@ class Note {
     Object? content = _sentinel,
     List<String>? imagePaths,
     List<String>? plantIds,
+    List<String>? tags,
     DateTime? updatedAt,
   }) {
     return Note(
@@ -86,6 +93,7 @@ class Note {
       content: content == _sentinel ? this.content : content as String?,
       imagePaths: imagePaths ?? this.imagePaths,
       plantIds: plantIds ?? this.plantIds,
+      tags: tags ?? this.tags,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
