@@ -15,6 +15,20 @@ class ClaudeShareService {
     );
   }
 
+  /// 1枚の写真に写っている複数の植物の一覧作成を依頼する（Issue #66）。
+  ///
+  /// アプリ側で機械的に読み取れるよう、1行1植物・`名前 / 品種` の形式を指定する。
+  static Future<void> shareForBulkIdentification(String imagePath) async {
+    await Share.shareXFiles(
+      [XFile(imagePath)],
+      text: 'この写真に写っている植物をすべて挙げてください。'
+          '1行に1つ、「名前 / 品種」の形式で、名前は和名または流通名でお願いします。'
+          '品種が分からない場合は名前だけで構いません。'
+          '説明文や見出しは付けず、一覧だけを返してください。',
+      subject: '植物の一括同定',
+    );
+  }
+
   /// 植物名・品種の同定を依頼するプロンプト付きで画像を共有する。
   static Future<void> shareForIdentification(String imagePath) async {
     await Share.shareXFiles(
