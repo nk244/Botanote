@@ -87,6 +87,38 @@ class ExportService {
     return tmpFile.path;
   }
 
+  /// ZIP を端末の任意の場所に保存する（Issue #270）。
+  ///
+  /// 共有シート経由の [exportToFile] はキャッシュ領域にしかファイルが残らず、
+  /// OS の空き容量確保で削除されうる。こちらは SAF（Android のファイル選択
+  /// ダイアログ）でユーザーが選んだ保存先に書き出すため、確実に端末へ残る。
+  ///
+  /// キャンセル時は null を返す。戻り値は保存先のパス。
+  Future<String?> exportToDeviceStorage() async {
+    final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+    final fileName = 'botanote_backup_$ts.zip';
+
+    final zipBytes = await _buildZipBytes();
+
+    // Android/iOS では bytes を渡さないとファイルが書き込まれないため必ず渡す
+    final savedPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'バックアップの保存先を選択',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      bytes: zipBytes,
+    );
+    if (savedPath == null) return null;
+
+    // デスクトップ（Windows/macOS/Linux）では bytes が書き込まれず
+    // パスだけが返るため、こちら側で書き出す。
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      await File(savedPath).writeAsBytes(zipBytes);
+    }
+
+    return savedPath;
+  }
+
   /// ZIP バイト列を生成する
   Future<Uint8List> _buildZipBytes() async {
     final plants = await _db.getAllPlants();

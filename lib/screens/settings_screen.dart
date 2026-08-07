@@ -182,7 +182,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   )
                 : const Icon(Icons.upload_file),
             title: const Text('データをエクスポート'),
-            subtitle: const Text('植物・ログ・画像を ZIP ファイルに保存'),
+            subtitle: const Text('植物・ログ・画像を ZIP ファイルに保存／共有'),
             onTap: _isExporting ? null : () => _handleExport(context),
           ),
           ListTile(
@@ -641,18 +641,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// エクスポート処理
+  ///
+  /// 共有シート経由だとキャッシュ領域にしかファイルが残らず、OS の空き容量確保で
+  /// 消える恐れがあるため、端末への保存を既定の選択肢として提示する（Issue #270）。
   Future<void> _handleExport(BuildContext context) async {
+    final method = await showDialog<_ExportMethod>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('データをエクスポート'),
+        content: const Text(
+          '植物・ログ・画像を ZIP にまとめます。\n'
+          '「端末に保存」は保存先を選んでファイルとして残します。\n'
+          '「共有」はアプリ内の一時ファイルを他アプリへ送るだけで、端末には残りません。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('キャンセル'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(_ExportMethod.share),
+            child: const Text('共有'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(_ExportMethod.saveToDevice),
+            child: const Text('端末に保存'),
+          ),
+        ],
+      ),
+    );
+    if (method == null || !context.mounted) return;
+
     setState(() => _isExporting = true);
     try {
-      final path = await ExportService().exportToFile();
-      if (!context.mounted) return;
-      if (path == null) {
+      if (method == _ExportMethod.saveToDevice) {
+        final path = await ExportService().exportToDeviceStorage();
+        if (!context.mounted) return;
         // ユーザーがキャンセル
-        return;
+        if (path == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('バックアップを保存しました\n$path'),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      } else {
+        final path = await ExportService().exportToFile();
+        if (!context.mounted) return;
+        // ユーザーがキャンセル
+        if (path == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('バックアップファイルを共有しました')),
+        );
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('バックアップファイルを共有しました')),
-      );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -797,4 +838,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return Colors.orange;
     }
   }
+}
+
+/// エクスポートの方法（Issue #270）。
+enum _ExportMethod {
+  /// 保存先を選んで端末に残す
+  saveToDevice,
+
+  /// OS の共有シートで他アプリへ送る（端末には残らない）
+  share,
 }
