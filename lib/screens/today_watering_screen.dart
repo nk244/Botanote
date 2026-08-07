@@ -630,6 +630,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     );
   }
 
+  /// カレンダーのマーカードット1つ分。
+  Widget _calendarDot(Color color) {
+    return Container(
+      width: 6,
+      height: 6,
+      margin: const EdgeInsets.symmetric(horizontal: 1),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+
   Widget _buildCalendarView() {
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
@@ -665,21 +675,41 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 markerBuilder: (context, day, events) {
                   final d = AppDateUtils.getDateOnly(day);
                   final hasLog = logDates.contains(d);
-                  // 予定日マーカーは「今日より後」だけに出す。今日以前は実績側で扱う。
-                  final isScheduled =
-                      d.isAfter(today) && scheduledDates.contains(d);
+                  final isScheduled = scheduledDates.contains(d);
+                  // 予定日を過ぎても水やりされていない日はエラー色で出す（Issue #275）。
+                  // 従来は「今日より後」の予定しかマーカーが出ず、
+                  // カレンダーを見ても予定超過に気づけなかった。
+                  final isOverdue = isScheduled && !d.isAfter(today);
                   if (!hasLog && !isScheduled) return null;
-                  final color = hasLog
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.tertiary;
+
+                  final Color color;
+                  if (isOverdue) {
+                    color = Theme.of(context).colorScheme.error;
+                  } else if (hasLog) {
+                    color = Theme.of(context).colorScheme.primary;
+                  } else {
+                    color = Theme.of(context).colorScheme.tertiary;
+                  }
+
+                  // 実績と予定超過が同じ日に重なる場合は両方のドットを並べる
+                  final showLogDot = hasLog;
+                  final showOverdueDot = isOverdue;
+                  final dots = <Widget>[
+                    if (showLogDot)
+                      _calendarDot(Theme.of(context).colorScheme.primary),
+                    if (showOverdueDot)
+                      _calendarDot(Theme.of(context).colorScheme.error),
+                    if (!showLogDot && !showOverdueDot) _calendarDot(color),
+                  ];
+
                   return Align(
                     alignment: Alignment.bottomCenter,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(bottom: 6),
-                      decoration:
-                          BoxDecoration(color: color, shape: BoxShape.circle),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: dots,
+                      ),
                     ),
                   );
                 },
@@ -711,6 +741,10 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                   const SizedBox(width: 16),
                   _CalendarLegendDot(
                       color: Theme.of(context).colorScheme.tertiary, label: '予定'),
+                  const SizedBox(width: 16),
+                  // 予定超過（Issue #275）
+                  _CalendarLegendDot(
+                      color: Theme.of(context).colorScheme.error, label: '予定超過'),
                 ],
               ),
             ),

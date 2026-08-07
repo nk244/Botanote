@@ -212,6 +212,23 @@ class PlantProvider with ChangeNotifier {
           return b.variety!.compareTo(a.variety!);
         });
         break;
+      case PlantSortOrder.nextWateringAsc:
+        // 次回水やり予定が近い順。予定日が過去（予定超過）のものほど先頭に来る。
+        // 水やり間隔が未設定で予定日を持たない植物は末尾にまとめる（Issue #271）。
+        plantsCopy.sort((a, b) {
+          final aNext = _nextWateringCache[a.id];
+          final bNext = _nextWateringCache[b.id];
+          if (aNext == null && bNext == null) {
+            return compareJapanese(a.name, a.nameReading, b.name, b.nameReading);
+          }
+          if (aNext == null) return 1;
+          if (bNext == null) return -1;
+          final diff = aNext.compareTo(bNext);
+          if (diff != 0) return diff;
+          // 同じ予定日なら名前順で安定させる
+          return compareJapanese(a.name, a.nameReading, b.name, b.nameReading);
+        });
+        break;
     }
     
     return plantsCopy;

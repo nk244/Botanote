@@ -28,6 +28,7 @@ enum PlantSortOrder {
   custom,            // ユーザー指定
   varietyAsc,        // 品種名昇順
   varietyDesc,       // 品種名降順
+  nextWateringAsc,   // 次の水やり予定が近い順（予定超過を先頭に、Issue #271）
 }
 
 class LogTypeColors {

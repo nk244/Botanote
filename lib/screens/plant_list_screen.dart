@@ -466,6 +466,8 @@ class _PlantListScreenState extends State<PlantListScreen> {
         return '品種名（あ→ん）';
       case PlantSortOrder.varietyDesc:
         return '品種名（ん→あ）';
+      case PlantSortOrder.nextWateringAsc:
+        return '水やり予定が近い順';
     }
   }
 
@@ -485,6 +487,8 @@ class _PlantListScreenState extends State<PlantListScreen> {
       case PlantSortOrder.varietyAsc:
       case PlantSortOrder.varietyDesc:
         return Icons.local_florist;
+      case PlantSortOrder.nextWateringAsc:
+        return Icons.water_drop;
     }
   }
 }
