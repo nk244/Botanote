@@ -677,85 +677,102 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
         return Column(
           children: [
-            TableCalendar(
-              firstDay: DateTime(2020),
-              lastDay: DateTime.now().add(const Duration(days: 365)),
-              focusedDay: _focusedDay,
-              selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() {
-                  _selectedDate = AppDateUtils.getDateOnly(selectedDay);
-                  _focusedDay = focusedDay;
-                  _selectedPlantIds.clear();
-                });
-                // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
-                _loadSelectedDateFirst(_selectedDate).ignore();
-              },
-              onPageChanged: (focusedDay) {
-                setState(() {
-                  _focusedDay = focusedDay;
-                });
-              },
-              calendarBuilders: CalendarBuilders(
-                // 過去ログのある日（primary）と、未来の水やり予定日（secondary）で
-                // マーカーを塗り分ける。両方に該当する場合は実績（過去ログ）を優先。
-                markerBuilder: (context, day, events) {
-                  final d = AppDateUtils.getDateOnly(day);
-                  final hasLog = logDates.contains(d);
-                  final isScheduled = scheduledDates.contains(d);
-                  // 予定日を過ぎても水やりされていない日はエラー色で出す（Issue #275）。
-                  // 従来は「今日より後」の予定しかマーカーが出ず、
-                  // カレンダーを見ても予定超過に気づけなかった。
-                  final isOverdue = isScheduled && !d.isAfter(today);
-                  if (!hasLog && !isScheduled) return null;
+            // TableCalendar（3.2.0時点）のセマンティクスサブツリーは、一度読み取られると
+            // 画面全体のセマンティクスツリーを失わせる（Issue #241）。実測では
+            // カレンダー表示中は1回目のダンプが125ノード、2回目以降は4ノード
+            // （ルートのみ）に落ち、以後復帰しない。スクリーンリーダー利用者は
+            // 画面の内容を一切読み上げられなくなる。
+            //
+            // カレンダー自体をセマンティクスから除外すると、残りの画面（日付ヘッダー・
+            // 植物リスト・記録ボタン）は安定する。日付の変更は日付ヘッダーの
+            // 「前の日」「次の日」ボタンと、日付タップで開く日付ピッカーから
+            // 行えるため、操作手段は失われない。
+            Semantics(
+              container: true,
+              label: 'カレンダー。日付を変更するには、下の日付欄をタップして'
+                  '日付を選ぶか、「前の日」「次の日」のボタンを使ってください。',
+              child: ExcludeSemantics(
+                child: TableCalendar(
+                  firstDay: DateTime(2020),
+                  lastDay: DateTime.now().add(const Duration(days: 365)),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+                  onDaySelected: (selectedDay, focusedDay) {
+                    setState(() {
+                      _selectedDate = AppDateUtils.getDateOnly(selectedDay);
+                      _focusedDay = focusedDay;
+                      _selectedPlantIds.clear();
+                    });
+                    // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+                    _loadSelectedDateFirst(_selectedDate).ignore();
+                  },
+                  onPageChanged: (focusedDay) {
+                    setState(() {
+                      _focusedDay = focusedDay;
+                    });
+                  },
+                  calendarBuilders: CalendarBuilders(
+                    // 過去ログのある日（primary）と、未来の水やり予定日（secondary）で
+                    // マーカーを塗り分ける。両方に該当する場合は実績（過去ログ）を優先。
+                    markerBuilder: (context, day, events) {
+                      final d = AppDateUtils.getDateOnly(day);
+                      final hasLog = logDates.contains(d);
+                      final isScheduled = scheduledDates.contains(d);
+                      // 予定日を過ぎても水やりされていない日はエラー色で出す（Issue #275）。
+                      // 従来は「今日より後」の予定しかマーカーが出ず、
+                      // カレンダーを見ても予定超過に気づけなかった。
+                      final isOverdue = isScheduled && !d.isAfter(today);
+                      if (!hasLog && !isScheduled) return null;
 
-                  final Color color;
-                  if (isOverdue) {
-                    color = Theme.of(context).colorScheme.error;
-                  } else if (hasLog) {
-                    color = Theme.of(context).colorScheme.primary;
-                  } else {
-                    color = Theme.of(context).colorScheme.tertiary;
-                  }
+                      final Color color;
+                      if (isOverdue) {
+                        color = Theme.of(context).colorScheme.error;
+                      } else if (hasLog) {
+                        color = Theme.of(context).colorScheme.primary;
+                      } else {
+                        color = Theme.of(context).colorScheme.tertiary;
+                      }
 
-                  // 実績と予定超過が同じ日に重なる場合は両方のドットを並べる
-                  final showLogDot = hasLog;
-                  final showOverdueDot = isOverdue;
-                  final dots = <Widget>[
-                    if (showLogDot)
-                      _calendarDot(Theme.of(context).colorScheme.primary),
-                    if (showOverdueDot)
-                      _calendarDot(Theme.of(context).colorScheme.error),
-                    if (!showLogDot && !showOverdueDot) _calendarDot(color),
-                  ];
+                      // 実績と予定超過が同じ日に重なる場合は両方のドットを並べる
+                      final showLogDot = hasLog;
+                      final showOverdueDot = isOverdue;
+                      final dots = <Widget>[
+                        if (showLogDot)
+                          _calendarDot(Theme.of(context).colorScheme.primary),
+                        if (showOverdueDot)
+                          _calendarDot(Theme.of(context).colorScheme.error),
+                        if (!showLogDot && !showOverdueDot) _calendarDot(color),
+                      ];
 
-                  return Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: dots,
-                      ),
+                      return Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: dots,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  calendarStyle: CalendarStyle(
+                    selectedDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
                     ),
-                  );
-                },
-              ),
-              calendarStyle: CalendarStyle(
-                selectedDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
+                    todayDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  headerStyle: const HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                  ),
+                  locale: 'ja_JP',
                 ),
-                todayDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
               ),
-              headerStyle: const HeaderStyle(
-                formatButtonVisible: false,
-                titleCentered: true,
-              ),
-              locale: 'ja_JP',
             ),
             // 凡例：実績（過去ログ）と予定（未来の水やり）の色を説明する
             Padding(
