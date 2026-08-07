@@ -473,11 +473,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed != true) return;
     final days = int.parse(controller.text);
     if (!context.mounted) return;
+
+    // 誤タップで全植物の間隔が書き換わらないよう、対象件数を示して確認する（Issue #274）
+    final plantProvider = context.read<PlantProvider>();
+    final targetCount =
+        plantProvider.countBulkIntervalTargets(onlyWithInterval: false);
+    final applied = await _confirmBulkIntervalChange(
+      context,
+      title: '水やり間隔を一括設定',
+      message: '$targetCount件の植物の水やり間隔を $days 日に変更します。よろしいですか？',
+    );
+    if (applied != true || !context.mounted) return;
+
     try {
-      await context.read<PlantProvider>().bulkUpdateWateringInterval(days);
+      final previous = await plantProvider.bulkUpdateWateringInterval(days);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('すべての植物の水やり間隔を $days 日に設定しました')),
+      _showBulkIntervalResultSnackBar(
+        context,
+        message: '$targetCount件の植物の水やり間隔を $days 日に設定しました',
+        previous: previous,
       );
     } catch (e) {
       if (!context.mounted) return;
@@ -485,6 +499,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
       );
     }
+  }
+
+  /// 一括変更前の確認ダイアログ（Issue #274）。
+  Future<bool?> _confirmBulkIntervalChange(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('変更する'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 一括変更後の SnackBar。「元に戻す」で変更前の間隔へ復元できる（Issue #274）。
+  void _showBulkIntervalResultSnackBar(
+    BuildContext context, {
+    required String message,
+    required Map<String, int?> previous,
+  }) {
+    final messenger = ScaffoldMessenger.of(context);
+    final plantProvider = context.read<PlantProvider>();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: '元に戻す',
+          onPressed: () async {
+            try {
+              await plantProvider.restoreWateringIntervals(previous);
+              messenger.showSnackBar(
+                const SnackBar(content: Text('水やり間隔を元に戻しました')),
+              );
+            } catch (e) {
+              messenger.showSnackBar(
+                SnackBar(content: Text('復元に失敗しました: ${describeError(e)}')),
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
 
   /// 水やり間隔を一括調整するダイアログ（増減）
@@ -541,12 +611,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (confirmed != true) return;
     if (!context.mounted) return;
+
+    final label = delta > 0 ? '+$delta' : '$delta';
+    // 誤タップ対策の確認ダイアログ（Issue #274）
+    final plantProvider = context.read<PlantProvider>();
+    final targetCount =
+        plantProvider.countBulkIntervalTargets(onlyWithInterval: true);
+    final applied = await _confirmBulkIntervalChange(
+      context,
+      title: '水やり間隔を一括調整',
+      message: '$targetCount件の植物の水やり間隔を $label 日します。よろしいですか？',
+    );
+    if (applied != true || !context.mounted) return;
+
     try {
-      await context.read<PlantProvider>().bulkAdjustWateringInterval(delta);
+      final previous = await plantProvider.bulkAdjustWateringInterval(delta);
       if (!context.mounted) return;
-      final label = delta > 0 ? '+$delta' : '$delta';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('水やり間隔を $label 日調整しました')),
+      _showBulkIntervalResultSnackBar(
+        context,
+        message: '$targetCount件の植物の水やり間隔を $label 日調整しました',
+        previous: previous,
       );
     } catch (e) {
       if (!context.mounted) return;

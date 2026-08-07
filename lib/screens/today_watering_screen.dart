@@ -321,6 +321,14 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         if (a.variety == null) return 1;
         if (b.variety == null) return -1;
         return b.variety!.compareTo(a.variety!);
+      case PlantSortOrder.nextWateringAsc:
+        // 次回水やり予定が近い順（予定超過が先頭、予定なしは末尾、Issue #271）
+        final aNext = nextWateringDateCache[a.id];
+        final bNext = nextWateringDateCache[b.id];
+        if (aNext == null && bNext == null) return 0;
+        if (aNext == null) return 1;
+        if (bNext == null) return -1;
+        return aNext.compareTo(bNext);
     }
   }
 
@@ -369,15 +377,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     }
   }
 
-  void _showSuccessMessage(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+  /// 操作結果の SnackBar を表示する。
+  ///
+  /// 画面下部には「その他の植物に水やり」ボタンや一括記録バーがあり、既定の
+  /// 固定表示だとそれらに重なってしまうため、フローティング表示にして下端に
+  /// 余白を確保する（Issue #280）。[onUndo] を渡すと「元に戻す」を表示する。
+  void _showSuccessMessage(String message, {VoidCallback? onUndo}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: Duration(seconds: onUndo == null ? 2 : 6),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        action: onUndo == null
+            ? null
+            : SnackBarAction(label: '元に戻す', onPressed: onUndo),
+      ),
+    );
   }
 
   Future<void> _deleteLog(
@@ -395,14 +412,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     final logTypesToDelete = await _confirmDeletion(hasOtherLogs, plantId, logType, logStatus);
     if (logTypesToDelete == null) return;
 
-    await plantProvider.deleteMultipleLogsForDate(
+    final deletedLogs = await plantProvider.deleteMultipleLogsForDate(
       plantId,
       logTypesToDelete,
       _selectedDate,
     );
 
     await _refreshAfterLogChange();
-    _showSuccessMessage(_buildDeleteMessage(logTypesToDelete, logType));
+    _showSuccessMessage(
+      _buildDeleteMessage(logTypesToDelete, logType),
+      // 誤って取り消した場合に元の記録へ戻せるようにする（Issue #280）
+      onUndo: deletedLogs.isEmpty
+          ? null
+          : () async {
+              await plantProvider.restoreLogs(deletedLogs);
+              await _refreshAfterLogChange();
+              _showSuccessMessage('記録を元に戻しました');
+            },
+    );
   }
 
   Future<List<LogType>?> _confirmDeletion(

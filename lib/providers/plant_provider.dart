@@ -689,13 +689,29 @@ class PlantProvider with ChangeNotifier {
   }
 
   /// 指定日の複数種別のログを一括削除する。
-  Future<void> deleteMultipleLogsForDate(
+  ///
+  /// 戻り値は削除したログの一覧。[restoreLogs] に渡すと取り消しを戻せる
+  /// （Issue #280 の「元に戻す」用）。
+  Future<List<LogEntry>> deleteMultipleLogsForDate(
     String plantId,
     List<LogType> logTypes,
     DateTime date,
   ) async {
+    final deleted = <LogEntry>[];
     for (final logType in logTypes) {
+      // 削除前のログを控えてから消す
+      deleted.addAll(await getLogsForDate(plantId, logType, date));
       await deleteLogsForDate(plantId, logType, date);
+    }
+    return deleted;
+  }
+
+  /// 削除したログを元の内容のまま復元する（Issue #280 の「元に戻す」）。
+  ///
+  /// ID も含めて同一のレコードを書き戻すため、二重実行しても増えない。
+  Future<void> restoreLogs(List<LogEntry> logs) async {
+    for (final log in logs) {
+      await _db.insertLog(log);
     }
   }
 
@@ -859,7 +875,25 @@ class PlantProvider with ChangeNotifier {
   }
 
   /// すべての植物の水やり間隔を指定日数に一括設定する。
-  Future<void> bulkUpdateWateringInterval(int days) async {
+  /// 一括変更の対象となる植物の件数を返す（Issue #274）。
+  ///
+  /// [onlyWithInterval] が true の場合は、水やり間隔が設定済みの植物だけを数える
+  /// （一括調整の対象件数）。
+  int countBulkIntervalTargets({required bool onlyWithInterval}) {
+    if (!onlyWithInterval) return _plants.length;
+    return _plants.where((p) => p.wateringIntervalDays != null).length;
+  }
+
+  /// 変更前の水やり間隔を植物IDごとに控える（Issue #274 の「元に戻す」用）。
+  Map<String, int?> _snapshotWateringIntervals() {
+    return {for (final plant in _plants) plant.id: plant.wateringIntervalDays};
+  }
+
+  /// すべての植物の水やり間隔を [days] に設定する。
+  ///
+  /// 戻り値は変更前の間隔（植物ID → 日数）。「元に戻す」に使う。
+  Future<Map<String, int?>> bulkUpdateWateringInterval(int days) async {
+    final previous = _snapshotWateringIntervals();
     for (final plant in _plants) {
       final updated = plant.copyWith(
         wateringIntervalDays: days,
@@ -868,16 +902,38 @@ class PlantProvider with ChangeNotifier {
       await _db.updatePlant(updated);
     }
     await loadPlants();
+    return previous;
   }
 
   /// 水やり間隔が設定されている植物のみ、間隔に delta を加算して一括調整する。
   /// 結果は最低 1 日にクランプする。
-  Future<void> bulkAdjustWateringInterval(int delta) async {
+  ///
+  /// 戻り値は変更前の間隔（植物ID → 日数）。「元に戻す」に使う。
+  Future<Map<String, int?>> bulkAdjustWateringInterval(int delta) async {
+    final previous = _snapshotWateringIntervals();
     for (final plant in _plants) {
       if (plant.wateringIntervalDays == null) continue;
       final newDays = (plant.wateringIntervalDays! + delta).clamp(1, 9999);
       final updated = plant.copyWith(
         wateringIntervalDays: newDays,
+        updatedAt: DateTime.now(),
+      );
+      await _db.updatePlant(updated);
+    }
+    await loadPlants();
+    return previous;
+  }
+
+  /// 一括変更前の水やり間隔を復元する（Issue #274 の「元に戻す」）。
+  ///
+  /// [previous] に含まれない植物（一括変更後に追加された等）は対象外。
+  Future<void> restoreWateringIntervals(Map<String, int?> previous) async {
+    for (final plant in _plants) {
+      if (!previous.containsKey(plant.id)) continue;
+      final before = previous[plant.id];
+      if (plant.wateringIntervalDays == before) continue;
+      final updated = plant.copyWith(
+        wateringIntervalDays: before,
         updatedAt: DateTime.now(),
       );
       await _db.updatePlant(updated);
