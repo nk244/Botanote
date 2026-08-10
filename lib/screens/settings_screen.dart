@@ -29,10 +29,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// 取得完了までは null で、その間はバージョン行を控えめに「取得中」と表示する。
   String? _appVersion;
 
+  /// 一括変更の結果 SnackBar。設定画面を離れるときに閉じるため保持する（Issue #286）。
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _bulkResultSnackBar;
+
   @override
   void initState() {
     super.initState();
     _loadAppVersion();
+  }
+
+  @override
+  void dispose() {
+    // SnackBar はルートの ScaffoldMessenger に出るため、閉じないと設定画面を
+    // 抜けた後もタブ画面に残り、植物一覧の FAB に重なって誤タップの原因になる。
+    _bulkResultSnackBar?.close();
+    super.dispose();
   }
 
   /// アプリのバージョンを取得して表示用に整形する（Issue #221）。
@@ -534,7 +545,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) {
     final messenger = ScaffoldMessenger.of(context);
     final plantProvider = context.read<PlantProvider>();
-    messenger.showSnackBar(
+    _bulkResultSnackBar = messenger.showSnackBar(
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 8),

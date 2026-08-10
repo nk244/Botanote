@@ -1,3 +1,5 @@
+import 'dart:ui' show DartPluginRegistrant;
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
@@ -14,11 +16,20 @@ import 'weather_service.dart';
 ///
 /// アプリが起動していない状態でも呼ばれるため、トップレベル関数かつ
 /// `@pragma('vm:entry-point')` が必須（Issue #276）。
+///
+/// 別Isolateで動くのでプラグインのチャネルが未登録の状態で始まる。
+/// `DartPluginRegistrant.ensureInitialized()` を呼ばないと sqflite / path_provider が
+/// MissingPluginException になり、DB書き込みが黙って失敗する（Issue #284）。
+///
+/// 戻り値の Future は呼び出し側からは await されないが、非同期にしておかないと
+/// DB書き込みの完了前にIsolateが破棄されうるため `async` で最後まで待つ。
 @pragma('vm:entry-point')
-void notificationBackgroundHandler(NotificationResponse response) {
+Future<void> notificationBackgroundHandler(NotificationResponse response) async {
   if (response.actionId != NotificationService.wateringDoneActionId) return;
-  // await できない同期エントリポイントのため、Future はそのまま流す
-  NotificationService.recordWateringForDuePlants();
+  debugPrint('NotificationService: background action received '
+      '(${response.actionId})');
+  DartPluginRegistrant.ensureInitialized();
+  await NotificationService.recordWateringForDuePlants();
 }
 
 class NotificationService {
@@ -87,6 +98,9 @@ class NotificationService {
   /// フォアグラウンド（アプリ起動中）で通知アクションを受け取ったときの処理。
   static void _handleNotificationResponse(NotificationResponse response) {
     if (response.actionId != wateringDoneActionId) return;
+    debugPrint('NotificationService: foreground action received '
+        '(${response.actionId})');
+    // UIスレッドを止めないため await せずに流す（完了は debugPrint で追える）
     recordWateringForDuePlants();
   }
 
