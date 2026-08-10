@@ -418,6 +418,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               trailing: _purchaseDate != null
                   ? IconButton(
                       icon: const Icon(Icons.clear),
+                      tooltip: '購入日をクリア',
                       onPressed: () {
                         setState(() {
                           _purchaseDate = null;
@@ -509,6 +510,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               trailing: _wateringInterval != null
                   ? IconButton(
                       icon: const Icon(Icons.clear),
+                      tooltip: '水やり間隔をクリア',
                       onPressed: () {
                         setState(() {
                           _wateringInterval = null;
@@ -635,6 +637,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
       trailing: (intervalDays != null || everyNWaterings != null)
           ? IconButton(
               icon: const Icon(Icons.clear),
+              tooltip: '設定をクリア',
               onPressed: () => onChanged(null, null),
             )
           : null,

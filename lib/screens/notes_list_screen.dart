@@ -21,6 +21,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String? _filterPlantId; // null = すべての植物
+  String? _filterTag; // null = すべてのタグ（Issue #278）
   bool _isSearching = false;
 
   @override
@@ -43,18 +44,25 @@ class _NotesListScreenState extends State<NotesListScreen> {
   List<Note> _applyFilters(List<Note> notes) {
     var result = notes;
 
-    // キーワード検索（タイトル・内容）
+    // キーワード検索（タイトル・内容・タグ）
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       result = result.where((n) {
         return n.title.toLowerCase().contains(q) ||
-            (n.content?.toLowerCase().contains(q) ?? false);
+            (n.content?.toLowerCase().contains(q) ?? false) ||
+            // タグ名でもヒットさせる（Issue #278）
+            n.tags.any((t) => t.toLowerCase().contains(q));
       }).toList();
     }
 
     // 植物フィルタ
     if (_filterPlantId != null) {
       result = result.where((n) => n.plantIds.contains(_filterPlantId)).toList();
+    }
+
+    // タグフィルタ（Issue #278）
+    if (_filterTag != null) {
+      result = result.where((n) => n.tags.contains(_filterTag)).toList();
     }
 
     return result;
@@ -211,7 +219,11 @@ class _NotesListScreenState extends State<NotesListScreen> {
           final filteredNotes = _applyFilters(noteProvider.notes);
 
           // 絞り込み中のフィルタバー
-          final isFiltering = _searchQuery.isNotEmpty || _filterPlantId != null;
+          final isFiltering = _searchQuery.isNotEmpty ||
+              _filterPlantId != null ||
+              _filterTag != null;
+          // 登録済みタグ（Issue #278）
+          final allTags = noteProvider.allTags;
 
           if (noteProvider.notes.isEmpty) {
             return Center(
@@ -259,11 +271,45 @@ class _NotesListScreenState extends State<NotesListScreen> {
                           _searchQuery = '';
                           _searchController.clear();
                           _filterPlantId = null;
+                          _filterTag = null;
                           _isSearching = false;
                         }),
                         child: Icon(Icons.close,
                             size: 16,
                             color: Theme.of(context).colorScheme.onSecondaryContainer),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // ── タグ絞り込みチップ（Issue #278）──
+              if (allTags.isNotEmpty)
+                SizedBox(
+                  height: 48,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: FilterChip(
+                          label: const Text('すべて'),
+                          selected: _filterTag == null,
+                          onSelected: (_) => setState(() => _filterTag = null),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      ...allTags.map(
+                        (tag) => Padding(
+                          padding: const EdgeInsets.only(left: 6, top: 6, bottom: 6),
+                          child: FilterChip(
+                            label: Text('#$tag'),
+                            selected: _filterTag == tag,
+                            onSelected: (selected) => setState(
+                                () => _filterTag = selected ? tag : null),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -317,6 +363,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
           .firstOrNull;
       if (name != null) parts.add(name);
     }
+    if (_filterTag != null) parts.add('#$_filterTag');
     return '${parts.join(' ・ ')} で絞り込み中';
   }
 
@@ -493,6 +540,31 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                                 materialTapTargetSize:
                                                     MaterialTapTargetSize
                                                         .shrinkWrap,
+                                              ))
+                                          .toList(),
+                                    ),
+                                  ],
+
+                                  // タグチップ（Issue #278）。タップでそのタグに絞り込む。
+                                  if (note.tags.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 2,
+                                      children: note.tags
+                                          .map((tag) => ActionChip(
+                                                label: Text('#$tag'),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding: EdgeInsets.zero,
+                                                labelStyle: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall,
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                onPressed: () => setState(
+                                                    () => _filterTag = tag),
                                               ))
                                           .toList(),
                                     ),

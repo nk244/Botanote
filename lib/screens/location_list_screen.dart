@@ -19,28 +19,40 @@ class LocationListScreen extends StatelessWidget {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: Text(location == null ? '置き場所を追加' : '置き場所を編集'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '場所名',
-                  border: OutlineInputBorder(),
-                  hintText: '例: リビング、ベランダ',
+          // 名前欄を自動フォーカスするとIMEのフローティングツールバーが「屋外」
+          // スイッチに重なり、タップしても切り替わらなくなる（Issue #268）。
+          // 自動フォーカスをやめ、内容もスクロール可能にして退避できるようにする。
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: '場所名',
+                    border: OutlineInputBorder(),
+                    hintText: '例: リビング、ベランダ',
+                  ),
+                  // 保存ボタンの活性状態を即座に反映するため、入力のたびに再描画する
+                  onChanged: (_) => setState(() {}),
+                  // 入力確定でキーボードを閉じ、下のスイッチを操作できるようにする
+                  onSubmitted: (_) => FocusScope.of(context).unfocus(),
                 ),
-                // 保存ボタンの活性状態を即座に反映するため、入力のたびに再描画する
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('屋外'),
-                value: isOutdoor,
-                onChanged: (value) => setState(() => isOutdoor = value),
-              ),
-            ],
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('屋外'),
+                  subtitle: const Text('天気連動ケアアラートの対象になります'),
+                  value: isOutdoor,
+                  onChanged: (value) {
+                    // スイッチ操作時にキーボードが出ていれば閉じる
+                    FocusScope.of(context).unfocus();
+                    setState(() => isOutdoor = value);
+                  },
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(

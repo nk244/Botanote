@@ -38,6 +38,7 @@ class NoteProvider with ChangeNotifier {
     String? content,
     List<String>? plantIds,
     List<String>? imagePaths,
+    List<String>? tags,
     DateTime? createdAt,
   }) async {
     final now = DateTime.now();
@@ -47,11 +48,31 @@ class NoteProvider with ChangeNotifier {
       content: content,
       plantIds: plantIds ?? [],
       imagePaths: imagePaths ?? [],
+      tags: tags ?? [],
       createdAt: createdAt ?? now,
       updatedAt: now,
     );
     await _db.insertNote(note);
     await loadNotes();
+  }
+
+  /// 登録済みの全タグを、使用回数の多い順・同数なら五十音順で返す（Issue #278）。
+  ///
+  /// タグ入力欄の候補表示と、一覧の絞り込みチップに使う。
+  List<String> get allTags {
+    final counts = <String, int>{};
+    for (final note in _notes) {
+      for (final tag in note.tags) {
+        counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+    }
+    final tags = counts.keys.toList();
+    tags.sort((a, b) {
+      final diff = counts[b]!.compareTo(counts[a]!);
+      if (diff != 0) return diff;
+      return a.compareTo(b);
+    });
+    return tags;
   }
 
   /// 既存のノートを更新する。

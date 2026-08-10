@@ -26,6 +26,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   List<String> _selectedPlantIds = [];
   List<String> _selectedImagePaths = [];
 
+  /// このノートに付けたタグ（Issue #278）
+  List<String> _tags = [];
+  late TextEditingController _tagController;
+
   /// 新規作成時のみ使用する作成日時（デフォルト=現在時刻）。
   /// 一覧では時刻も表示するため、日付だけに丸めず時刻を保持する（Issue #242）。
   late DateTime _selectedDate;
@@ -38,6 +42,8 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
     _selectedPlantIds = widget.note?.plantIds ??
         (widget.initialPlantId != null ? [widget.initialPlantId!] : []);
     _selectedImagePaths = widget.note?.imagePaths ?? [];
+    _tags = List<String>.from(widget.note?.tags ?? const <String>[]);
+    _tagController = TextEditingController();
     // 新規作成時：現在日時を初期値、編集時：既存のcreatedAt
     _selectedDate = widget.note?.createdAt ?? DateTime.now();
   }
@@ -46,7 +52,92 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _tagController.dispose();
     super.dispose();
+  }
+
+  /// 入力中のタグを確定して追加する（Issue #278）。
+  ///
+  /// 先頭の `#` と前後の空白は取り除き、重複は追加しない。
+  void _addTag(String raw) {
+    final tag = raw.trim().replaceFirst(RegExp(r'^#+'), '').trim();
+    if (tag.isEmpty || _tags.contains(tag)) {
+      _tagController.clear();
+      return;
+    }
+    setState(() {
+      _tags.add(tag);
+      _tagController.clear();
+    });
+  }
+
+  /// タグ入力欄と、付与済みタグ・既存タグ候補の表示（Issue #278）。
+  Widget _buildTagField(BuildContext context) {
+    final theme = Theme.of(context);
+    return Consumer<NoteProvider>(
+      builder: (context, noteProv, _) {
+        // 未使用の既存タグだけを候補として出す
+        final suggestions =
+            noteProv.allTags.where((t) => !_tags.contains(t)).take(12).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('タグ', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _tagController,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                hintText: '例: 発根管理、徒長、開花',
+                border: const OutlineInputBorder(),
+                prefixText: '# ',
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'タグを追加',
+                  onPressed: () => _addTag(_tagController.text),
+                ),
+              ),
+              onSubmitted: _addTag,
+            ),
+            if (_tags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: _tags
+                    .map((tag) => Chip(
+                          label: Text('#$tag'),
+                          visualDensity: VisualDensity.compact,
+                          onDeleted: () => setState(() => _tags.remove(tag)),
+                        ))
+                    .toList(),
+              ),
+            ],
+            if (suggestions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                '使ったことのあるタグ',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: suggestions
+                    .map((tag) => ActionChip(
+                          label: Text('#$tag'),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _addTag(tag),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ],
+        );
+      },
+    );
   }
 
   /// 作成日選択UIウィジェット群（新規作成時のみ利用）
@@ -110,6 +201,11 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // 入力途中のタグも保存対象に含める（Issue #278）
+    if (_tagController.text.trim().isNotEmpty) {
+      _addTag(_tagController.text);
+    }
+
     final provider = context.read<NoteProvider>();
 
     if (widget.note == null) {
@@ -118,6 +214,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         content: _contentController.text.trim(),
         plantIds: _selectedPlantIds,
         imagePaths: _selectedImagePaths,
+        tags: _tags,
         createdAt: _selectedDate,
       );
     } else {
@@ -126,6 +223,7 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         content: _contentController.text.trim(),
         plantIds: _selectedPlantIds,
         imagePaths: _selectedImagePaths,
+        tags: _tags,
         updatedAt: DateTime.now(),
       );
       await provider.updateNote(updated);
@@ -140,7 +238,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
       appBar: AppBar(
         title: Text(widget.note == null ? 'ノート作成' : 'ノート編集'),
         actions: [
-          IconButton(onPressed: _save, icon: const Icon(Icons.save)),
+          IconButton(
+              onPressed: _save,
+              icon: const Icon(Icons.save),
+              tooltip: '保存'),
         ],
       ),
       body: Form(
@@ -212,6 +313,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
                 ],
               );
             }),
+            const SizedBox(height: 16),
+
+            // タグ（Issue #278）
+            _buildTagField(context),
             const SizedBox(height: 16),
 
             // 内容

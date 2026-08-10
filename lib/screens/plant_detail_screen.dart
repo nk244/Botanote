@@ -169,7 +169,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   /// 画像背景上でも見やすいアクションボタンを生成する（半透明の丸背景付き）
-  Widget _buildImageOverlayAction(IconData icon, VoidCallback onPressed) {
+  ///
+  /// [tooltip] はスクリーンリーダーの読み上げにも使われるため必須とする（Issue #282）。
+  Widget _buildImageOverlayAction(
+      IconData icon, String tooltip, VoidCallback onPressed) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: DecoratedBox(
@@ -179,6 +182,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         ),
         child: IconButton(
           icon: Icon(icon, color: Colors.white),
+          tooltip: tooltip,
           onPressed: onPressed,
           iconSize: 22,
           padding: const EdgeInsets.all(6),
@@ -248,8 +252,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             forceElevated: innerBoxIsScrolled,
             actions: [
               if (_plant.imagePath != null)
-                _buildImageOverlayAction(
-                    Icons.auto_awesome_motion, _navigateToGrowthTimeline)
+                _buildImageOverlayAction(Icons.auto_awesome_motion, '成長タイムライン',
+                    _navigateToGrowthTimeline)
               else
                 IconButton(
                   icon: const Icon(Icons.auto_awesome_motion),
@@ -257,17 +261,19 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   onPressed: _navigateToGrowthTimeline,
                 ),
               if (_plant.imagePath != null)
-                _buildImageOverlayAction(Icons.edit, _navigateToEdit)
+                _buildImageOverlayAction(Icons.edit, '編集', _navigateToEdit)
               else
                 IconButton(
                   icon: const Icon(Icons.edit),
+                  tooltip: '編集',
                   onPressed: _navigateToEdit,
                 ),
               if (_plant.imagePath != null)
-                _buildImageOverlayAction(Icons.delete, _deletePlant)
+                _buildImageOverlayAction(Icons.delete, '削除', _deletePlant)
               else
                 IconButton(
                   icon: const Icon(Icons.delete),
+                  tooltip: '削除',
                   onPressed: _deletePlant,
                 ),
             ],
@@ -537,6 +543,12 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             label: '季節調整',
             value: '休眠期のため $base日 → $effective日',
           ),
+        // 現在延長中でなくても設定内容が分かるようにする（Issue #279）
+        if (!isExtended)
+          _InfoRow(
+            label: '冬季の延長',
+            value: _seasonalAdjustmentDescription(base),
+          ),
         if (_nextWateringDate != null)
           _InfoRow(
             label: '次回予定',
@@ -547,6 +559,29 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           ),
       ],
     );
+  }
+
+  /// 「冬季は間隔を延長する」設定の内容を人が読める文言にする（Issue #279）。
+  ///
+  /// [baseIntervalDays] が分かる場合は延長後の日数も添える。
+  String _seasonalAdjustmentDescription(int? baseIntervalDays) {
+    final multiplier = _plant.dormantSeasonIntervalMultiplier;
+    if (!_plant.seasonalAdjustmentEnabled || multiplier == null) {
+      return 'しない';
+    }
+    final months = dormantSeasonMonths.toList()..sort();
+    // 12・1・2月を「12〜2月」と読みやすく表記する
+    final monthsLabel = months.contains(12) && months.contains(1)
+        ? '12〜${months.where((m) => m != 12).reduce((a, b) => a > b ? a : b)}月'
+        : '${months.join('・')}月';
+    final multiplierLabel =
+        multiplier == multiplier.roundToDouble() ? '${multiplier.round()}' : '$multiplier';
+
+    if (baseIntervalDays == null) {
+      return '$monthsLabel は間隔を$multiplierLabel倍にする';
+    }
+    final extended = (baseIntervalDays * multiplier).round();
+    return '$monthsLabel は $baseIntervalDays日 → $extended日（$multiplierLabel倍）';
   }
 
   Widget _buildFertilizerInfoCard() {
@@ -620,8 +655,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
+                  // 実際の導線に合わせた案内にする（Issue #269）
                   Text(
-                    '「記録」ボタンから水やり・肥料・活力剤を記録できます',
+                    '「その他のケアを記録」から植え替え・剪定・葉水・掃除を記録できます。\n'
+                    '水やり・肥料・活力剤は「水やりログ」タブから記録します。',
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -1156,56 +1194,164 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   Widget _buildGroupedLogRow(DateTime day, List<LogEntry> logs) {
+    final theme = Theme.of(context);
+    // メモ付きのログは本文としても表示する（Issue #267）
+    final logsWithNote =
+        logs.where((log) => (log.note ?? '').trim().isNotEmpty).toList();
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              DateFormat('yyyy年MM月dd日').format(day),
-              style: Theme.of(context).textTheme.bodyMedium,
+            Row(
+              children: [
+                Text(
+                  DateFormat('yyyy年MM月dd日').format(day),
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children:
+                        logs.map((log) => _buildLogTypeChip(log)).toList(),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: '${DateFormat('M月d日').format(day)}の記録をすべて削除',
+                  onPressed: () => _deleteLogsForDay(day, logs),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
+            if (logsWithNote.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              ...logsWithNote.map(_buildLogNoteLine),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ログ1件分のチップ。× で種類ごとに個別削除できる（Issue #272）。
+  ///
+  /// メモがある場合はタップで全文を表示する（Issue #267）。
+  Widget _buildLogTypeChip(LogEntry log) {
+    final theme = Theme.of(context);
+    final typeName = _getLogTypeName(log.type);
+    final hasNote = (log.note ?? '').trim().isNotEmpty;
+
+    return InputChip(
+      avatar: Icon(
+        _getIconForLogType(log.type),
+        size: 16,
+        color: theme.colorScheme.primary,
+      ),
+      label: Text(
+        typeName,
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.primary),
+      ),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      onPressed: hasNote ? () => _showLogNoteDialog(log) : null,
+      deleteIcon: const Icon(Icons.close, size: 16),
+      deleteButtonTooltipMessage: '$typeName の記録を削除',
+      onDeleted: () => _deleteSingleLog(log),
+    );
+  }
+
+  /// ログのメモを一覧上に本文として表示する行（Issue #267）。
+  ///
+  /// 長い場合は2行で省略し、タップで全文ダイアログを開く。
+  Widget _buildLogNoteLine(LogEntry log) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () => _showLogNoteDialog(log),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.sticky_note_2_outlined,
+              size: 14,
+              color: theme.colorScheme.outline,
+            ),
+            const SizedBox(width: 4),
             Expanded(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: logs.map((log) {
-                  return Tooltip(
-                    message: log.note ?? _getLogTypeName(log.type),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _getIconForLogType(log.type),
-                          size: 16,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          _getLogTypeName(log.type),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
+              child: Text(
+                '${_getLogTypeName(log.type)}: ${log.note!.trim()}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 20),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              tooltip: '${DateFormat('M月d日').format(day)}の記録を削除',
-              onPressed: () => _deleteLogsForDay(day, logs),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// ログのメモ全文を表示する（Issue #267）。
+  Future<void> _showLogNoteDialog(LogEntry log) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${_getLogTypeName(log.type)}のメモ'),
+        content: SingleChildScrollView(
+          child: SelectableText(log.note ?? ''),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// ログを1件だけ削除する（Issue #272）。
+  Future<void> _deleteSingleLog(LogEntry log) async {
+    // async ギャップ前に context 依存の参照を取得しておく
+    final plantProvider = context.read<PlantProvider>();
+    final typeName = _getLogTypeName(log.type);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('記録を削除'),
+        content: Text(
+            '${DateFormat('yyyy年MM月dd日').format(log.date)}の「$typeName」の記録を削除しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await plantProvider.deleteLog(log.id);
+      await _loadData();
+    }
   }
 
   Future<void> _deleteLogsForDay(DateTime day, List<LogEntry> logs) async {

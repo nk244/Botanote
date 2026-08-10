@@ -9,6 +9,7 @@ import '../models/plant.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
 import 'add_plant_screen.dart';
+import 'bulk_add_plants_screen.dart';
 import 'location_list_screen.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
@@ -314,22 +315,47 @@ class _PlantListScreenState extends State<PlantListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: '植物を追加',
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const AddPlantScreen(),
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 複数の植物をまとめて登録する導線（Issue #66）
+          FloatingActionButton.small(
+            heroTag: 'bulkAddPlants',
+            tooltip: '植物をまとめて登録',
+            onPressed: () async {
+              final added = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (context) => const BulkAddPlantsScreen(),
+                ),
+              );
+              if (added == true && context.mounted) {
+                await context.read<PlantProvider>().loadPlants();
+              }
+            },
+            child: const Icon(Icons.playlist_add),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'addPlant',
+            tooltip: '植物を追加',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const AddPlantScreen(),
+                ),
+              );
+            },
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
     );
   }
 
   /// 「植物を追加」FAB に最後の項目が隠れないよう確保する下部余白（Issue #262）。
-  static const double _fabBottomInset = 80;
+  /// 一括登録FAB（small）が上に増えた分も含めている（Issue #66）。
+  static const double _fabBottomInset = 140;
 
   Widget _buildListView(List<Plant> plants) {
     return ListView.builder(
@@ -466,6 +492,8 @@ class _PlantListScreenState extends State<PlantListScreen> {
         return '品種名（あ→ん）';
       case PlantSortOrder.varietyDesc:
         return '品種名（ん→あ）';
+      case PlantSortOrder.nextWateringAsc:
+        return '水やり予定が近い順';
     }
   }
 
@@ -485,6 +513,8 @@ class _PlantListScreenState extends State<PlantListScreen> {
       case PlantSortOrder.varietyAsc:
       case PlantSortOrder.varietyDesc:
         return Icons.local_florist;
+      case PlantSortOrder.nextWateringAsc:
+        return Icons.water_drop;
     }
   }
 }

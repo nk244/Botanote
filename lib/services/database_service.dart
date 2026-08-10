@@ -35,7 +35,7 @@ class DatabaseService {
 
     return await openDatabase(
       newPath,
-      version: 9,
+      version: 10,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -149,6 +149,14 @@ class DatabaseService {
             // 既にカラムが存在する場合は無視
           }
         }
+        if (oldVersion < 10) {
+          // ノートのタグ（Issue #278）。JSON 配列の文字列として保持する。
+          try {
+            await db.execute('ALTER TABLE notes ADD COLUMN tags TEXT');
+          } catch (_) {
+            // 既にカラムが存在する場合は無視
+          }
+        }
       },
     );
   }
@@ -208,6 +216,7 @@ class DatabaseService {
         content TEXT,
         imagePaths TEXT,
         plantIds TEXT,
+        tags TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL
       )

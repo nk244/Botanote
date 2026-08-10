@@ -5,8 +5,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
+import '../models/log_entry.dart';
 import 'database_service.dart';
 import 'weather_service.dart';
+
+/// 通知アクション「水やり完了」をバックグラウンドIsolateで受け取るエントリポイント。
+///
+/// アプリが起動していない状態でも呼ばれるため、トップレベル関数かつ
+/// `@pragma('vm:entry-point')` が必須（Issue #276）。
+@pragma('vm:entry-point')
+void notificationBackgroundHandler(NotificationResponse response) {
+  if (response.actionId != NotificationService.wateringDoneActionId) return;
+  // await できない同期エントリポイントのため、Future はそのまま流す
+  NotificationService.recordWateringForDuePlants();
+}
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -18,6 +31,9 @@ class NotificationService {
 
   static const int _dailyWateringNotificationId = 1;
   static const int _weatherAlertNotificationId = 2;
+
+  /// 通知アクション「水やり完了」の識別子（Issue #276）。
+  static const String wateringDoneActionId = 'watering_done';
 
   bool _initialized = false;
 
@@ -37,19 +53,84 @@ class NotificationService {
 
     const androidSettings =
         AndroidInitializationSettings('@drawable/ic_notification');
-    const darwinSettings = DarwinInitializationSettings(
+    // iOS/macOS では通知カテゴリにアクションを登録する（Issue #276）
+    final darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
+      notificationCategories: <DarwinNotificationCategory>[
+        DarwinNotificationCategory(
+          'watering',
+          actions: <DarwinNotificationAction>[
+            DarwinNotificationAction.plain(
+              wateringDoneActionId,
+              '水やり完了',
+            ),
+          ],
+        ),
+      ],
     );
-    const initSettings = InitializationSettings(
+    final initSettings = InitializationSettings(
       android: androidSettings,
       iOS: darwinSettings,
       macOS: darwinSettings,
     );
 
-    await _plugin.initialize(settings: initSettings);
+    await _plugin.initialize(
+      settings: initSettings,
+      onDidReceiveNotificationResponse: _handleNotificationResponse,
+      onDidReceiveBackgroundNotificationResponse: notificationBackgroundHandler,
+    );
     _initialized = true;
+  }
+
+  /// フォアグラウンド（アプリ起動中）で通知アクションを受け取ったときの処理。
+  static void _handleNotificationResponse(NotificationResponse response) {
+    if (response.actionId != wateringDoneActionId) return;
+    recordWateringForDuePlants();
+  }
+
+  /// 今日時点で水やり予定を迎えている（予定超過を含む）植物すべてに、
+  /// 今日の日付で水やりログを記録する（Issue #276）。
+  ///
+  /// 同じ日に既に水やりログがある植物は二重記録しない。
+  /// 通知アクションから呼ばれ、アプリ未起動のバックグラウンドIsolateでも動作する。
+  static Future<void> recordWateringForDuePlants() async {
+    try {
+      final db = DatabaseService();
+      final now = DateTime.now();
+      final duePlants = await db.getPlantsDueOn(now);
+      if (duePlants.isEmpty) return;
+
+      const uuid = Uuid();
+      for (final plant in duePlants) {
+        final existing =
+            await db.getLogsByPlantAndType(plant.id, LogType.watering);
+        final alreadyLogged = existing.any((log) =>
+            log.date.year == now.year &&
+            log.date.month == now.month &&
+            log.date.day == now.day);
+        if (alreadyLogged) continue;
+
+        await db.insertLog(LogEntry(
+          id: uuid.v4(),
+          plantId: plant.id,
+          type: LogType.watering,
+          date: now,
+          createdAt: now,
+          updatedAt: now,
+        ));
+      }
+
+      debugPrint(
+          'NotificationService: recorded watering from notification action '
+          '(${duePlants.length} plants checked)');
+
+      // 記録内容が変わったので次回のリマインダーを組み直す
+      await scheduleSmartWateringReminder();
+    } catch (e) {
+      debugPrint('NotificationService: watering action failed: $e');
+    }
   }
 
   /// 通知パーミッションをリクエストする。
@@ -145,18 +226,28 @@ class NotificationService {
       return;
     }
 
-    // 翌日の水やり予定をDBから確認
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    // 通知対象日を決める（Issue #281）。
+    // 当日の通知時刻がまだ来ていなければ「今日」を対象にする。
+    // 「翌日だけ」を見ていると、予定日当日にスケジューリングが走った場合に
+    // その日の通知が登録されず、通知が丸1日遅れてしまう。
+    final now = DateTime.now();
+    final todayNotifyTime =
+        DateTime(now.year, now.month, now.day, notifHour, notifMinute);
+    final bool targetIsToday = now.isBefore(todayNotifyTime);
+    final targetDate =
+        targetIsToday ? now : now.add(const Duration(days: 1));
+
     bool hasDuePlants = false;
     // 通知本文に載せる対象植物名（DBエラー時は空のまま汎用文言にフォールバック）
     var duePlantNames = <String>[];
     try {
       final db = DatabaseService();
-      final duePlants = await db.getPlantsDueOn(tomorrow);
+      // getPlantsDueOn は「予定日が対象日以前」の植物を返すため、予定超過分も含まれる
+      final duePlants = await db.getPlantsDueOn(targetDate);
       hasDuePlants = duePlants.isNotEmpty;
       duePlantNames = duePlants.map((p) => p.name).toList();
-      debugPrint(
-          'NotificationService: plants due tomorrow = ${duePlants.length}');
+      debugPrint('NotificationService: plants due on '
+          '${targetIsToday ? "today" : "tomorrow"} = ${duePlants.length}');
     } catch (e) {
       debugPrint('NotificationService: DB check failed, scheduling anyway: $e');
       // DBエラー時は安全側として通知を登録する
@@ -192,18 +283,18 @@ class NotificationService {
 
     if (!hasDuePlants) {
       debugPrint(
-          'NotificationService: no plants due tomorrow, notification cancelled');
+          'NotificationService: no plants due on target day, notification cancelled');
       return;
     }
 
-    // 翌日の指定時刻に1回限りの通知を登録
+    // 対象日の指定時刻に1回限りの通知を登録
     final location = tz.local;
-    final now = tz.TZDateTime.now(location);
-    var scheduledDate = tz.TZDateTime(
+    final tzNow = tz.TZDateTime.now(location);
+    final scheduledDate = tz.TZDateTime(
       location,
-      now.year,
-      now.month,
-      now.day + 1, // 翌日
+      tzNow.year,
+      tzNow.month,
+      targetIsToday ? tzNow.day : tzNow.day + 1,
       notifHour,
       notifMinute,
     );
@@ -215,6 +306,15 @@ class NotificationService {
       importance: Importance.high,
       priority: Priority.high,
       icon: '@drawable/ic_notification',
+      // 通知から直接その日の水やりを記録できるようにする（Issue #276）
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          wateringDoneActionId,
+          '水やり完了',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+      ],
     );
     const darwinDetails = DarwinNotificationDetails(
       categoryIdentifier: 'watering',

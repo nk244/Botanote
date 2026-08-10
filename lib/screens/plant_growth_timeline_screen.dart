@@ -74,6 +74,7 @@ class PlantGrowthTimelineScreen extends StatelessWidget {
               right: 4,
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
+                tooltip: '閉じる',
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),

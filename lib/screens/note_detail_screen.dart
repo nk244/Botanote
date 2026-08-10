@@ -100,12 +100,14 @@ class NoteDetailScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
+            tooltip: '編集',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => AddEditNoteScreen(note: note)),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.delete),
+            tooltip: '削除',
             onPressed: () async {
               final confirmed = await showDialog<bool>(
                 context: context,
@@ -138,6 +140,22 @@ class NoteDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // タグチップ（Issue #278）
+            if (note.tags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: note.tags
+                      .map((tag) => Chip(
+                            label: Text('#$tag'),
+                            visualDensity: VisualDensity.compact,
+                          ))
+                      .toList(),
+                ),
+              ),
+
             // 植物チップ
             if (note.plantIds.isNotEmpty)
               Consumer<PlantProvider>(builder: (context, plantProv, _) {

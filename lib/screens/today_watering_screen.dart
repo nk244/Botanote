@@ -321,6 +321,14 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         if (a.variety == null) return 1;
         if (b.variety == null) return -1;
         return b.variety!.compareTo(a.variety!);
+      case PlantSortOrder.nextWateringAsc:
+        // 次回水やり予定が近い順（予定超過が先頭、予定なしは末尾、Issue #271）
+        final aNext = nextWateringDateCache[a.id];
+        final bNext = nextWateringDateCache[b.id];
+        if (aNext == null && bNext == null) return 0;
+        if (aNext == null) return 1;
+        if (bNext == null) return -1;
+        return aNext.compareTo(bNext);
     }
   }
 
@@ -369,15 +377,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     }
   }
 
-  void _showSuccessMessage(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+  /// 操作結果の SnackBar を表示する。
+  ///
+  /// 画面下部には「その他の植物に水やり」ボタンや一括記録バーがあり、既定の
+  /// 固定表示だとそれらに重なってしまうため、フローティング表示にして下端に
+  /// 余白を確保する（Issue #280）。[onUndo] を渡すと「元に戻す」を表示する。
+  void _showSuccessMessage(String message, {VoidCallback? onUndo}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: Duration(seconds: onUndo == null ? 2 : 6),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        action: onUndo == null
+            ? null
+            : SnackBarAction(label: '元に戻す', onPressed: onUndo),
+      ),
+    );
   }
 
   Future<void> _deleteLog(
@@ -395,14 +412,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     final logTypesToDelete = await _confirmDeletion(hasOtherLogs, plantId, logType, logStatus);
     if (logTypesToDelete == null) return;
 
-    await plantProvider.deleteMultipleLogsForDate(
+    final deletedLogs = await plantProvider.deleteMultipleLogsForDate(
       plantId,
       logTypesToDelete,
       _selectedDate,
     );
 
     await _refreshAfterLogChange();
-    _showSuccessMessage(_buildDeleteMessage(logTypesToDelete, logType));
+    _showSuccessMessage(
+      _buildDeleteMessage(logTypesToDelete, logType),
+      // 誤って取り消した場合に元の記録へ戻せるようにする（Issue #280）
+      onUndo: deletedLogs.isEmpty
+          ? null
+          : () async {
+              await plantProvider.restoreLogs(deletedLogs);
+              await _refreshAfterLogChange();
+              _showSuccessMessage('記録を元に戻しました');
+            },
+    );
   }
 
   Future<List<LogType>?> _confirmDeletion(
@@ -630,6 +657,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     );
   }
 
+  /// カレンダーのマーカードット1つ分。
+  Widget _calendarDot(Color color) {
+    return Container(
+      width: 6,
+      height: 6,
+      margin: const EdgeInsets.symmetric(horizontal: 1),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+
   Widget _buildCalendarView() {
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
@@ -640,65 +677,102 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
         return Column(
           children: [
-            TableCalendar(
-              firstDay: DateTime(2020),
-              lastDay: DateTime.now().add(const Duration(days: 365)),
-              focusedDay: _focusedDay,
-              selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() {
-                  _selectedDate = AppDateUtils.getDateOnly(selectedDay);
-                  _focusedDay = focusedDay;
-                  _selectedPlantIds.clear();
-                });
-                // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
-                _loadSelectedDateFirst(_selectedDate).ignore();
-              },
-              onPageChanged: (focusedDay) {
-                setState(() {
-                  _focusedDay = focusedDay;
-                });
-              },
-              calendarBuilders: CalendarBuilders(
-                // 過去ログのある日（primary）と、未来の水やり予定日（secondary）で
-                // マーカーを塗り分ける。両方に該当する場合は実績（過去ログ）を優先。
-                markerBuilder: (context, day, events) {
-                  final d = AppDateUtils.getDateOnly(day);
-                  final hasLog = logDates.contains(d);
-                  // 予定日マーカーは「今日より後」だけに出す。今日以前は実績側で扱う。
-                  final isScheduled =
-                      d.isAfter(today) && scheduledDates.contains(d);
-                  if (!hasLog && !isScheduled) return null;
-                  final color = hasLog
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.tertiary;
-                  return Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      margin: const EdgeInsets.only(bottom: 6),
-                      decoration:
-                          BoxDecoration(color: color, shape: BoxShape.circle),
+            // TableCalendar（3.2.0時点）のセマンティクスサブツリーは、一度読み取られると
+            // 画面全体のセマンティクスツリーを失わせる（Issue #241）。実測では
+            // カレンダー表示中は1回目のダンプが125ノード、2回目以降は4ノード
+            // （ルートのみ）に落ち、以後復帰しない。スクリーンリーダー利用者は
+            // 画面の内容を一切読み上げられなくなる。
+            //
+            // カレンダー自体をセマンティクスから除外すると、残りの画面（日付ヘッダー・
+            // 植物リスト・記録ボタン）は安定する。日付の変更は日付ヘッダーの
+            // 「前の日」「次の日」ボタンと、日付タップで開く日付ピッカーから
+            // 行えるため、操作手段は失われない。
+            Semantics(
+              container: true,
+              label: 'カレンダー。日付を変更するには、下の日付欄をタップして'
+                  '日付を選ぶか、「前の日」「次の日」のボタンを使ってください。',
+              child: ExcludeSemantics(
+                child: TableCalendar(
+                  firstDay: DateTime(2020),
+                  lastDay: DateTime.now().add(const Duration(days: 365)),
+                  focusedDay: _focusedDay,
+                  selectedDayPredicate: (day) => isSameDay(_selectedDate, day),
+                  onDaySelected: (selectedDay, focusedDay) {
+                    setState(() {
+                      _selectedDate = AppDateUtils.getDateOnly(selectedDay);
+                      _focusedDay = focusedDay;
+                      _selectedPlantIds.clear();
+                    });
+                    // 選択日を優先ロードしてから±2日分をバックグラウンドプリロード
+                    _loadSelectedDateFirst(_selectedDate).ignore();
+                  },
+                  onPageChanged: (focusedDay) {
+                    setState(() {
+                      _focusedDay = focusedDay;
+                    });
+                  },
+                  calendarBuilders: CalendarBuilders(
+                    // 過去ログのある日（primary）と、未来の水やり予定日（secondary）で
+                    // マーカーを塗り分ける。両方に該当する場合は実績（過去ログ）を優先。
+                    markerBuilder: (context, day, events) {
+                      final d = AppDateUtils.getDateOnly(day);
+                      final hasLog = logDates.contains(d);
+                      final isScheduled = scheduledDates.contains(d);
+                      // 予定日を過ぎても水やりされていない日はエラー色で出す（Issue #275）。
+                      // 従来は「今日より後」の予定しかマーカーが出ず、
+                      // カレンダーを見ても予定超過に気づけなかった。
+                      final isOverdue = isScheduled && !d.isAfter(today);
+                      if (!hasLog && !isScheduled) return null;
+
+                      final Color color;
+                      if (isOverdue) {
+                        color = Theme.of(context).colorScheme.error;
+                      } else if (hasLog) {
+                        color = Theme.of(context).colorScheme.primary;
+                      } else {
+                        color = Theme.of(context).colorScheme.tertiary;
+                      }
+
+                      // 実績と予定超過が同じ日に重なる場合は両方のドットを並べる
+                      final showLogDot = hasLog;
+                      final showOverdueDot = isOverdue;
+                      final dots = <Widget>[
+                        if (showLogDot)
+                          _calendarDot(Theme.of(context).colorScheme.primary),
+                        if (showOverdueDot)
+                          _calendarDot(Theme.of(context).colorScheme.error),
+                        if (!showLogDot && !showOverdueDot) _calendarDot(color),
+                      ];
+
+                      return Align(
+                        alignment: Alignment.bottomCenter,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: dots,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  calendarStyle: CalendarStyle(
+                    selectedDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
                     ),
-                  );
-                },
-              ),
-              calendarStyle: CalendarStyle(
-                selectedDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
+                    todayDecoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  headerStyle: const HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                  ),
+                  locale: 'ja_JP',
                 ),
-                todayDecoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                ),
               ),
-              headerStyle: const HeaderStyle(
-                formatButtonVisible: false,
-                titleCentered: true,
-              ),
-              locale: 'ja_JP',
             ),
             // 凡例：実績（過去ログ）と予定（未来の水やり）の色を説明する
             Padding(
@@ -711,6 +785,10 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                   const SizedBox(width: 16),
                   _CalendarLegendDot(
                       color: Theme.of(context).colorScheme.tertiary, label: '予定'),
+                  const SizedBox(width: 16),
+                  // 予定超過（Issue #275）
+                  _CalendarLegendDot(
+                      color: Theme.of(context).colorScheme.error, label: '予定超過'),
                 ],
               ),
             ),
@@ -911,6 +989,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         children: [
           IconButton(
             icon: const Icon(Icons.chevron_left),
+            tooltip: '前の日',
             onPressed: () {
               if (_isCalendarView) {
                 final prev = AppDateUtils.getDateOnly(
@@ -950,6 +1029,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
+            tooltip: '次の日',
             onPressed: () {
               if (_isCalendarView) {
                 final next = AppDateUtils.getDateOnly(
@@ -1158,29 +1238,60 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   }
 
   Widget _buildEmptyState(bool isToday) {
+    // 植物が1件も無いうちは「予定がありません」より先に登録を促す（Issue #277）
+    final hasNoPlants = context.read<PlantProvider>().plants.isEmpty;
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.eco_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            isToday ? '今日は水やりの予定と記録がありません' : 'この日は水やりの予定と記録がありません',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            onPressed: _showUnscheduledWateringDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('水やり記録をつける'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.eco_outlined,
+              size: 64,
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hasNoPlants
+                  ? 'まずは植物を登録しましょう'
+                  : isToday
+                      ? '今日は水やりの予定と記録がありません'
+                      : 'この日は水やりの予定と記録がありません',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            if (hasNoPlants) ...[
+              const SizedBox(height: 8),
+              Text(
+                '植物を登録すると、水やりの予定日と記録を管理できます。',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: hasNoPlants
+                  ? _navigateToAddPlant
+                  : _showUnscheduledWateringDialog,
+              icon: const Icon(Icons.add),
+              label: Text(hasNoPlants ? '植物を登録' : '水やり記録をつける'),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  /// 植物の追加画面へ遷移する（Issue #277 の空状態導線）。
+  Future<void> _navigateToAddPlant() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AddPlantScreen()),
+    );
+    if (!mounted) return;
+    await context.read<PlantProvider>().loadPlants();
   }
 
   Widget _buildDivider() {

@@ -36,10 +36,11 @@ class ExportService {
   /// 書き出すバックアップのバージョン。
   /// 5 でアプリ設定（`settings`）を含めるようになった（Issue #239）。
   /// 6 で植物に読み仮名（`nameReading`）が加わった（Issue #257）。
+  /// 7 でノートにタグ（`tags`）が加わった（Issue #278）。
   ///
   /// 旧バージョンのアプリが新しい形式を取り込むと、DB に存在しない列を
   /// insert しようとして失敗するため、版数を上げて明示的に弾く。
-  static const int _backupVersion = 6;
+  static const int _backupVersion = 7;
 
   /// バックアップに含めないアプリ設定のキー。
   ///
@@ -85,6 +86,38 @@ class ExportService {
 
     if (result.status == ShareResultStatus.dismissed) return null;
     return tmpFile.path;
+  }
+
+  /// ZIP を端末の任意の場所に保存する（Issue #270）。
+  ///
+  /// 共有シート経由の [exportToFile] はキャッシュ領域にしかファイルが残らず、
+  /// OS の空き容量確保で削除されうる。こちらは SAF（Android のファイル選択
+  /// ダイアログ）でユーザーが選んだ保存先に書き出すため、確実に端末へ残る。
+  ///
+  /// キャンセル時は null を返す。戻り値は保存先のパス。
+  Future<String?> exportToDeviceStorage() async {
+    final ts = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+    final fileName = 'botanote_backup_$ts.zip';
+
+    final zipBytes = await _buildZipBytes();
+
+    // Android/iOS では bytes を渡さないとファイルが書き込まれないため必ず渡す
+    final savedPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'バックアップの保存先を選択',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      bytes: zipBytes,
+    );
+    if (savedPath == null) return null;
+
+    // デスクトップ（Windows/macOS/Linux）では bytes が書き込まれず
+    // パスだけが返るため、こちら側で書き出す。
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      await File(savedPath).writeAsBytes(zipBytes);
+    }
+
+    return savedPath;
   }
 
   /// ZIP バイト列を生成する
