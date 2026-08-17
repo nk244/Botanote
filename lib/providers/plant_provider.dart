@@ -484,8 +484,12 @@ class PlantProvider with ChangeNotifier {
   ///
   /// 起算日の優先順位（日数指定モード）:
   /// 1. 最後に肥料を与えた日
-  /// 2. 肥料ログがなければ最後に水やりをした日
+  /// 2. 肥料ログがなければ**最初に**水やりをした日
   /// 3. 水やりログもなければ次回水やり予定日
+  ///
+  /// 起算日2で「最後の水やり日」を使うと、水やりを記録するたびに予定日が
+  /// 後ろへずれて永久に到来しなくなる（Issue #285）。肥料ログが1件も無い間の
+  /// 起算日は、以降の水やりで動かない「ケアを始めた日」に固定する。
   ///
   /// - [fertilizerEveryNWaterings] が設定されている場合: 最終肥料日以降の
   ///   水やり回数が N 回に達する日（水やり間隔から推定）
@@ -505,11 +509,11 @@ class PlantProvider with ChangeNotifier {
             days: _adjustedInterval(
                 plant, plant.fertilizerIntervalDays!, sorted.first.date)));
       }
-      // 起算日2: 最後に水やりをした日
+      // 起算日2: 最初に水やりをした日（Issue #285）
       final wateringLogs2 =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
       if (wateringLogs2.isNotEmpty) {
-        final sorted2 = [...wateringLogs2]..sort((a, b) => b.date.compareTo(a.date));
+        final sorted2 = [...wateringLogs2]..sort((a, b) => a.date.compareTo(b.date));
         return sorted2.first.date.add(Duration(
             days: _adjustedInterval(
                 plant, plant.fertilizerIntervalDays!, sorted2.first.date)));
@@ -570,7 +574,7 @@ class PlantProvider with ChangeNotifier {
   ///
   /// 起算日の優先順位（日数指定モード）:
   /// 1. 最後に活力剤を与えた日
-  /// 2. 活力剤ログがなければ最後に水やりをした日
+  /// 2. 活力剤ログがなければ**最初に**水やりをした日（Issue #285）
   /// 3. 水やりログもなければ次回水やり予定日
   ///
   /// ロジックは [calculateNextFertilizerDate] と同様。
@@ -589,11 +593,11 @@ class PlantProvider with ChangeNotifier {
             days: _adjustedInterval(
                 plant, plant.vitalizerIntervalDays!, sorted.first.date)));
       }
-      // 起算日2: 最後に水やりをした日
+      // 起算日2: 最初に水やりをした日（Issue #285）
       final wateringLogs2 =
           await _db.getLogsByPlantAndType(plantId, LogType.watering);
       if (wateringLogs2.isNotEmpty) {
-        final sorted2 = [...wateringLogs2]..sort((a, b) => b.date.compareTo(a.date));
+        final sorted2 = [...wateringLogs2]..sort((a, b) => a.date.compareTo(b.date));
         return sorted2.first.date.add(Duration(
             days: _adjustedInterval(
                 plant, plant.vitalizerIntervalDays!, sorted2.first.date)));
@@ -755,6 +759,7 @@ class PlantProvider with ChangeNotifier {
 
   /// ログリストから次回肥料予定日を計算する（DBアクセスなし・同期的）。
   ///
+  /// 起算日の優先順位は [calculateNextFertilizerDate] と同じ。
   /// [nextWateringDate] は起算日3（水やり予定日）として使用する。
   DateTime? calcNextFertilizerDateFromLogs(
     Plant plant,
@@ -770,9 +775,10 @@ class PlantProvider with ChangeNotifier {
             days: _adjustedInterval(
                 plant, plant.fertilizerIntervalDays!, sorted.first.date)));
       }
+      // 起算日2: 最初に水やりをした日（Issue #285）
       if (wateringLogs.isNotEmpty) {
         final sorted = [...wateringLogs]
-          ..sort((a, b) => b.date.compareTo(a.date));
+          ..sort((a, b) => a.date.compareTo(b.date));
         return sorted.first.date.add(Duration(
             days: _adjustedInterval(
                 plant, plant.fertilizerIntervalDays!, sorted.first.date)));
@@ -797,9 +803,14 @@ class PlantProvider with ChangeNotifier {
                 .where((l) => l.date.isAfter(lastFertDate))
                 .toList()
               ..sort((a, b) => a.date.compareTo(b.date)));
+      // completedInCurrentGroup == 0 は 2 パターンある（DBアクセス版と同じ扱いにする）:
+      //   ・水やり実績なし（起算後まだ0回）→ 次のN回目が期限（remaining = n）
+      //   ・水やりが N の倍数に到達済み（例: N=3 で3回）→ 施肥期限に到達済みで
+      //     期限は最後の水やり日（remaining = 0）。ここを n にすると施肥忘れが
+      //     Nサイクル先に飛び、超過状態が隠れてしまう。
       final completedInCurrentGroup = wateringsAfter.length % n;
       final remaining = completedInCurrentGroup == 0
-          ? n
+          ? (wateringsAfter.isEmpty ? n : 0)
           : n - completedInCurrentGroup;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
@@ -813,6 +824,7 @@ class PlantProvider with ChangeNotifier {
 
   /// ログリストから次回活力剤予定日を計算する（DBアクセスなし・同期的）。
   ///
+  /// 起算日の優先順位は [calculateNextVitalizerDate] と同じ。
   /// [nextWateringDate] は起算日3（水やり予定日）として使用する。
   DateTime? calcNextVitalizerDateFromLogs(
     Plant plant,
@@ -828,9 +840,10 @@ class PlantProvider with ChangeNotifier {
             days: _adjustedInterval(
                 plant, plant.vitalizerIntervalDays!, sorted.first.date)));
       }
+      // 起算日2: 最初に水やりをした日（Issue #285）
       if (wateringLogs.isNotEmpty) {
         final sorted = [...wateringLogs]
-          ..sort((a, b) => b.date.compareTo(a.date));
+          ..sort((a, b) => a.date.compareTo(b.date));
         return sorted.first.date.add(Duration(
             days: _adjustedInterval(
                 plant, plant.vitalizerIntervalDays!, sorted.first.date)));
@@ -855,9 +868,14 @@ class PlantProvider with ChangeNotifier {
                 .where((l) => l.date.isAfter(lastVitDate))
                 .toList()
               ..sort((a, b) => a.date.compareTo(b.date)));
+      // completedInCurrentGroup == 0 は 2 パターンある（DBアクセス版と同じ扱いにする）:
+      //   ・水やり実績なし（起算後まだ0回）→ 次のN回目が期限（remaining = n）
+      //   ・水やりが N の倍数に到達済み（例: N=3 で3回）→ 期限に到達済みで
+      //     期限は最後の水やり日（remaining = 0）。ここを n にすると付与忘れが
+      //     Nサイクル先に飛び、超過状態が隠れてしまう。
       final completedInCurrentGroup = wateringsAfter.length % n;
       final remaining = completedInCurrentGroup == 0
-          ? n
+          ? (wateringsAfter.isEmpty ? n : 0)
           : n - completedInCurrentGroup;
       final baseDate = wateringsAfter.isNotEmpty
           ? wateringsAfter.last.date
