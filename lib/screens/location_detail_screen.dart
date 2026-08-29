@@ -6,7 +6,9 @@ import '../providers/location_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/plant_picker_dialog.dart';
 import 'iot_settings_screen.dart';
+import 'plant_detail_screen.dart';
 
 /// 管理場所（Location）の詳細画面。
 ///
@@ -19,6 +21,7 @@ class LocationDetailScreen extends StatelessWidget {
   /// この場所に属する植物を一括選択するダイアログを表示する
   Future<void> _showPlantPickerDialog(BuildContext context) async {
     final plantProvider = context.read<PlantProvider>();
+    final locationProvider = context.read<LocationProvider>();
     final plants = plantProvider.plants;
 
     if (plants.isEmpty) {
@@ -28,61 +31,26 @@ class LocationDetailScreen extends StatelessWidget {
       return;
     }
 
-    final selectedIds = Set<String>.from(
-      plants.where((p) => p.locationId == location.id).map((p) => p.id),
+    // 共通ダイアログに寄せることで、並び順がアプリ設定に揃い、
+    // 検索と全選択も使えるようになる（Issue #293）
+    final selectedIds = await PlantPickerDialog.show(
+      context,
+      title: 'この場所の植物を設定',
+      confirmLabel: '確定',
+      initialSelectedIds: plants
+          .where((p) => p.locationId == location.id)
+          .map((p) => p.id)
+          .toSet(),
+      subtitleBuilder: (plant) {
+        if (plant.locationId == null || plant.locationId == location.id) {
+          return null;
+        }
+        final name = locationProvider.getLocationName(plant.locationId);
+        return '現在「$name」に設定中';
+      },
     );
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('この場所の植物を設定'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: plants.length,
-              itemBuilder: (_, i) {
-                final plant = plants[i];
-                final isSelected = selectedIds.contains(plant.id);
-                final otherLocationName = plant.locationId != null &&
-                        plant.locationId != location.id
-                    ? ctx.read<LocationProvider>().getLocationName(plant.locationId)
-                    : null;
-                return CheckboxListTile(
-                  title: Text(plant.name),
-                  subtitle: otherLocationName != null
-                      ? Text('現在「$otherLocationName」に設定中')
-                      : (plant.variety != null ? Text(plant.variety!) : null),
-                  value: isSelected,
-                  onChanged: (checked) {
-                    setDialogState(() {
-                      if (checked == true) {
-                        selectedIds.add(plant.id);
-                      } else {
-                        selectedIds.remove(plant.id);
-                      }
-                    });
-                  },
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('確定'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
+    if (selectedIds == null || !context.mounted) return;
     await plantProvider.assignPlantsToLocation(location.id, selectedIds);
   }
 
@@ -240,11 +208,18 @@ class LocationDetailScreen extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodySmall,
                   )
                 else
+                  // 行から植物詳細へ入れるようにする（Issue #292）
                   ...plants.map((plant) => ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.eco_outlined),
                         title: Text(plant.name),
                         subtitle: plant.variety != null ? Text(plant.variety!) : null,
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => PlantDetailScreen(plant: plant),
+                          ),
+                        ),
                       )),
               ],
             ),
@@ -303,11 +278,18 @@ class LocationDetailScreen extends StatelessWidget {
                             if (latest.humidity != null)
                               '${latest.humidity!.toStringAsFixed(0)}%',
                           ].join(' / ');
+                    // センサー行も反応しなかったため、デバイス設定へ入れるようにする
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.device_hub),
                       title: Text(mapping.deviceName),
                       subtitle: Text(reading),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const IotSettingsScreen(),
+                        ),
+                      ),
                     );
                   }),
               ],

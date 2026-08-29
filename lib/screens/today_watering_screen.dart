@@ -11,6 +11,7 @@ import '../models/daily_log_status.dart';
 import '../models/app_settings.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
+import '../widgets/plant_picker_dialog.dart';
 import 'care_stats_screen.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
@@ -1429,14 +1430,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     }
     if (!context.mounted) return;
 
-    final selectedPlants = await showDialog<List<Plant>>(
-      context: context,
-      builder: (context) => _UnscheduledWateringDialog(
-        plants: unscheduledPlants,
-      ),
+    // 3画面で共通のダイアログを使う（Issue #293）
+    final selectedIds = await PlantPickerDialog.show(
+      context,
+      title: '水やり記録をつける',
+      confirmLabel: '記録する',
+      candidates: unscheduledPlants,
+      allowEmptyConfirm: false,
+      showImages: true,
     );
+    final selectedPlants = selectedIds == null
+        ? <Plant>[]
+        : unscheduledPlants.where((p) => selectedIds.contains(p.id)).toList();
 
-    if (selectedPlants != null && selectedPlants.isNotEmpty && mounted) {
+    if (selectedPlants.isNotEmpty && mounted) {
       // ログ種別選択ダイアログを表示
       final selectedLogTypes = await showDialog<Set<LogType>>(
         context: context,
@@ -1834,118 +1841,6 @@ class _LogTypeSelectionDialogState extends State<_LogTypeSelectionDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_selectedTypes),
-          child: const Text('記録する'),
-        ),
-      ],
-    );
-  }
-}
-
-/// 未予定植物の複数選択ダイアログ
-class _UnscheduledWateringDialog extends StatefulWidget {
-  final List<Plant> plants;
-
-  const _UnscheduledWateringDialog({required this.plants});
-
-  @override
-  State<_UnscheduledWateringDialog> createState() => _UnscheduledWateringDialogState();
-}
-
-class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> {
-  String _searchQuery = '';
-  final Set<String> _selectedIds = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredPlants = widget.plants
-        .where((plant) =>
-            plant.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            (plant.variety?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false))
-        .toList();
-
-    return AlertDialog(
-      title: const Text('水やり記録をつける'),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: '検索',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            // 選択件数表示
-            if (_selectedIds.isNotEmpty)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${_selectedIds.length}件選択中',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: filteredPlants.isEmpty
-                  ? const Center(child: Text('植物が見つかりません'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: filteredPlants.length,
-                      itemBuilder: (context, index) {
-                        final plant = filteredPlants[index];
-                        final isChecked = _selectedIds.contains(plant.id);
-                        return CheckboxListTile(
-                          value: isChecked,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == true) {
-                                _selectedIds.add(plant.id);
-                              } else {
-                                _selectedIds.remove(plant.id);
-                              }
-                            });
-                          },
-                          secondary: PlantImageWidget(
-                              plant: plant, width: 40, height: 40),
-                          title: Text(plant.name),
-                          subtitle:
-                              plant.variety != null ? Text(plant.variety!) : null,
-                          controlAffinity: ListTileControlAffinity.leading,
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('キャンセル'),
-        ),
-        FilledButton(
-          // 未選択時は非活性
-          onPressed: _selectedIds.isEmpty
-              ? null
-              : () {
-                  final selected = widget.plants
-                      .where((p) => _selectedIds.contains(p.id))
-                      .toList();
-                  Navigator.of(context).pop(selected);
-                },
           child: const Text('記録する'),
         ),
       ],

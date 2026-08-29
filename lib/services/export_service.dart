@@ -336,6 +336,19 @@ class ExportService {
     int noteCount = 0;
     int locationCount = 0;
     bool settingsRestored = false;
+    // 画像参照の解決状況（Issue #289）
+    int imageCount = 0;
+    int unresolvedImageCount = 0;
+
+    // 解決できなかった画像参照を相対パスのまま書き戻すと、ConflictAlgorithm.replace で
+    // 既存行が丸ごと置き換わり、有効だった写真が消える。既存値を退避しておき、
+    // 解決できなかった参照はこちらで埋める（Issue #289）。
+    final existingPlantImagePaths = <String, String?>{
+      for (final plant in await _db.getAllPlants()) plant.id: plant.imagePath,
+    };
+    final existingNoteImagePaths = <String, List<String>>{
+      for (final note in await _db.getAllNotes()) note.id: note.imagePaths,
+    };
 
     // 復元対象の行をテーブルごとに組み立て、最後に1トランザクションで投入する
     // （1件ずつ insert すると数千件で数十秒〜数分かかるため。Issue #214）。
@@ -366,7 +379,15 @@ class ExportService {
       // 画像パスを絶対パスに解決
       if (map['imagePath'] != null) {
         final rel = map['imagePath'] as String;
-        map['imagePath'] = pathMap[rel] ?? map['imagePath'];
+        final resolved = pathMap[rel];
+        if (resolved != null) {
+          map['imagePath'] = resolved;
+          imageCount++;
+        } else {
+          // 解決できない相対パスで既存の写真を上書きしない（Issue #289）
+          unresolvedImageCount++;
+          map['imagePath'] = existingPlantImagePaths[map['id']];
+        }
       }
       // 置き場所を含まない旧バックアップ（version <= 3）は、植物が持つ
       // locationId の参照先が存在しないため、孤児参照を避けてクリアする。
@@ -391,12 +412,28 @@ class ExportService {
       final map = Map<String, dynamic>.from(n as Map);
       // imagePaths を絶対パスに解決（'|' 区切り文字列）
       if (map['imagePaths'] != null && (map['imagePaths'] as String).isNotEmpty) {
-        final relPaths = (map['imagePaths'] as String).split('|');
-        final absPaths = relPaths
-            .map((rel) => pathMap[rel] ?? rel)
-            .where((path) => path.isNotEmpty)
-            .toList();
-        map['imagePaths'] = absPaths.join('|');
+        final relPaths = (map['imagePaths'] as String)
+            .split('|')
+            .where((path) => path.isNotEmpty);
+        final absPaths = <String>[];
+        var unresolvedInNote = 0;
+        for (final rel in relPaths) {
+          final resolved = pathMap[rel];
+          if (resolved != null) {
+            absPaths.add(resolved);
+            imageCount++;
+          } else {
+            unresolvedInNote++;
+            unresolvedImageCount++;
+          }
+        }
+        // 1枚も解決できなかった場合は、相対パスで潰さず既存の写真を維持する（Issue #289）
+        if (absPaths.isEmpty && unresolvedInNote > 0) {
+          map['imagePaths'] =
+              (existingNoteImagePaths[map['id']] ?? const <String>[]).join('|');
+        } else {
+          map['imagePaths'] = absPaths.join('|');
+        }
       }
       noteRows.add(Note.fromMap(map).toMap());
       noteCount++;
@@ -444,6 +481,8 @@ class ExportService {
       sensorLogCount: sensorLogCount,
       locationCount: locationCount,
       settingsRestored: settingsRestored,
+      imageCount: imageCount,
+      unresolvedImageCount: unresolvedImageCount,
     );
   }
 }
@@ -460,6 +499,15 @@ class ImportResult {
   /// version 4 以前のバックアップには設定が含まれないため false になる。
   final bool settingsRestored;
 
+  /// ZIP から実ファイルに解決できた画像参照の件数（Issue #289）
+  final int imageCount;
+
+  /// 実ファイルに解決できなかった画像参照の件数（Issue #289）。
+  ///
+  /// JSON のみのバックアップや、画像を含まない ZIP を取り込むと発生する。
+  /// これらの参照は復元されず、既存の写真がそのまま維持される。
+  final int unresolvedImageCount;
+
   const ImportResult({
     required this.plantCount,
     required this.logCount,
@@ -467,7 +515,12 @@ class ImportResult {
     this.sensorLogCount = 0,
     this.locationCount = 0,
     this.settingsRestored = false,
+    this.imageCount = 0,
+    this.unresolvedImageCount = 0,
   });
+
+  /// 解決できなかった画像参照があるかどうか。
+  bool get hasUnresolvedImages => unresolvedImageCount > 0;
 
   @override
   String toString() {
@@ -478,7 +531,17 @@ class ImportResult {
     ];
     if (sensorLogCount > 0) parts.add('センサーログ: $sensorLogCount件');
     if (locationCount > 0) parts.add('置き場所: $locationCount件');
+    // 画像は0件でも「入っていなかった」ことが分かるよう常に出す（Issue #289）
+    parts.add('画像: $imageCount件');
     if (settingsRestored) parts.add('アプリ設定');
     return parts.join('、');
+  }
+
+  /// 画像を復元できなかった場合に表示する警告文。問題がなければ null。
+  String? get imageWarning {
+    if (!hasUnresolvedImages) return null;
+    return 'このバックアップには画像が含まれていないため、'
+        '$unresolvedImageCount件の写真を復元できませんでした。\n'
+        '端末に残っていた写真はそのまま保持しています。';
   }
 }

@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/location_provider.dart';
+import '../providers/note_provider.dart';
+import '../providers/plant_provider.dart';
+import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/export_service.dart';
 import '../services/notification_service.dart';
 
 /// 初回起動時に表示するオンボーディング画面（Issue #277）。
@@ -21,6 +26,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// 通知権限のリクエスト中かどうか（ボタンの二重押し防止）
   bool _isRequestingPermission = false;
+
+  /// バックアップからの復元中かどうか（Issue #288）
+  bool _isRestoring = false;
 
   static const List<_OnboardingPage> _pages = [
     _OnboardingPage(
@@ -52,6 +60,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   bool get _isLastPage => _currentPage == _pages.length - 1;
 
+  /// 通知権限リクエスト中か復元中で、操作を受け付けない状態か
+  bool get _isBusy => _isRequestingPermission || _isRestoring;
+
   /// オンボーディングを完了させる。
   ///
   /// [requestPermission] が true の場合は通知権限をリクエストしてから閉じる。
@@ -80,6 +91,85 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (mounted) setState(() => _isRequestingPermission = false);
   }
 
+  /// バックアップZIPからデータを復元し、成功したらオンボーディングを完了する。
+  ///
+  /// 機種変更・再インストール直後の利用者が、設定画面まで辿り着かずに
+  /// 手元のバックアップを取り込めるようにする（Issue #288）。
+  Future<void> _restoreFromBackup() async {
+    if (_isRestoring) return;
+    setState(() => _isRestoring = true);
+
+    try {
+      final result = await ExportService().importFromFilePicker();
+      if (!mounted) return;
+
+      // ファイル選択をキャンセルした場合はオンボーディングを続ける
+      if (result == null) {
+        setState(() => _isRestoring = false);
+        return;
+      }
+
+      // 復元したデータを各Providerに反映する
+      await context.read<PlantProvider>().loadPlants();
+      if (!mounted) return;
+      await context.read<NoteProvider>().loadNotes();
+      if (!mounted) return;
+      await context.read<SensorLogProvider>().loadLogs();
+      if (!mounted) return;
+      await context.read<LocationProvider>().loadLocations();
+      if (!mounted) return;
+      if (result.settingsRestored) {
+        await context.read<SettingsProvider>().loadSettings();
+        if (!mounted) return;
+      }
+
+      setState(() => _isRestoring = false);
+
+      final imageWarning = result.imageWarning;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('復元しました'),
+          content: Text(
+            imageWarning == null
+                ? '以下のデータを復元しました。\n\n$result'
+                : '以下のデータを復元しました。\n\n$result\n\n⚠ $imageWarning',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('はじめる'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+
+      // 復元できたらデータが入った状態でホームに入る。
+      // 通知権限は既存データの予定に対しても必要なためリクエストする。
+      await _finish(requestPermission: true);
+    } catch (e) {
+      debugPrint('オンボーディングからの復元に失敗しました: $e');
+      if (!mounted) return;
+      setState(() => _isRestoring = false);
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('復元できませんでした'),
+          content: const Text('バックアップファイルが壊れているか、このバージョンでは'
+              '対応していない形式の可能性があります。\n\n'
+              'あとから 設定 → データ管理 でもう一度お試しください。'),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('閉じる'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -91,9 +181,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: _isRequestingPermission
-                    ? null
-                    : () => _finish(requestPermission: false),
+                onPressed:
+                    _isBusy ? null : () => _finish(requestPermission: false),
                 child: const Text('スキップ'),
               ),
             ),
@@ -125,11 +214,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               }),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: _isRequestingPermission
+                  onPressed: _isBusy
                       ? null
                       : () {
                           if (_isLastPage) {
@@ -146,6 +235,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   child: Text(_isLastPage ? 'はじめる' : '次へ'),
                 ),
+              ),
+            ),
+            // 機種変更・再インストール直後の復元導線。新規利用者の主導線を
+            // 邪魔しないよう TextButton に留める（Issue #288）
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: TextButton.icon(
+                onPressed: _isBusy ? null : _restoreFromBackup,
+                icon: _isRestoring
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.settings_backup_restore, size: 18),
+                label: Text(_isRestoring ? '復元しています…' : 'バックアップから復元'),
               ),
             ),
           ],
