@@ -4,7 +4,6 @@ import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
-import '../models/location.dart';
 import '../models/plant.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
@@ -41,86 +40,58 @@ class _PlantListScreenState extends State<PlantListScreen> {
     });
   }
 
-  /// 置き場所での絞り込みをボトムシートで選ばせる（Issue #251）。
-  Future<void> _showLocationFilterSheet(
-      BuildContext context, List<Location> locations) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) {
-        Widget option(String label, String? value) {
-          return ListTile(
-            title: Text(label),
-            trailing: _selectedLocationId == value
-                ? Icon(Icons.check,
-                    color: Theme.of(sheetContext).colorScheme.primary)
-                : null,
-            onTap: () {
-              setState(() => _selectedLocationId = value);
-              Navigator.of(sheetContext).pop();
-            },
+  /// 置き場所フィルタのチップ行（Issue #294）。
+  ///
+  /// 以前は AppBar のメニュー＋適用中バナーだったが、いま何で絞り込めるのか・
+  /// 何件あるのかが開くまで分からなかったため、一覧の直上に常設する。
+  /// 置き場所が未登録のときは行ごと出さないので、リストの位置は変わらない。
+  Widget _buildLocationFilterChips() {
+    return Consumer2<LocationProvider, PlantProvider>(
+      builder: (context, locationProvider, plantProvider, _) {
+        final locations = locationProvider.locations;
+        if (locations.isEmpty) return const SizedBox.shrink();
+
+        final plants = plantProvider.plants;
+        final unassignedCount =
+            plants.where((p) => p.locationId == null).length;
+
+        Widget chip(String label, int count, String? value) {
+          final selected = _selectedLocationId == value;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text('$label $count'),
+              selected: selected,
+              onSelected: (_) => setState(() => _selectedLocationId = value),
+            ),
           );
         }
 
-        return SafeArea(
+        return SizedBox(
+          height: 52,
           child: ListView(
-            shrinkWrap: true,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('置き場所で絞り込む',
-                    style: Theme.of(sheetContext).textTheme.titleMedium),
-              ),
-              option('すべて', null),
-              option('未設定', _unassignedLocationFilter),
+              chip('すべて', plants.length, null),
               for (final location in locations)
-                option(location.name, location.id),
-              const Divider(),
+                chip(
+                  location.name,
+                  plants.where((p) => p.locationId == location.id).length,
+                  location.id,
+                ),
+              if (unassignedCount > 0)
+                chip('未設定', unassignedCount, _unassignedLocationFilter),
               // 置き場所の管理画面は設定の奥にあるため、ここからも開けるようにする
-              // （Issue #248）
-              ListTile(
-                leading: const Icon(Icons.home_outlined),
-                title: const Text('置き場所を編集'),
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const LocationListScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// 絞り込み中であることを示すバー。解除操作もここから行える。
-  Widget _buildActiveLocationFilterBar() {
-    if (_selectedLocationId == null) return const SizedBox.shrink();
-
-    return Consumer<LocationProvider>(
-      builder: (context, locationProvider, _) {
-        final name = _selectedLocationId == _unassignedLocationFilter
-            ? '未設定'
-            : locationProvider.locations
-                    .where((l) => l.id == _selectedLocationId)
-                    .firstOrNull
-                    ?.name ??
-                '不明な置き場所';
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          color: Theme.of(context).colorScheme.secondaryContainer,
-          child: Row(
-            children: [
-              const Icon(Icons.filter_alt, size: 18),
-              const SizedBox(width: 8),
-              Expanded(child: Text('置き場所: $name')),
-              TextButton(
-                onPressed: () => setState(() => _selectedLocationId = null),
-                child: const Text('解除'),
+              // （Issue #248 の導線をチップ行へ引き継ぐ）
+              IconButton(
+                icon: const Icon(Icons.home_outlined),
+                tooltip: '置き場所を編集',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const LocationListScreen(),
+                  ),
+                ),
               ),
             ],
           ),
@@ -144,30 +115,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
       appBar: AppBar(
         title: const Text('植物一覧'),
         actions: [
-          // 置き場所での絞り込み（Issue #251）。
-          // 一覧本体にチップ行を出すと、置き場所の登録有無でリストの位置が
-          // ずれてしまうため、ノートタブと同じく AppBar に寄せる。
-          Consumer2<LocationProvider, SettingsProvider>(
-            builder: (context, locationProvider, settings, _) {
-              // カスタム並び替え（ドラッグ）と併用すると並び順が破損するため無効化する
-              final isCustomSort =
-                  settings.plantSortOrder == PlantSortOrder.custom;
-              final hasLocations = locationProvider.locations.isNotEmpty;
-              return IconButton(
-                // 並び順の Icons.sort と形が似て見分けづらいため、
-                // 「置き場所」だと分かる家アイコンにする（Issue #259）
-                icon: Badge(
-                  isLabelVisible: _selectedLocationId != null,
-                  child: const Icon(Icons.home_outlined),
-                ),
-                tooltip: '置き場所で絞り込む',
-                onPressed: (!hasLocations || isCustomSort)
-                    ? null
-                    : () => _showLocationFilterSheet(
-                        context, locationProvider.locations),
-              );
-            },
-          ),
+          // 置き場所での絞り込みは AppBar のメニューから一覧上のチップ行へ移した
+          // （Issue #294。従来の判断は Issue #251）
+
           // グリッド/リスト表示切り替えボタン
           IconButton(
             icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
@@ -249,7 +199,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
             children: [
               // 置き場所フィルタはカスタム並び替え（ドラッグ）と併用すると並び順が
               // 破損するため、カスタムソート中は表示・適用しない
-              if (!isCustomSort) _buildActiveLocationFilterBar(),
+              if (!isCustomSort) _buildLocationFilterChips(),
               Expanded(
                 child: Consumer<PlantProvider>(
                   builder: (context, plantProvider, _) {
@@ -578,13 +528,25 @@ class _PlantGridCard extends StatelessWidget {
             // 植物画像（カード上部 3/5 を占める）
             Expanded(
               flex: 3,
-              child: LayoutBuilder(
-                builder: (context, constraints) => PlantImageWidget(
-                  plant: plant,
-                  width: constraints.maxWidth,
-                  height: constraints.maxHeight,
-                  borderRadius: BorderRadius.zero,
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  LayoutBuilder(
+                    builder: (context, constraints) => PlantImageWidget(
+                      plant: plant,
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  // 遅れは画像の上に出して、一覧をスクロールするだけで拾えるようにする
+                  // （Issue #294）
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: _OverdueBadge(plant: plant),
+                  ),
+                ],
               ),
             ),
             // 植物名・品種（カード下部 2/5）
@@ -669,6 +631,48 @@ class _LocationBadge extends StatelessWidget {
                   ?.copyWith(color: color),
               overflow: TextOverflow.ellipsis,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 水やり予定を過ぎている植物にだけ出す遅れバッジ（Issue #294）。
+///
+/// 予定日を算出できない、または遅れていない場合は何も表示しない。
+class _OverdueBadge extends StatelessWidget {
+  final Plant plant;
+
+  const _OverdueBadge({required this.plant});
+
+  @override
+  Widget build(BuildContext context) {
+    final next = context.read<PlantProvider>().cachedNextWateringDate(plant.id);
+    if (next == null) return const SizedBox.shrink();
+
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    final nextDay = AppDateUtils.getDateOnly(next);
+    if (nextDay.isAfter(today)) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.error,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.water_drop, size: 13, color: scheme.onError),
+          const SizedBox(width: 3),
+          Text(
+            AppDateUtils.formatDateDifference(next),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: scheme.onError,
+                  fontWeight: FontWeight.bold,
+                ),
           ),
         ],
       ),

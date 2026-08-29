@@ -82,6 +82,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     LogType.cleaning,
   ];
   DateTime? _nextWateringDate;
+
+  /// 肥料・活力剤の次回予定日（「次のケア」カード用。Issue #294）
+  DateTime? _nextFertilizerDate;
+  DateTime? _nextVitalizerDate;
   List<SensorLog> _sensorLogs = [];
   bool _isFetchingSensor = false;
 
@@ -140,11 +144,17 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   Future<void> _loadNextWateringDate() async {
-    final nextDate = await context.read<PlantProvider>()
-        .calculateNextWateringDate(_plant.id);
+    final provider = context.read<PlantProvider>();
+    final dates = await Future.wait([
+      provider.calculateNextWateringDate(_plant.id),
+      provider.calculateNextFertilizerDate(_plant.id),
+      provider.calculateNextVitalizerDate(_plant.id),
+    ]);
     if (mounted) {
       setState(() {
-        _nextWateringDate = nextDate;
+        _nextWateringDate = dates[0];
+        _nextFertilizerDate = dates[1];
+        _nextVitalizerDate = dates[2];
       });
     }
   }
@@ -445,9 +455,16 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   Widget _buildInfoTab() {
+    final nextCareCard = _buildNextCareCard();
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // まず「次に何をすればよいか」を出す（Issue #294）
+        if (nextCareCard != null) ...[
+          nextCareCard,
+          const SizedBox(height: 16),
+        ],
         _buildBasicInfoCard(),
         // 水やり間隔も次回予定も無い場合は見出しだけの空カードになるため表示しない
         if (_plant.wateringIntervalDays != null ||
@@ -464,6 +481,119 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         ],
       ],
     );
+  }
+
+  /// 「次のケア」カード（Issue #294）。
+  ///
+  /// 水やり・肥料・活力剤の予定を1行ずつ並べ、遅れている行は error 色で強調して
+  /// 同じ行から記録できるようにする。予定が1つも無ければ null を返す。
+  Widget? _buildNextCareCard() {
+    final entries = <(LogType, DateTime)>[
+      if (_nextWateringDate != null) (LogType.watering, _nextWateringDate!),
+      if (_nextFertilizerDate != null) (LogType.fertilizer, _nextFertilizerDate!),
+      if (_nextVitalizerDate != null) (LogType.vitalizer, _nextVitalizerDate!),
+    ]..sort((a, b) => a.$2.compareTo(b.$2));
+
+    if (entries.isEmpty) return null;
+
+    return _InfoCard(
+      title: '次のケア',
+      children: [
+        for (var i = 0; i < entries.length; i++) ...[
+          if (i > 0) const Divider(height: 16),
+          _buildNextCareRow(entries[i].$1, entries[i].$2),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNextCareRow(LogType logType, DateTime nextDate) {
+    final scheme = Theme.of(context).colorScheme;
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    final due = AppDateUtils.getDateOnly(nextDate);
+    final isDue = !due.isAfter(today);
+    final isOverdue = due.isBefore(today);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: isOverdue ? scheme.errorContainer : scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _getLogTypeIcon(logType),
+              size: 22,
+              color: isOverdue ? scheme.onErrorContainer : scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_getLogTypeName(logType)} ${AppDateUtils.formatDateDifference(nextDate)}',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: isOverdue ? scheme.error : null,
+                        fontWeight: isOverdue ? FontWeight.bold : null,
+                      ),
+                ),
+                Text(
+                  '予定 ${DateFormat('M月d日（E）', 'ja').format(nextDate)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 予定日を迎えているものは塗りつぶし、まだ先のものは輪郭ボタンにする
+          if (isDue)
+            FilledButton(
+              onPressed: () => _recordCareNow(logType),
+              child: const Text('記録'),
+            )
+          else
+            OutlinedButton(
+              onPressed: () => _recordCareNow(logType),
+              child: const Text('記録'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getLogTypeIcon(LogType type) {
+    switch (type) {
+      case LogType.fertilizer:
+        return Icons.grass;
+      case LogType.vitalizer:
+        return Icons.favorite;
+      default:
+        return Icons.water_drop;
+    }
+  }
+
+  /// 「次のケア」カードから今日の記録を1件つける（Issue #294）。
+  Future<void> _recordCareNow(LogType logType) async {
+    final plantProvider = context.read<PlantProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await plantProvider.bulkRecordLogs([_plant.id], [logType], DateTime.now());
+      if (!mounted) return;
+      await _loadData();
+      messenger.showSnackBar(
+        SnackBar(content: Text('${_getLogTypeName(logType)}を記録しました')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('記録に失敗しました: ${describeError(e)}')),
+      );
+    }
   }
 
   Widget _buildBasicInfoCard() {

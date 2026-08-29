@@ -22,7 +22,6 @@ class _NotesListScreenState extends State<NotesListScreen> {
   String _searchQuery = '';
   String? _filterPlantId; // null = すべての植物
   String? _filterTag; // null = すべてのタグ（Issue #278）
-  bool _isSearching = false;
 
   @override
   void initState() {
@@ -149,32 +148,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'タイトル・内容を検索…',
-                  border: InputBorder.none,
-                ),
-                onChanged: (v) => setState(() => _searchQuery = v),
-              )
-            : const Text('ノート'),
+        // 検索は AppBar のトグルから本文上の常設バーへ移した（Issue #294）
+        title: const Text('ノート'),
         actions: [
-          // 検索トグル
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search),
-            tooltip: _isSearching ? '検索を閉じる' : '検索',
-            onPressed: () {
-              setState(() {
-                _isSearching = !_isSearching;
-                if (!_isSearching) {
-                  _searchQuery = '';
-                  _searchController.clear();
-                }
-              });
-            },
-          ),
           // 植物フィルタ
           Consumer2<PlantProvider, SettingsProvider>(
             builder: (context, plantProvider, settingsProvider, _) {
@@ -197,16 +173,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
             },
           ),
           // 設定画面へ遷移 (#104)
-          if (!_isSearching)
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: '設定',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const SettingsScreen(),
-                ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: '設定',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const SettingsScreen(),
               ),
             ),
+          ),
         ],
       ),
       body: Consumer2<NoteProvider, PlantProvider>(
@@ -246,6 +221,28 @@ class _NotesListScreenState extends State<NotesListScreen> {
 
           return Column(
             children: [
+              // ── 検索バー（常設。Issue #294）──
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: SearchBar(
+                  controller: _searchController,
+                  hintText: 'タイトル・内容を検索',
+                  leading: const Icon(Icons.search),
+                  trailing: [
+                    if (_searchQuery.isNotEmpty)
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: '検索を消す',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _searchQuery = v),
+                ),
+              ),
+
               // ── アクティブフィルタバー ──
               if (isFiltering)
                 Container(
@@ -272,7 +269,6 @@ class _NotesListScreenState extends State<NotesListScreen> {
                           _searchController.clear();
                           _filterPlantId = null;
                           _filterTag = null;
-                          _isSearching = false;
                         }),
                         child: Icon(Icons.close,
                             size: 16,
