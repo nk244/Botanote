@@ -100,6 +100,42 @@ class _PlantListScreenState extends State<PlantListScreen> {
     );
   }
 
+  /// カスタム並び替え中に、置き場所フィルタが使えない理由を示す行（Issue #308）。
+  ///
+  /// チップ行と同じ高さにして、並び順を切り替えてもリストの位置がずれないようにする。
+  Widget _buildCustomSortNotice() {
+    return Consumer<LocationProvider>(
+      builder: (context, locationProvider, _) {
+        // 置き場所が未登録ならそもそもフィルタの話をしない
+        if (locationProvider.locations.isEmpty) return const SizedBox.shrink();
+
+        final scheme = Theme.of(context).colorScheme;
+        return SizedBox(
+          height: 52,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 16, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'カスタム並び替え中は置き場所で絞り込めません',
+                    maxLines: 2,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   /// 選択中の置き場所フィルタに従って植物リストを絞り込む。
   List<Plant> _applyLocationFilter(List<Plant> plants) {
     if (_selectedLocationId == null) return plants;
@@ -198,8 +234,13 @@ class _PlantListScreenState extends State<PlantListScreen> {
           return Column(
             children: [
               // 置き場所フィルタはカスタム並び替え（ドラッグ）と併用すると並び順が
-              // 破損するため、カスタムソート中は表示・適用しない
-              if (!isCustomSort) _buildLocationFilterChips(),
+              // 破損するため、カスタムソート中は適用しない。
+              // ただし黙って消すと機能が無くなったように見えるため、
+              // 理由を示す行に差し替える（Issue #308）
+              if (isCustomSort)
+                _buildCustomSortNotice()
+              else
+                _buildLocationFilterChips(),
               Expanded(
                 child: Consumer<PlantProvider>(
                   builder: (context, plantProvider, _) {
@@ -655,27 +696,18 @@ class _OverdueBadge extends StatelessWidget {
     final nextDay = AppDateUtils.getDateOnly(next);
     if (nextDay.isAfter(today)) return const SizedBox.shrink();
 
+    // 遅れの日数は下部の _WateringStatusText が出すため、バッジは
+    // 「遅れている」ことだけを示す小さな印にとどめる（Issue #300）。
+    // 文言を持たないぶん、色が判別しにくいテーマでも形で気づける（Issue #303）。
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      width: 26,
+      height: 26,
       decoration: BoxDecoration(
         color: scheme.error,
-        borderRadius: BorderRadius.circular(8),
+        shape: BoxShape.circle,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.water_drop, size: 13, color: scheme.onError),
-          const SizedBox(width: 3),
-          Text(
-            AppDateUtils.formatDateDifference(next),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onError,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-        ],
-      ),
+      child: Icon(Icons.priority_high, size: 18, color: scheme.onError),
     );
   }
 }
