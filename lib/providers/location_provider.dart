@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show ChangeNotifier, debugPrint;
 import 'package:uuid/uuid.dart';
 import '../models/location.dart';
 import '../services/database_service.dart';
+import '../utils/japanese_sort_utils.dart';
 
 /// 置き場所（Location）データを管理する Provider（Issue #180）。
 class LocationProvider with ChangeNotifier {
@@ -19,7 +20,12 @@ class LocationProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      _locations = await _db.getAllLocations();
+      final locations = await _db.getAllLocations();
+      // DB は name の昇順（コードポイント順）で返すため、「2階ホール」「キッチン」が
+      // 「リビング」より前に来るなど日本語の読み順にならない。
+      // 植物の並び順（Issue #257）と同じ比較でかな順に揃える（Issue #309）。
+      locations.sort((a, b) => compareJapanese(a.name, null, b.name, null));
+      _locations = locations;
     } catch (e) {
       debugPrint('Error loading locations: $e');
     } finally {

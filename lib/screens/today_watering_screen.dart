@@ -1116,26 +1116,56 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Row(
         children: [
-          _buildSummaryTile('予定超過', overdueCount, scheme.errorContainer,
-              scheme.onErrorContainer),
+          _buildSummaryTile(
+            label: '予定超過',
+            count: overdueCount,
+            icon: Icons.priority_high,
+            background: scheme.errorContainer,
+            foreground: scheme.onErrorContainer,
+          ),
           const SizedBox(width: 8),
-          _buildSummaryTile('今日の予定', dueTodayCount, scheme.primaryContainer,
-              scheme.onPrimaryContainer),
+          _buildSummaryTile(
+            label: '今日の予定',
+            count: dueTodayCount,
+            icon: Icons.water_drop,
+            background: scheme.primaryContainer,
+            foreground: scheme.onPrimaryContainer,
+          ),
           const SizedBox(width: 8),
-          _buildSummaryTile('記録済み', recordedCount,
-              scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+          _buildSummaryTile(
+            label: '記録済み',
+            count: recordedCount,
+            icon: Icons.check_circle,
+            background: scheme.surfaceContainerHighest,
+            foreground: scheme.onSurfaceVariant,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryTile(
-      String label, int count, Color background, Color foreground) {
+  /// サマリー帯の1タイル。
+  ///
+  /// テーマ色によっては「予定超過（error）」と「今日の予定（primary）」が
+  /// 同系色になり色だけでは区別できないため、アイコンも添える（Issue #303）。
+  /// 0件のタイルは彩度を落とし、片付いた状態が伝わるようにする（Issue #305）。
+  Widget _buildSummaryTile({
+    required String label,
+    required int count,
+    required IconData icon,
+    required Color background,
+    required Color foreground,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final isEmpty = count == 0;
+    final tileBackground = isEmpty ? scheme.surfaceContainerHigh : background;
+    final tileForeground = isEmpty ? scheme.onSurfaceVariant : foreground;
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: background,
+          color: tileBackground,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1148,7 +1178,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 Text(
                   '$count',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: foreground,
+                        color: tileForeground,
                         fontWeight: FontWeight.bold,
                       ),
                 ),
@@ -1157,15 +1187,25 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: foreground)),
+                        ?.copyWith(color: tileForeground)),
               ],
             ),
-            Text(
-              label,
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: foreground, fontWeight: FontWeight.w500),
+            Row(
+              children: [
+                Icon(icon, size: 13, color: tileForeground),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tileForeground,
+                          fontWeight: FontWeight.w500,
+                        ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1267,6 +1307,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                     nextWateringDateCache, nextFertilizerDateCache,
                     nextVitalizerDateCache, date);
               }
+              if (item.isAllDone) return _buildAllDoneMessage();
               if (item.completedCount != null) {
                 return _buildCompletedToggle(item.completedCount!);
               }
@@ -1316,6 +1357,19 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         }
       }
 
+      // 予定超過だけは、件数が増えるとどれから手を付ければよいか分からなくなるため
+      // 遅れが大きい順に並べ替える。他のセクションはアプリの並び順設定に従う（Issue #302）。
+      overdue.sort((a, b) {
+        final aDate = _earliestDueDate(a.id, nextWateringDateCache,
+            nextFertilizerDateCache, nextVitalizerDateCache);
+        final bDate = _earliestDueDate(b.id, nextWateringDateCache,
+            nextFertilizerDateCache, nextVitalizerDateCache);
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+        return aDate.compareTo(bDate);
+      });
+
       void addSection(String label, Color color, List<Plant> plants) {
         if (plants.isEmpty) return;
         items.add(_LogListItem.header(label, color));
@@ -1330,12 +1384,44 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     }
 
     if (completedPlants.isNotEmpty) {
+      // 今日やることが残っていないなら、片付いたことを明示する（Issue #305）。
+      // 植物が0鉢のときの空状態とは別物なので、記録済みがある場合のみ出す。
+      if (isToday && incompletePlants.isEmpty) {
+        items.add(const _LogListItem.allDone());
+      }
       items.add(_LogListItem.completed(completedPlants.length));
       if (_isCompletedExpanded) {
         items.addAll(completedPlants.map(_LogListItem.plant));
       }
     }
     return items;
+  }
+
+  /// その日のケアをすべて記録し終えたことを示す表示（Issue #305）。
+  Widget _buildAllDoneMessage() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+      child: Column(
+        children: [
+          Icon(Icons.task_alt, size: 56, color: scheme.primary),
+          const SizedBox(height: 12),
+          Text(
+            '今日のケアは完了しました',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'お疲れさまでした。予定はすべて記録済みです。',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
   }
 
   /// セクション見出し（色ドット＋ラベル）。Issue #294。
@@ -1398,6 +1484,22 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         ),
       ),
     );
+  }
+
+  /// 水やり・肥料・活力剤のうち、最も早い予定日を返す。予定が無ければ null。
+  DateTime? _earliestDueDate(
+    String plantId,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    final dates = [
+      _dueDateOnly(plantId, nextWateringDateCache),
+      _dueDateOnly(plantId, nextFertilizerDateCache),
+      _dueDateOnly(plantId, nextVitalizerDateCache),
+    ].whereType<DateTime>().toList();
+    if (dates.isEmpty) return null;
+    return dates.reduce((a, b) => a.isBefore(b) ? a : b);
   }
 
   /// いずれかの予定日が [day] と同じかどうかを返す。
@@ -1677,20 +1779,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     final nextWateringDate = nextWateringDateCache[plant.id];
     final nextFertilizerDate = nextFertilizerDateCache[plant.id];
     final nextVitalizerDate = nextVitalizerDateCache[plant.id];
-    final nextDay = nextWateringDate != null
-        ? AppDateUtils.getDateOnly(nextWateringDate)
-        : null;
-    // 水やり超過: 予定日 ≦ 今日
-    final isOverdue = nextDay != null && !nextDay.isAfter(today);
-
     // 予定超過（予定日 < 今日）のカードは左端にエラー色のラインを引いて
-    // リストの中でひと目で拾えるようにする（Issue #294）
-    final isPastDue = _isPastDue(
-      plant.id,
-      nextWateringDateCache,
-      nextFertilizerDateCache,
-      nextVitalizerDateCache,
-    );
+    // リストの中でひと目で拾えるようにする（Issue #294）。
+    // ただし今日以外の日を見ているときは、今日基準の強調を出すと
+    // 何の日付を見ているのか分からなくなるため出さない（Issue #299, #301）。
+    final isViewingToday = AppDateUtils.isSameDay(selectedDay, today);
+    final isPastDue = isViewingToday &&
+        _isPastDue(
+          plant.id,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+        );
     final scheme = Theme.of(context).colorScheme;
 
     final tile = ListTile(
@@ -1705,29 +1805,39 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             PlantImageWidget(plant: plant),
           ],
         ),
-        title: Text(plant.name),
+        // 長い名前で1枚のカードが画面を占有しないよう2行で省略する（Issue #306）。
+        // 全文は植物詳細で確認できる。
+        title: Text(
+          plant.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
         subtitle: _buildPlantSubtitle(
           plant,
           nextWateringDate,
           nextFertilizerDate,
           nextVitalizerDate,
           selectedDay,
-          isOverdue,
           hasAnyLog,
           isWatered,
           isFertilized,
           isVitalized,
           logStatus,
         ),
-        // 予定がある未記録の植物には、その場で記録できるボタンを出す（Issue #294）
-        trailing: _buildQuickRecordButton(
-          plant,
-          logStatus,
-          nextWateringDateCache,
-          nextFertilizerDateCache,
-          nextVitalizerDateCache,
-          isPastDue,
-        ),
+        // 予定がある未記録の植物には、その場で記録できるボタンを出す（Issue #294）。
+        // 今日以外を見ているときは何を記録するのか判断できないため出さない（Issue #299, #301）。
+        // 一括選択中も、個別記録と一括記録のどちらを操作しているのか
+        // 分からなくなるため出さない（Issue #312）。
+        trailing: (!isViewingToday || _selectedPlantIds.isNotEmpty)
+            ? null
+            : _buildQuickRecordButton(
+                plant,
+                logStatus,
+                nextWateringDateCache,
+                nextFertilizerDateCache,
+                nextVitalizerDateCache,
+                isPastDue,
+              ),
         onTap: () => _navigateToPlantDetail(plant),
       );
 
@@ -1810,22 +1920,26 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     DateTime? nextFertilizerDate,
     DateTime? nextVitalizerDate,
     DateTime selectedDay,
-    bool isOverdue,
     bool hasAnyLog,
     bool isWatered,
     bool isFertilized,
     bool isVitalized,
     DailyLogStatus logStatus,
   ) {
-    // 肥料・活力剤の超過判定も今日基準で統一する (#124)
+    // 肥料・活力剤の超過判定も今日基準で統一する (#124)。
+    // 「予定日 < 今日」だけを超過とし、予定日が今日ちょうどのものは含めない。
+    // セクション分割（_isPastDue）と判定を揃え、「今日の予定」セクションのカードに
+    // 超過色のチップが出る矛盾を防ぐ（Issue #298）。
     final today = AppDateUtils.getDateOnly(DateTime.now());
-    bool isDateDue(DateTime? d) =>
-        d != null && !AppDateUtils.getDateOnly(d).isAfter(today);
+    bool isDatePastDue(DateTime? d) =>
+        d != null && AppDateUtils.getDateOnly(d).isBefore(today);
 
-    // 次回予定は「今日」からの相対表示のため、過去日を見ているときに出すと
+    // 次回予定は「今日」からの相対表示のため、今日以外を見ているときに出すと
     // その日の状態と誤解される（4/22 を見ているのに「2日後」と出る）。
     // 過去日ではその日の記録だけを示す（Issue #249）。
-    final isPastDate = selectedDay.isBefore(today);
+    // 未来日にも同じ問題があり、「明日」の画面に「3日前（予定超過）」と
+    // 出てしまうため、今日以外はまとめて出さない（Issue #301）。
+    final isViewingToday = AppDateUtils.isSameDay(selectedDay, today);
 
     // 水やり・肥料・活力剤の予定を横並び1行でまとめて表示する (#125)
     return Column(
@@ -1833,7 +1947,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       children: [
         if (plant.variety != null) Text(plant.variety!),
         // 予定がある項目を Wrap で横並びにまとめる
-        if (!isPastDate &&
+        if (isViewingToday &&
             (nextWateringDate != null ||
                 nextFertilizerDate != null ||
                 nextVitalizerDate != null))
@@ -1845,21 +1959,21 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 _buildScheduleChip(
                   icon: Icons.water_drop,
                   label: AppDateUtils.formatDateDifference(nextWateringDate),
-                  isOverdue: isOverdue,
+                  isOverdue: isDatePastDue(nextWateringDate),
                   normalColor: Theme.of(context).colorScheme.primary,
                 ),
               if (nextFertilizerDate != null)
                 _buildScheduleChip(
                   icon: Icons.grass,
                   label: AppDateUtils.formatDateDifference(nextFertilizerDate),
-                  isOverdue: isDateDue(nextFertilizerDate),
+                  isOverdue: isDatePastDue(nextFertilizerDate),
                   normalColor: Theme.of(context).colorScheme.secondary,
                 ),
               if (nextVitalizerDate != null)
                 _buildScheduleChip(
                   icon: Icons.favorite,
                   label: AppDateUtils.formatDateDifference(nextVitalizerDate),
-                  isOverdue: isDateDue(nextVitalizerDate),
+                  isOverdue: isDatePastDue(nextVitalizerDate),
                   normalColor: Theme.of(context).colorScheme.tertiary,
                 ),
             ],
@@ -2129,22 +2243,35 @@ class _LogListItem {
   /// 記録済みの折りたたみ行の件数（折りたたみ行以外では null）
   final int? completedCount;
 
+  /// その日のケアを完了したことを示す表示か（Issue #305）
+  final bool isAllDone;
+
   const _LogListItem.header(String label, Color color)
       : headerLabel = label,
         headerColor = color,
         plant = null,
-        completedCount = null;
+        completedCount = null,
+        isAllDone = false;
 
   const _LogListItem.plant(this.plant)
       : headerLabel = null,
         headerColor = null,
-        completedCount = null;
+        completedCount = null,
+        isAllDone = false;
 
   const _LogListItem.completed(int count)
       : headerLabel = null,
         headerColor = null,
         plant = null,
-        completedCount = count;
+        completedCount = count,
+        isAllDone = false;
+
+  const _LogListItem.allDone()
+      : headerLabel = null,
+        headerColor = null,
+        plant = null,
+        completedCount = null,
+        isAllDone = true;
 }
 
 /// ログチップの設定
