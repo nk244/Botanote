@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive_io.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -326,6 +327,28 @@ class ExportService {
     return _importData(data, const {});
   }
 
+  /// ノートの `imagePaths` を文字列リストとして取り出す。
+  ///
+  /// ZIP エクスポートが書き出す `'|'` 区切りと、DB の `Note.toMap()` が書き出す
+  /// JSON 配列（写真が無ければ `"[]"`）の両方を受け取る。判別できない値は
+  /// 空リストとして扱い、参照が無いものを未解決として数えないようにする。
+  @visibleForTesting
+  static List<String> parseImagePathList(dynamic raw) {
+    if (raw is List) return raw.map((e) => e.toString()).toList();
+    if (raw is! String || raw.isEmpty) return const [];
+
+    final trimmed = raw.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) return decoded.map((e) => e.toString()).toList();
+      } catch (_) {
+        // JSON として壊れている場合は '|' 区切りとして解釈を試みる
+      }
+    }
+    return raw.split('|').where((path) => path.isNotEmpty).toList();
+  }
+
   /// [data] を DB に保存する。[pathMap] は ZIP 内相対パス→絶対パスの対応表。
   Future<ImportResult> _importData(
     Map<String, dynamic> data,
@@ -410,11 +433,12 @@ class ExportService {
     final notesJson = data['notes'] as List<dynamic>? ?? [];
     for (final n in notesJson) {
       final map = Map<String, dynamic>.from(n as Map);
-      // imagePaths を絶対パスに解決（'|' 区切り文字列）
-      if (map['imagePaths'] != null && (map['imagePaths'] as String).isNotEmpty) {
-        final relPaths = (map['imagePaths'] as String)
-            .split('|')
-            .where((path) => path.isNotEmpty);
+      // imagePaths を絶対パスに解決する。
+      // ZIP エクスポートは '|' 区切り、DB 由来の値は JSON 配列（写真なしなら "[]"）
+      // の両方がありうるため、素朴に '|' で分割すると "[]" を1件の参照として
+      // 数えてしまい、写真の無いノートの数だけ誤った警告が出る。
+      final relPaths = parseImagePathList(map['imagePaths']);
+      if (relPaths.isNotEmpty) {
         final absPaths = <String>[];
         var unresolvedInNote = 0;
         for (final rel in relPaths) {

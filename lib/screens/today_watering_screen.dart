@@ -1738,12 +1738,19 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       color: isSelected
           ? scheme.primaryContainer.withValues(alpha: 0.3)
           : null,
-      child: Row(
-        // アクセントラインをカードの高さいっぱいに伸ばすため stretch にする
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // アクセントラインは Stack で重ねる。Row + CrossAxisAlignment.stretch だと
+      // ListView 内で高さが非制約になり、子に無限高さが渡ってレイアウトが壊れる。
+      child: Stack(
         children: [
-          if (isPastDue) Container(width: 4, color: scheme.error),
-          Expanded(child: tile),
+          tile,
+          if (isPastDue)
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 4,
+              child: ColoredBox(color: scheme.error),
+            ),
         ],
       ),
     );
