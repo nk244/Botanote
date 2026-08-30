@@ -277,6 +277,82 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
+  /// 置き場所を新規作成するダイアログを表示し、作成できたらそれを選択する。
+  ///
+  /// 置き場所が未登録のまま植物登録に入った利用者が、登録を中断せずに
+  /// その場で置き場所を用意できるようにする（Issue #291）。
+  Future<void> _createLocationAndSelect() async {
+    final nameController = TextEditingController();
+    var isOutdoor = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('置き場所を追加'),
+          // 置き場所一覧の追加ダイアログと同じ理由で自動フォーカスしない（Issue #268）
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: '場所名',
+                    border: OutlineInputBorder(),
+                    hintText: '例: リビング、ベランダ',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                  onSubmitted: (_) => FocusScope.of(ctx).unfocus(),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('屋外'),
+                  subtitle: const Text('天気連動ケアアラートの対象になります'),
+                  value: isOutdoor,
+                  onChanged: (value) {
+                    FocusScope.of(ctx).unfocus();
+                    setDialogState(() => isOutdoor = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: nameController.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.of(ctx).pop(true),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final name = nameController.text.trim();
+    nameController.dispose();
+    if (confirmed != true || name.isEmpty || !mounted) return;
+
+    try {
+      final created =
+          await context.read<LocationProvider>().addLocation(name, isOutdoor);
+      if (!mounted) return;
+      setState(() => _locationId = created.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('置き場所の作成に失敗しました: ${describeError(e)}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -474,10 +550,14 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                     locations.any((l) => l.id == _locationId) ? _locationId : null;
                 return DropdownButtonFormField<String?>(
                   initialValue: validValue,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '置き場所（任意）',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.home_outlined),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.home_outlined),
+                    // 置き場所が0件のときは新規作成の導線を見つけやすくする（Issue #291）
+                    helperText: locations.isEmpty
+                        ? 'まだ置き場所がありません。「新しい置き場所を作成」から追加できます'
+                        : null,
                   ),
                   items: [
                     const DropdownMenuItem<String?>(
@@ -488,8 +568,35 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                           value: location.id,
                           child: Text(location.name),
                         )),
+                    // 登録を中断せずにその場で置き場所を作れるようにする（Issue #291）
+                    DropdownMenuItem<String?>(
+                      value: _createLocationValue,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.add,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '新しい置き場所を作成',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
+                    if (value == _createLocationValue) {
+                      // ドロップダウンの表示値は元に戻し、作成できたら選択し直す
+                      setState(() {});
+                      _createLocationAndSelect();
+                      return;
+                    }
                     setState(() => _locationId = value);
                   },
                 );
@@ -925,3 +1032,8 @@ class _LogIntervalDialogState extends State<_LogIntervalDialog> {
     );
   }
 }
+
+/// 置き場所ドロップダウンで「新しい置き場所を作成」を表すセンチネル値（Issue #291）。
+///
+/// 実際の置き場所IDは UUID v4 のため、この値と衝突しない。
+const String _createLocationValue = '__create_new_location__';

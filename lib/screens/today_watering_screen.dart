@@ -11,6 +11,7 @@ import '../models/daily_log_status.dart';
 import '../models/app_settings.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
+import '../widgets/plant_picker_dialog.dart';
 import 'care_stats_screen.dart';
 import 'plant_detail_screen.dart';
 import 'settings_screen.dart';
@@ -62,6 +63,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   static const int _cacheMaxSize = 20;
 
   final Set<String> _selectedPlantIds = {};
+
+  /// 記録済みセクションを展開しているか（Issue #294）
+  bool _isCompletedExpanded = false;
   final Set<LogType> _selectedBulkLogTypes = {LogType.watering};
   final ScrollController _listScrollController = ScrollController();
 
@@ -962,7 +966,14 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             return Column(
               children: [
                 _buildDateHeader(date, isToday),
-                if (logStatus.hasAnyRecords) _buildSummaryFor(logStatus),
+                if (isToday)
+                  _buildStatusSummaryBand(
+                    plantsForDate, logStatus,
+                    nextWateringDateCache, nextFertilizerDateCache,
+                    nextVitalizerDateCache,
+                  )
+                else if (logStatus.hasAnyRecords)
+                  _buildSummaryFor(logStatus),
                 Expanded(
                   child: _buildPlantList(
                     plantsForDate, isToday, logStatus,
@@ -1073,6 +1084,95 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     }
   }
 
+  /// 今日の状況を「予定超過 / 今日の予定 / 記録済み」の3タイルで示す帯（Issue #294）。
+  ///
+  /// リストを見る前に、まず何件やることが残っているかが分かるようにする。
+  Widget _buildStatusSummaryBand(
+    List<Plant> plantsForDate,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    var overdueCount = 0;
+    var dueTodayCount = 0;
+    var recordedCount = 0;
+
+    for (final plant in plantsForDate) {
+      if (logStatus.hasAnyLog(plant.id)) recordedCount++;
+      if (logStatus.isWatered(plant.id)) continue;
+      if (_isPastDue(plant.id, nextWateringDateCache, nextFertilizerDateCache,
+          nextVitalizerDateCache)) {
+        overdueCount++;
+      } else if (_isDueOn(plant.id, today, nextWateringDateCache,
+          nextFertilizerDateCache, nextVitalizerDateCache)) {
+        dueTodayCount++;
+      }
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          _buildSummaryTile('予定超過', overdueCount, scheme.errorContainer,
+              scheme.onErrorContainer),
+          const SizedBox(width: 8),
+          _buildSummaryTile('今日の予定', dueTodayCount, scheme.primaryContainer,
+              scheme.onPrimaryContainer),
+          const SizedBox(width: 8),
+          _buildSummaryTile('記録済み', recordedCount,
+              scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryTile(
+      String label, int count, Color background, Color foreground) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  '$count',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: foreground,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(width: 2),
+                Text('件',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: foreground)),
+              ],
+            ),
+            Text(
+              label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: foreground, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSummaryFor(DailyLogStatus logStatus) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1139,6 +1239,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         .where((plant) => logStatus.isWatered(plant.id))
         .toList();
 
+    final items = _buildLogListItems(
+      incompletePlants,
+      completedPlants,
+      isToday,
+      nextWateringDateCache,
+      nextFertilizerDateCache,
+      nextVitalizerDateCache,
+    );
+
     return Column(
       children: [
         if (incompletePlants.isNotEmpty)
@@ -1148,27 +1257,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             controller: _listScrollController,
             padding: const EdgeInsets.only(
                 left: 8, right: 8, top: 8, bottom: 80),
-            itemCount: incompletePlants.length +
-                (completedPlants.isNotEmpty ? 1 : 0) +
-                completedPlants.length,
+            itemCount: items.length,
             itemBuilder: (context, index) {
-              if (index < incompletePlants.length) {
+              final item = items[index];
+              final plant = item.plant;
+              if (plant != null) {
                 return _buildPlantCard(
-                    incompletePlants[index], logStatus,
+                    plant, logStatus,
                     nextWateringDateCache, nextFertilizerDateCache,
                     nextVitalizerDateCache, date);
               }
-              if (index == incompletePlants.length &&
-                  completedPlants.isNotEmpty) {
-                return _buildDivider();
+              if (item.completedCount != null) {
+                return _buildCompletedToggle(item.completedCount!);
               }
-              final completedIndex = index -
-                  incompletePlants.length -
-                  (completedPlants.isNotEmpty ? 1 : 0);
-              return _buildPlantCard(
-                  completedPlants[completedIndex], logStatus,
-                  nextWateringDateCache, nextFertilizerDateCache,
-                  nextVitalizerDateCache, date);
+              return _buildSectionHeader(item.headerLabel!, item.headerColor!);
             },
           ),
         ),
@@ -1179,6 +1281,138 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           _buildAddUnscheduledWateringButton(hasPlants: true),
       ],
     );
+  }
+
+  /// リストに並べる要素（セクション見出し・植物カード・記録済みの折りたたみ）を組み立てる。
+  ///
+  /// 今日を見ているときだけ「予定超過」「今日の予定」に分ける。過去日・未来日では
+  /// 「今日から見た遅れ」を見出しにすると誤解を招くため、従来どおり一列に並べる（Issue #294）。
+  List<_LogListItem> _buildLogListItems(
+    List<Plant> incompletePlants,
+    List<Plant> completedPlants,
+    bool isToday,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final items = <_LogListItem>[];
+
+    if (isToday) {
+      final today = AppDateUtils.getDateOnly(DateTime.now());
+      final overdue = <Plant>[];
+      final dueToday = <Plant>[];
+      final upcoming = <Plant>[];
+
+      for (final plant in incompletePlants) {
+        if (_isPastDue(plant.id, nextWateringDateCache,
+            nextFertilizerDateCache, nextVitalizerDateCache)) {
+          overdue.add(plant);
+        } else if (_isDueOn(plant.id, today, nextWateringDateCache,
+            nextFertilizerDateCache, nextVitalizerDateCache)) {
+          dueToday.add(plant);
+        } else {
+          upcoming.add(plant);
+        }
+      }
+
+      void addSection(String label, Color color, List<Plant> plants) {
+        if (plants.isEmpty) return;
+        items.add(_LogListItem.header(label, color));
+        items.addAll(plants.map(_LogListItem.plant));
+      }
+
+      addSection('予定超過', scheme.error, overdue);
+      addSection('今日の予定', scheme.primary, dueToday);
+      addSection('これからの予定', scheme.outline, upcoming);
+    } else {
+      items.addAll(incompletePlants.map(_LogListItem.plant));
+    }
+
+    if (completedPlants.isNotEmpty) {
+      items.add(_LogListItem.completed(completedPlants.length));
+      if (_isCompletedExpanded) {
+        items.addAll(completedPlants.map(_LogListItem.plant));
+      }
+    }
+    return items;
+  }
+
+  /// セクション見出し（色ドット＋ラベル）。Issue #294。
+  Widget _buildSectionHeader(String label, Color color) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 記録済みをまとめる折りたたみ行（Issue #294）。
+  Widget _buildCompletedToggle(int count) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Material(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () =>
+              setState(() => _isCompletedExpanded = !_isCompletedExpanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, size: 20, color: scheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '記録済み $count件',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Icon(
+                  _isCompletedExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// いずれかの予定日が [day] と同じかどうかを返す。
+  bool _isDueOn(
+    String plantId,
+    DateTime day,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    return [
+      _dueDateOnly(plantId, nextWateringDateCache),
+      _dueDateOnly(plantId, nextFertilizerDateCache),
+      _dueDateOnly(plantId, nextVitalizerDateCache),
+    ].any((date) => date != null && AppDateUtils.isSameDay(date, day));
   }
 
   Widget _buildBulkSelectionHeader(List<Plant> incompletePlants) {
@@ -1294,48 +1528,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     await context.read<PlantProvider>().loadPlants();
   }
 
-  Widget _buildDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Divider(
-              thickness: 2,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.check_circle,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '水やり完了',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Divider(
-              thickness: 2,
-              color: Theme.of(context).colorScheme.outline,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAddUnscheduledWateringButton({bool hasPlants = false}) {
     return Container(
       decoration: BoxDecoration(
@@ -1429,14 +1621,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     }
     if (!context.mounted) return;
 
-    final selectedPlants = await showDialog<List<Plant>>(
-      context: context,
-      builder: (context) => _UnscheduledWateringDialog(
-        plants: unscheduledPlants,
-      ),
+    // 3画面で共通のダイアログを使う（Issue #293）
+    final selectedIds = await PlantPickerDialog.show(
+      context,
+      title: '水やり記録をつける',
+      confirmLabel: '記録する',
+      candidates: unscheduledPlants,
+      allowEmptyConfirm: false,
+      showImages: true,
     );
+    final selectedPlants = selectedIds == null
+        ? <Plant>[]
+        : unscheduledPlants.where((p) => selectedIds.contains(p.id)).toList();
 
-    if (selectedPlants != null && selectedPlants.isNotEmpty && mounted) {
+    if (selectedPlants.isNotEmpty && mounted) {
       // ログ種別選択ダイアログを表示
       final selectedLogTypes = await showDialog<Set<LogType>>(
         context: context,
@@ -1485,16 +1683,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     // 水やり超過: 予定日 ≦ 今日
     final isOverdue = nextDay != null && !nextDay.isAfter(today);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      elevation: isSelected ? 4 : 1,
-      color: isSelected
-          ? Theme.of(context)
-              .colorScheme
-              .primaryContainer
-              .withValues(alpha: 0.3)
-          : null,
-      child: ListTile(
+    // 予定超過（予定日 < 今日）のカードは左端にエラー色のラインを引いて
+    // リストの中でひと目で拾えるようにする（Issue #294）
+    final isPastDue = _isPastDue(
+      plant.id,
+      nextWateringDateCache,
+      nextFertilizerDateCache,
+      nextVitalizerDateCache,
+    );
+    final scheme = Theme.of(context).colorScheme;
+
+    final tile = ListTile(
         leading: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1520,7 +1719,70 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           isVitalized,
           logStatus,
         ),
+        // 予定がある未記録の植物には、その場で記録できるボタンを出す（Issue #294）
+        trailing: _buildQuickRecordButton(
+          plant,
+          logStatus,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+          isPastDue,
+        ),
         onTap: () => _navigateToPlantDetail(plant),
+      );
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      elevation: isSelected ? 4 : 1,
+      clipBehavior: Clip.antiAlias,
+      color: isSelected
+          ? scheme.primaryContainer.withValues(alpha: 0.3)
+          : null,
+      child: Row(
+        // アクセントラインをカードの高さいっぱいに伸ばすため stretch にする
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (isPastDue) Container(width: 4, color: scheme.error),
+          Expanded(child: tile),
+        ],
+      ),
+    );
+  }
+
+  /// カード右端のワンタップ記録ボタン（Issue #294）。
+  ///
+  /// 予定が無い、またはその日すでに記録済みの植物には出さない。
+  /// 遅れている種別を優先して記録する。
+  Widget? _buildQuickRecordButton(
+    Plant plant,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+    bool isPastDue,
+  ) {
+    final logType = _quickRecordLogType(
+      plant.id,
+      logStatus,
+      nextWateringDateCache,
+      nextFertilizerDateCache,
+      nextVitalizerDateCache,
+    );
+    if (logType == null) return null;
+
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: IconButton(
+        icon: Icon(_getLogTypeIcon(logType)),
+        tooltip: '${_getLogTypeName(logType)}を記録',
+        style: IconButton.styleFrom(
+          backgroundColor: isPastDue ? scheme.primary : scheme.primaryContainer,
+          foregroundColor:
+              isPastDue ? scheme.onPrimary : scheme.onPrimaryContainer,
+        ),
+        onPressed: () => _recordSingleLog(plant, logType),
       ),
     );
   }
@@ -1613,20 +1875,41 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   }
 
   /// 予定日チップ（アイコン＋テキスト）を構築する (#125)
+  ///
+  /// 超過しているものだけ errorContainer で塗りつぶし、リストの中で
+  /// 遅れている予定が拾えるようにする（Issue #294）。
   Widget _buildScheduleChip({
     required IconData icon,
     required String label,
     required bool isOverdue,
     required Color normalColor,
   }) {
-    final color = isOverdue ? Theme.of(context).colorScheme.error : normalColor;
-    return Row(
+    final scheme = Theme.of(context).colorScheme;
+    final color = isOverdue ? scheme.onErrorContainer : normalColor;
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 14, color: color),
         const SizedBox(width: 3),
-        Text(label, style: TextStyle(color: isOverdue ? color : null, fontSize: 12)),
+        Text(
+          label,
+          style: TextStyle(
+            color: isOverdue ? color : null,
+            fontSize: 12,
+            fontWeight: isOverdue ? FontWeight.w700 : null,
+          ),
+        ),
       ],
+    );
+
+    if (!isOverdue) return row;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: row,
     );
   }
 
@@ -1733,6 +2016,128 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         return 'その他';
     }
   }
+
+  IconData _getLogTypeIcon(LogType type) {
+    switch (type) {
+      case LogType.fertilizer:
+        return Icons.grass;
+      case LogType.vitalizer:
+        return Icons.favorite;
+      default:
+        return Icons.water_drop;
+    }
+  }
+
+  /// 予定日（日付のみ）を取り出す。予定が無ければ null。
+  DateTime? _dueDateOnly(String plantId, Map<String, DateTime?> cache) {
+    final date = cache[plantId];
+    return date == null ? null : AppDateUtils.getDateOnly(date);
+  }
+
+  /// 予定超過（いずれかの予定日が今日より前）かどうかを返す（Issue #294）。
+  bool _isPastDue(
+    String plantId,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    return [
+      _dueDateOnly(plantId, nextWateringDateCache),
+      _dueDateOnly(plantId, nextFertilizerDateCache),
+      _dueDateOnly(plantId, nextVitalizerDateCache),
+    ].any((date) => date != null && date.isBefore(today));
+  }
+
+  /// ワンタップ記録ボタンで記録する種別を返す（Issue #294）。
+  ///
+  /// 予定日が今日以前で、かつ選択日にまだ記録していない種別のうち、
+  /// 最も予定日が早いものを選ぶ。該当が無ければ null（ボタンを出さない）。
+  LogType? _quickRecordLogType(
+    String plantId,
+    DailyLogStatus logStatus,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    final candidates = <LogType, DateTime?>{
+      LogType.watering: logStatus.isWatered(plantId)
+          ? null
+          : _dueDateOnly(plantId, nextWateringDateCache),
+      LogType.fertilizer: logStatus.isFertilized(plantId)
+          ? null
+          : _dueDateOnly(plantId, nextFertilizerDateCache),
+      LogType.vitalizer: logStatus.isVitalized(plantId)
+          ? null
+          : _dueDateOnly(plantId, nextVitalizerDateCache),
+    };
+
+    LogType? best;
+    DateTime? bestDate;
+    for (final entry in candidates.entries) {
+      final date = entry.value;
+      if (date == null || date.isAfter(today)) continue;
+      if (bestDate == null || date.isBefore(bestDate)) {
+        best = entry.key;
+        bestDate = date;
+      }
+    }
+    return best;
+  }
+
+  /// 1件だけその場で記録する（Issue #294）。取り消しは SnackBar から行える。
+  Future<void> _recordSingleLog(Plant plant, LogType logType) async {
+    final plantProvider = context.read<PlantProvider>();
+    await plantProvider.bulkRecordLogs([plant.id], [logType], _selectedDate);
+    await _refreshAfterLogChange();
+    _showSuccessMessage(
+      '${plant.name}に${_getLogTypeName(logType)}を記録しました',
+      onUndo: () async {
+        final deleted = await plantProvider.deleteMultipleLogsForDate(
+          plant.id,
+          [logType],
+          _selectedDate,
+        );
+        await _refreshAfterLogChange();
+        if (deleted.isNotEmpty) _showSuccessMessage('記録を取り消しました');
+      },
+    );
+  }
+}
+
+/// 水やりログのリストに並べる1要素（Issue #294）。
+///
+/// セクション見出し・植物カード・記録済みの折りたたみ行のいずれかを表す。
+class _LogListItem {
+  /// セクション見出しのラベル（見出し以外では null）
+  final String? headerLabel;
+
+  /// セクション見出しの色（見出し以外では null）
+  final Color? headerColor;
+
+  /// 植物カードとして表示する植物（カード以外では null）
+  final Plant? plant;
+
+  /// 記録済みの折りたたみ行の件数（折りたたみ行以外では null）
+  final int? completedCount;
+
+  const _LogListItem.header(String label, Color color)
+      : headerLabel = label,
+        headerColor = color,
+        plant = null,
+        completedCount = null;
+
+  const _LogListItem.plant(this.plant)
+      : headerLabel = null,
+        headerColor = null,
+        completedCount = null;
+
+  const _LogListItem.completed(int count)
+      : headerLabel = null,
+        headerColor = null,
+        plant = null,
+        completedCount = count;
 }
 
 /// ログチップの設定
@@ -1834,118 +2239,6 @@ class _LogTypeSelectionDialogState extends State<_LogTypeSelectionDialog> {
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_selectedTypes),
-          child: const Text('記録する'),
-        ),
-      ],
-    );
-  }
-}
-
-/// 未予定植物の複数選択ダイアログ
-class _UnscheduledWateringDialog extends StatefulWidget {
-  final List<Plant> plants;
-
-  const _UnscheduledWateringDialog({required this.plants});
-
-  @override
-  State<_UnscheduledWateringDialog> createState() => _UnscheduledWateringDialogState();
-}
-
-class _UnscheduledWateringDialogState extends State<_UnscheduledWateringDialog> {
-  String _searchQuery = '';
-  final Set<String> _selectedIds = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final filteredPlants = widget.plants
-        .where((plant) =>
-            plant.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-            (plant.variety?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false))
-        .toList();
-
-    return AlertDialog(
-      title: const Text('水やり記録をつける'),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: '検索',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            // 選択件数表示
-            if (_selectedIds.isNotEmpty)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  '${_selectedIds.length}件選択中',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: filteredPlants.isEmpty
-                  ? const Center(child: Text('植物が見つかりません'))
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: filteredPlants.length,
-                      itemBuilder: (context, index) {
-                        final plant = filteredPlants[index];
-                        final isChecked = _selectedIds.contains(plant.id);
-                        return CheckboxListTile(
-                          value: isChecked,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == true) {
-                                _selectedIds.add(plant.id);
-                              } else {
-                                _selectedIds.remove(plant.id);
-                              }
-                            });
-                          },
-                          secondary: PlantImageWidget(
-                              plant: plant, width: 40, height: 40),
-                          title: Text(plant.name),
-                          subtitle:
-                              plant.variety != null ? Text(plant.variety!) : null,
-                          controlAffinity: ListTileControlAffinity.leading,
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('キャンセル'),
-        ),
-        FilledButton(
-          // 未選択時は非活性
-          onPressed: _selectedIds.isEmpty
-              ? null
-              : () {
-                  final selected = widget.plants
-                      .where((p) => _selectedIds.contains(p.id))
-                      .toList();
-                  Navigator.of(context).pop(selected);
-                },
           child: const Text('記録する'),
         ),
       ],

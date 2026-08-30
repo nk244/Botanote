@@ -28,8 +28,11 @@ class LocationProvider with ChangeNotifier {
     }
   }
 
-  /// 置き場所を新規追加する。
-  Future<void> addLocation(String name, bool isOutdoor) async {
+  /// 置き場所を新規追加し、追加した置き場所を返す。
+  ///
+  /// 追加直後にその場所を選択状態にしたい呼び出し元（植物登録画面）が
+  /// ID を必要とするため、生成した [Location] を返す（Issue #291）。
+  Future<Location> addLocation(String name, bool isOutdoor) async {
     final now = DateTime.now();
     final location = Location(
       id: const Uuid().v4(),
@@ -40,6 +43,7 @@ class LocationProvider with ChangeNotifier {
     );
     await _db.insertLocation(location);
     await loadLocations();
+    return location;
   }
 
   /// 置き場所を更新する。

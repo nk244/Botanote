@@ -765,10 +765,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // ダイアログ表示中もスピナーが回り続けないよう、先に読み込み状態を解除する
       setState(() => _isImporting = false);
       // 復元結果は見逃すと影響が大きいため、SnackBar ではなくダイアログで示す（Issue #225）
+      // 画像を復元できなかった場合は、成功メッセージに紛れないよう警告として出す（Issue #289）
+      final imageWarning = result.imageWarning;
       await _showImportResultDialog(
         context,
-        title: 'インポートが完了しました',
-        message: '以下のデータを復元しました。\n\n$result',
+        title: imageWarning == null ? 'インポートが完了しました' : 'インポートが完了しました（一部の写真は未復元）',
+        message: imageWarning == null
+            ? '以下のデータを復元しました。\n\n$result'
+            : '以下のデータを復元しました。\n\n$result\n\n⚠ $imageWarning',
       );
     } catch (e) {
       debugPrint('インポートに失敗: $e');

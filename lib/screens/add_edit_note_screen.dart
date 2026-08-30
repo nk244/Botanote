@@ -3,11 +3,11 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../providers/plant_provider.dart';
-import '../providers/settings_provider.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
 import '../services/claude_share_service.dart';
 import '../widgets/claude_share_hint_dialog.dart';
+import '../widgets/plant_picker_dialog.dart';
 import '../utils/error_utils.dart';
 
 class AddEditNoteScreen extends StatefulWidget {
@@ -412,61 +412,18 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   Future<void> _selectPlants(BuildContext context, PlantProvider plantProv) async {
     // 植物データが未ロードの場合は先にロードする
     if (plantProv.plants.isEmpty) await plantProv.loadPlants();
+    if (!context.mounted) return;
 
-    // ソート設定に従って並べた植物リストを取得する
-    final settings = context.read<SettingsProvider>(); // ignore: use_build_context_synchronously
-    final allPlants = plantProv.getSortedPlants(
-      settings.plantSortOrder,
-      settings.customSortOrder,
+    // 並び順・検索・全選択は共通ダイアログ側で面倒を見る（Issue #293）
+    final selectedIds = await PlantPickerDialog.show(
+      context,
+      title: '植物を選択',
+      confirmLabel: 'OK',
+      initialSelectedIds: _selectedPlantIds.toSet(),
     );
-    final tempSelected = List<String>.from(_selectedPlantIds);
 
-    await showDialog<void>(
-      context: context, // ignore: use_build_context_synchronously
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            return AlertDialog(
-              title: const Text('植物を選択'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: ListView(
-                  shrinkWrap: true,
-                  children: allPlants.map((p) {
-                    final checked = tempSelected.contains(p.id);
-                    return CheckboxListTile(
-                      value: checked,
-                      title: Text(p.name),
-                      subtitle: p.variety != null ? Text(p.variety!) : null,
-                      onChanged: (v) {
-                        setDialogState(() {
-                          if (v == true) {
-                            if (!tempSelected.contains(p.id)) {
-                              tempSelected.add(p.id);
-                            }
-                          } else {
-                            tempSelected.remove(p.id);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('キャンセル')),
-                TextButton(
-                    onPressed: () {
-                      setState(() => _selectedPlantIds = List.from(tempSelected));
-                      Navigator.of(ctx).pop();
-                    },
-                    child: const Text('OK')),
-              ],
-            );
-          },
-        );
-      },
-    );
+    if (selectedIds == null || !mounted) return;
+    setState(() => _selectedPlantIds = selectedIds.toList());
   }
 
   void _showImageSourceOptions() async {
