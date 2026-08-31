@@ -79,11 +79,7 @@ class LogEntry {
   }
 
   /// フィールドを部分的に更新した新しい LogEntry を返す。
-  LogEntry copyWith({
-    DateTime? date,
-    String? note,
-    DateTime? updatedAt,
-  }) {
+  LogEntry copyWith({DateTime? date, String? note, DateTime? updatedAt}) {
     return LogEntry(
       id: id,
       plantId: plantId,

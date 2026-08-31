@@ -46,7 +46,9 @@ class LogService {
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
 
     return logs.where((log) {
-      return log.date.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+      return log.date.isAfter(
+            startOfDay.subtract(const Duration(seconds: 1)),
+          ) &&
           log.date.isBefore(endOfDay.add(const Duration(seconds: 1)));
     }).toList();
   }

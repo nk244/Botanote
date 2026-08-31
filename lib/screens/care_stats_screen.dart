@@ -189,53 +189,56 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _logs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.bar_chart,
-                        size: 64,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'まだケアの記録がありません',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '水やり・肥料等を記録すると、ここで振り返れます',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.bar_chart,
+                    size: 64,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.5),
                   ),
-                )
-              : Consumer<PlantProvider>(
-                  builder: (context, plantProvider, _) {
-                    return ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _buildPeriodSelector(context),
-                        const SizedBox(height: 20),
-                        Text('月別ケア件数（$_periodCaption）',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 12),
-                        _buildMonthlyChart(context),
-                        const SizedBox(height: 24),
-                        Text('種別ごとの件数（$_periodCaption）',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 12),
-                        _buildTypeCounts(context),
-                        const SizedBox(height: 24),
-                        _buildPlantRankingSection(context, plantProvider.plants),
-                      ],
-                    );
-                  },
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'まだケアの記録がありません',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '水やり・肥料等を記録すると、ここで振り返れます',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            )
+          : Consumer<PlantProvider>(
+              builder: (context, plantProvider, _) {
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildPeriodSelector(context),
+                    const SizedBox(height: 20),
+                    Text(
+                      '月別ケア件数（$_periodCaption）',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMonthlyChart(context),
+                    const SizedBox(height: 24),
+                    Text(
+                      '種別ごとの件数（$_periodCaption）',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTypeCounts(context),
+                    const SizedBox(height: 24),
+                    _buildPlantRankingSection(context, plantProvider.plants),
+                  ],
+                );
+              },
+            ),
     );
   }
 
@@ -245,10 +248,12 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
       width: double.infinity,
       child: SegmentedButton<StatsPeriod>(
         segments: StatsPeriod.values
-            .map((period) => ButtonSegment<StatsPeriod>(
-                  value: period,
-                  label: Text(_periodLabel(period)),
-                ))
+            .map(
+              (period) => ButtonSegment<StatsPeriod>(
+                value: period,
+                label: Text(_periodLabel(period)),
+              ),
+            )
             .toList(),
         selected: {_period},
         showSelectedIcon: false,
@@ -278,7 +283,9 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
 
   Widget _buildMonthlyChart(BuildContext context) {
     final monthly = _monthlyCounts();
-    final maxCount = monthly.map((e) => e.value).fold(0, (a, b) => a > b ? a : b);
+    final maxCount = monthly
+        .map((e) => e.value)
+        .fold(0, (a, b) => a > b ? a : b);
     const chartHeight = 120.0;
     // 6ヶ月までは画面幅いっぱいに広げ、それ以上は横スクロールにして
     // 棒とラベルが潰れないようにする（Issue #290）
@@ -290,8 +297,9 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
       final i = indexed.key;
       final entry = indexed.value;
       final prevMonth = i > 0 ? monthly[i - 1].key : null;
-      final barHeight =
-          maxCount == 0 ? 0.0 : chartHeight * entry.value / maxCount;
+      final barHeight = maxCount == 0
+          ? 0.0
+          : chartHeight * entry.value / maxCount;
       final bar = Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
@@ -348,13 +356,16 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
-                Icon(_typeIcon(type),
-                    color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  _typeIcon(type),
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(height: 4),
-                Text('$count回',
-                    style: Theme.of(context).textTheme.titleMedium),
-                Text(_typeLabel(type),
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text('$count回', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  _typeLabel(type),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
@@ -368,14 +379,15 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
     final ranking = _plantRanking(plants);
     final isTruncated =
         !_showAllRanking && ranking.length > _rankingCollapsedCount;
-    final visible =
-        isTruncated ? ranking.take(_rankingCollapsedCount).toList() : ranking;
+    final visible = isTruncated
+        ? ranking.take(_rankingCollapsedCount).toList()
+        : ranking;
 
     final heading = ranking.isEmpty
         ? '植物ごとのケア頻度'
         : isTruncated
-            ? '植物ごとのケア頻度（上位$_rankingCollapsedCount件）'
-            : '植物ごとのケア頻度（全${ranking.length}件）';
+        ? '植物ごとのケア頻度（上位$_rankingCollapsedCount件）'
+        : '植物ごとのケア頻度（全${ranking.length}件）';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,7 +413,9 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
   }
 
   Widget _buildPlantRanking(
-      BuildContext context, List<MapEntry<Plant, int>> ranking) {
+    BuildContext context,
+    List<MapEntry<Plant, int>> ranking,
+  ) {
     if (ranking.isEmpty) {
       return Text('データがありません', style: Theme.of(context).textTheme.bodySmall);
     }
@@ -418,11 +432,12 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
             child: Text('$rank', style: const TextStyle(fontSize: 12)),
           ),
           title: Text(plant.name),
-          trailing: Text('$count回',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          trailing: Text(
+            '$count回',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
         );
       }).toList(),
     );

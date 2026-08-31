@@ -80,10 +80,9 @@ class ExportService {
     await tmpFile.writeAsBytes(zipBytes);
 
     // OS のシェアシート経由で保存先を選ばせる
-    final result = await Share.shareXFiles(
-      [XFile(tmpFile.path, mimeType: 'application/zip')],
-      subject: 'Botanote バックアップ',
-    );
+    final result = await Share.shareXFiles([
+      XFile(tmpFile.path, mimeType: 'application/zip'),
+    ], subject: 'Botanote バックアップ');
 
     if (result.status == ShareResultStatus.dismissed) return null;
     return tmpFile.path;
@@ -159,11 +158,16 @@ class ExportService {
           // 旧形式: ファイルパスの場合はファイルから読み込む（後方互換）
           final imgFile = File(path);
           if (await imgFile.exists()) {
-            final ext = p.extension(path).isNotEmpty ? p.extension(path) : '.jpg';
+            final ext = p.extension(path).isNotEmpty
+                ? p.extension(path)
+                : '.jpg';
             final zipPath = 'images/plants/${plant.id}$ext';
             archive.addFile(
-              ArchiveFile(zipPath, await imgFile.length(),
-                  await imgFile.readAsBytes()),
+              ArchiveFile(
+                zipPath,
+                await imgFile.length(),
+                await imgFile.readAsBytes(),
+              ),
             );
             map['imagePath'] = zipPath; // ZIP 内相対パスに変換
           } else {
@@ -188,8 +192,11 @@ class ExportService {
                 : '.jpg';
             final zipPath = 'images/notes/${note.id}_$i$ext';
             archive.addFile(
-              ArchiveFile(zipPath, await imgFile.length(),
-                  await imgFile.readAsBytes()),
+              ArchiveFile(
+                zipPath,
+                await imgFile.length(),
+                await imgFile.readAsBytes(),
+              ),
             );
             zipRelPaths.add(zipPath);
           }
@@ -223,7 +230,9 @@ class ExportService {
       'locations': locations.map((l) => l.toMap()).toList(),
       'settings': settingsMap,
     };
-    final jsonBytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
+    final jsonBytes = utf8.encode(
+      const JsonEncoder.withIndent('  ').convert(data),
+    );
     archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
 
     // ZIP エンコード
@@ -479,8 +488,10 @@ class ExportService {
       try {
         final current = await _settingsService.loadSettings();
         final merged = Map<String, dynamic>.from(current.toMap())
-          ..addAll(Map<String, dynamic>.from(settingsJson)
-            ..removeWhere((key, _) => _secretSettingKeys.contains(key)));
+          ..addAll(
+            Map<String, dynamic>.from(settingsJson)
+              ..removeWhere((key, _) => _secretSettingKeys.contains(key)),
+          );
         await _settingsService.saveSettings(AppSettings.fromMap(merged));
         settingsRestored = true;
       } catch (e) {
@@ -548,11 +559,7 @@ class ImportResult {
 
   @override
   String toString() {
-    final parts = [
-      '植物: $plantCount件',
-      'ログ: $logCount件',
-      'ノート: $noteCount件',
-    ];
+    final parts = ['植物: $plantCount件', 'ログ: $logCount件', 'ノート: $noteCount件'];
     if (sensorLogCount > 0) parts.add('センサーログ: $sensorLogCount件');
     if (locationCount > 0) parts.add('置き場所: $locationCount件');
     // 画像は0件でも「入っていなかった」ことが分かるよう常に出す（Issue #289）

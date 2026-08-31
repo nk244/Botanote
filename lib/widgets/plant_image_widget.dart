@@ -19,7 +19,10 @@ class PlantImageWidget extends StatelessWidget {
     this.width = 56,
     this.height = 56,
     this.borderRadius,
-  }) : assert(plant != null || imagePath != null, 'Either plant or imagePath must be provided');
+  }) : assert(
+         plant != null || imagePath != null,
+         'Either plant or imagePath must be provided',
+       );
 
   String? get _effectiveImagePath => imagePath ?? plant?.imagePath;
 

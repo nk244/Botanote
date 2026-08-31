@@ -25,7 +25,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   final _nameReadingController = TextEditingController();
   final _varietyController = TextEditingController();
   final _purchaseLocationController = TextEditingController();
-  
+
   DateTime? _purchaseDate;
   int? _wateringInterval;
   // 肥料間隔（どちらか一方のみ非null）
@@ -120,7 +120,11 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
 
     try {
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: source, maxWidth: 2048, maxHeight: 2048);
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
       if (pickedFile == null) return;
 
       // トリミング画面へ遷移
@@ -162,7 +166,6 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     }
   }
 
-
   /// 登録済みの写真を同定依頼文とともにClaudeアプリへ共有する（Issue #178）。
   ///
   /// Anthropic APIを直接呼び出す従量課金方式は使わず、OSの共有シート経由で
@@ -186,7 +189,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')),
+      );
     }
   }
 
@@ -225,8 +230,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           isOutdoor: _isOutdoor,
           locationId: _locationId,
           seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
-          dormantSeasonIntervalMultiplier:
-              _seasonalAdjustmentEnabled ? _dormantSeasonIntervalMultiplier : null,
+          dormantSeasonIntervalMultiplier: _seasonalAdjustmentEnabled
+              ? _dormantSeasonIntervalMultiplier
+              : null,
         );
       } else {
         // 既存植物の更新。nullable フィールドを明示的に null にできるよう
@@ -237,9 +243,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               ? null
               : _nameReadingController.text.trim(),
           variety: _varietyController.text.trim().isEmpty
-              ? null  // sentinel により null として保存される
+              ? null // sentinel により null として保存される
               : _varietyController.text.trim(),
-          purchaseDate: _purchaseDate,  // null なら null として保存される
+          purchaseDate: _purchaseDate, // null なら null として保存される
           purchaseLocation: _purchaseLocationController.text.trim().isEmpty
               ? null
               : _purchaseLocationController.text.trim(),
@@ -252,8 +258,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
           isOutdoor: _isOutdoor,
           locationId: _locationId,
           seasonalAdjustmentEnabled: _seasonalAdjustmentEnabled,
-          dormantSeasonIntervalMultiplier:
-              _seasonalAdjustmentEnabled ? _dormantSeasonIntervalMultiplier : null,
+          dormantSeasonIntervalMultiplier: _seasonalAdjustmentEnabled
+              ? _dormantSeasonIntervalMultiplier
+              : null,
         );
         await plantProvider.updatePlant(updatedPlant);
       }
@@ -341,8 +348,10 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
     if (confirmed != true || name.isEmpty || !mounted) return;
 
     try {
-      final created =
-          await context.read<LocationProvider>().addLocation(name, isOutdoor);
+      final created = await context.read<LocationProvider>().addLocation(
+        name,
+        isOutdoor,
+      );
       if (!mounted) return;
       setState(() => _locationId = created.id);
     } catch (e) {
@@ -396,10 +405,14 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                   width: 150,
                   height: 150,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.5),
                       width: 2,
                     ),
                   ),
@@ -480,7 +493,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // Purchase date
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -517,7 +530,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               },
             ),
             const Divider(),
-            
+
             // Purchase location
             TextFormField(
               controller: _purchaseLocationController,
@@ -546,8 +559,9 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
             Consumer<LocationProvider>(
               builder: (context, locationProvider, _) {
                 final locations = locationProvider.locations;
-                final validValue =
-                    locations.any((l) => l.id == _locationId) ? _locationId : null;
+                final validValue = locations.any((l) => l.id == _locationId)
+                    ? _locationId
+                    : null;
                 return DropdownButtonFormField<String?>(
                   initialValue: validValue,
                   decoration: InputDecoration(
@@ -564,10 +578,12 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                       value: null,
                       child: Text('未設定'),
                     ),
-                    ...locations.map((location) => DropdownMenuItem<String?>(
-                          value: location.id,
-                          child: Text(location.name),
-                        )),
+                    ...locations.map(
+                      (location) => DropdownMenuItem<String?>(
+                        value: location.id,
+                        child: Text(location.name),
+                      ),
+                    ),
                     // 登録を中断せずにその場で置き場所を作れるようにする（Issue #291）
                     DropdownMenuItem<String?>(
                       value: _createLocationValue,
@@ -610,9 +626,7 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               leading: const Icon(Icons.water_drop),
               title: const Text('水やり間隔'),
               subtitle: Text(
-                _wateringInterval == null
-                    ? '未設定'
-                    : '$_wateringInterval日ごと',
+                _wateringInterval == null ? '未設定' : '$_wateringInterval日ごと',
               ),
               trailing: _wateringInterval != null
                   ? IconButton(
@@ -635,9 +649,8 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
               onTap: () async {
                 final result = await showDialog<int>(
                   context: context,
-                  builder: (context) => _WateringIntervalDialog(
-                    initialValue: _wateringInterval,
-                  ),
+                  builder: (context) =>
+                      _WateringIntervalDialog(initialValue: _wateringInterval),
                 );
                 if (result != null) {
                   setState(() {
@@ -699,10 +712,12 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
                     prefixIcon: Icon(Icons.timelapse),
                   ),
                   items: const [1.2, 1.5, 2.0, 3.0]
-                      .map((multiplier) => DropdownMenuItem(
-                            value: multiplier,
-                            child: Text('$multiplier倍'),
-                          ))
+                      .map(
+                        (multiplier) => DropdownMenuItem(
+                          value: multiplier,
+                          child: Text('$multiplier倍'),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value == null) return;
@@ -772,7 +787,8 @@ class _WateringIntervalDialog extends StatefulWidget {
   const _WateringIntervalDialog({this.initialValue});
 
   @override
-  State<_WateringIntervalDialog> createState() => _WateringIntervalDialogState();
+  State<_WateringIntervalDialog> createState() =>
+      _WateringIntervalDialogState();
 }
 
 class _WateringIntervalDialogState extends State<_WateringIntervalDialog> {

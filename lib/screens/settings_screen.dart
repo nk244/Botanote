@@ -30,7 +30,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
 
   /// 一括変更の結果 SnackBar。設定画面を離れるときに閉じるため保持する（Issue #286）。
-  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _bulkResultSnackBar;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>?
+  _bulkResultSnackBar;
 
   @override
   void initState() {
@@ -70,13 +71,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('設定'),
-      ),
+      appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
           const SizedBox(height: 8),
-          
+
           // Theme settings
           _buildSectionHeader(context, 'テーマ'),
           Consumer<SettingsProvider>(
@@ -213,11 +212,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('ケア統計'),
             subtitle: const Text('月別のケア件数・植物ごとの頻度を振り返る'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const CareStatsScreen(),
-              ),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const CareStatsScreen())),
           ),
           const Divider(),
 
@@ -229,9 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('リビング・ベランダ等の置き場所を登録・編集'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const LocationListScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const LocationListScreen()),
             ),
           ),
           const Divider(),
@@ -273,7 +268,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             : '未設定',
                       ),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _showWeatherLocationDialog(context, settings),
+                      onTap: () =>
+                          _showWeatherLocationDialog(context, settings),
                     ),
                 ],
               );
@@ -289,9 +285,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Nature Remo / SwitchBot の APIキーを管理'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const IotSettingsScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const IotSettingsScreen()),
             ),
           ),
           const Divider(),
@@ -303,11 +297,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('光量メーター'),
             subtitle: const Text('カメラで置き場所の明るさの目安を測定'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const LightMeterScreen(),
-              ),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const LightMeterScreen())),
           ),
           const Divider(),
 
@@ -342,7 +334,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-
   /// 水やり間隔を一括設定するダイアログ
   /// 天気連動ケアアラートの観測地点（緯度・経度）を入力するダイアログ（Issue #176）。
   Future<void> _showWeatherLocationDialog(
@@ -373,30 +364,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: latController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true, signed: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: '緯度',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {
                   final n = double.tryParse(v ?? '');
-                  if (n == null || n < -90 || n > 90) return '-90〜90の数値を入力してください';
+                  if (n == null || n < -90 || n > 90)
+                    return '-90〜90の数値を入力してください';
                   return null;
                 },
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: lonController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true, signed: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: '経度',
                   border: OutlineInputBorder(),
                 ),
                 validator: (v) {
                   final n = double.tryParse(v ?? '');
-                  if (n == null || n < -180 || n > 180) return '-180〜180の数値を入力してください';
+                  if (n == null || n < -180 || n > 180)
+                    return '-180〜180の数値を入力してください';
                   return null;
                 },
               ),
@@ -487,8 +484,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 誤タップで全植物の間隔が書き換わらないよう、対象件数を示して確認する（Issue #274）
     final plantProvider = context.read<PlantProvider>();
-    final targetCount =
-        plantProvider.countBulkIntervalTargets(onlyWithInterval: false);
+    final targetCount = plantProvider.countBulkIntervalTargets(
+      onlyWithInterval: false,
+    );
     final applied = await _confirmBulkIntervalChange(
       context,
       title: '水やり間隔を一括設定',
@@ -506,9 +504,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')));
     }
   }
 
@@ -626,8 +624,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final label = delta > 0 ? '+$delta' : '$delta';
     // 誤タップ対策の確認ダイアログ（Issue #274）
     final plantProvider = context.read<PlantProvider>();
-    final targetCount =
-        plantProvider.countBulkIntervalTargets(onlyWithInterval: true);
+    final targetCount = plantProvider.countBulkIntervalTargets(
+      onlyWithInterval: true,
+    );
     final applied = await _confirmBulkIntervalChange(
       context,
       title: '水やり間隔を一括調整',
@@ -645,9 +644,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')));
     }
   }
 
@@ -701,9 +700,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!context.mounted) return;
         // ユーザーがキャンセル
         if (path == null) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('バックアップファイルを共有しました')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('バックアップファイルを共有しました')));
       }
     } catch (e) {
       if (!context.mounted) return;
@@ -769,7 +768,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final imageWarning = result.imageWarning;
       await _showImportResultDialog(
         context,
-        title: imageWarning == null ? 'インポートが完了しました' : 'インポートが完了しました（一部の写真は未復元）',
+        title: imageWarning == null
+            ? 'インポートが完了しました'
+            : 'インポートが完了しました（一部の写真は未復元）',
         message: imageWarning == null
             ? '以下のデータを復元しました。\n\n$result'
             : '以下のデータを復元しました。\n\n$result\n\n⚠ $imageWarning',
@@ -781,7 +782,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _showImportResultDialog(
         context,
         title: 'インポートできませんでした',
-        message: 'バックアップファイルが壊れているか、このバージョンでは'
+        message:
+            'バックアップファイルが壊れているか、このバージョンでは'
             '対応していない形式の可能性があります。\n\n'
             '既存のデータは変更されていません。'
             '別のバックアップファイルでお試しください。',

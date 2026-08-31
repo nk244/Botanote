@@ -52,8 +52,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
         if (locations.isEmpty) return const SizedBox.shrink();
 
         final plants = plantProvider.plants;
-        final unassignedCount =
-            plants.where((p) => p.locationId == null).length;
+        final unassignedCount = plants
+            .where((p) => p.locationId == null)
+            .length;
 
         Widget chip(String label, int count, String? value) {
           final selected = _selectedLocationId == value;
@@ -88,9 +89,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
                 icon: const Icon(Icons.home_outlined),
                 tooltip: '置き場所を編集',
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const LocationListScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const LocationListScreen()),
                 ),
               ),
             ],
@@ -116,16 +115,19 @@ class _PlantListScreenState extends State<PlantListScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 16, color: scheme.onSurfaceVariant),
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'カスタム並び替え中は置き場所で絞り込めません',
                     maxLines: 2,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -175,7 +177,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
                 },
                 itemBuilder: (context) {
                   final currentOrder = settingsForMenu.plantSortOrder;
-                  
+
                   return PlantSortOrder.values.map((order) {
                     return PopupMenuItem<PlantSortOrder>(
                       value: order,
@@ -184,20 +186,22 @@ class _PlantListScreenState extends State<PlantListScreen> {
                           Icon(
                             _getSortOrderIcon(order),
                             size: 20,
-                            color: currentOrder == order 
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
+                            color: currentOrder == order
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               _getSortOrderName(order),
                               style: currentOrder == order
-                                ? TextStyle(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  )
-                                : null,
+                                  ? TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      fontWeight: FontWeight.bold,
+                                    )
+                                  : null,
                             ),
                           ),
                           if (currentOrder == order)
@@ -219,9 +223,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
             tooltip: '設定',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
           ),
@@ -256,10 +258,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
                             Icon(
                               Icons.eco_outlined,
                               size: 64,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.5),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.5),
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -269,13 +270,13 @@ class _PlantListScreenState extends State<PlantListScreen> {
                             const SizedBox(height: 8),
                             Text(
                               '右下のボタンから植物を追加しましょう',
-                              style:
-                                  Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.6),
-                                      ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
                             ),
                           ],
                         ),
@@ -288,8 +289,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
                     );
 
                     // カスタムソート中は全体順序を保つためフィルタを適用しない
-                    final displayedPlants =
-                        isCustomSort ? sortedPlants : _applyLocationFilter(sortedPlants);
+                    final displayedPlants = isCustomSort
+                        ? sortedPlants
+                        : _applyLocationFilter(sortedPlants);
 
                     // グリッド表示（カスタムソート時はリスト優先）
                     if (_isGridView && !isCustomSort) {
@@ -297,7 +299,11 @@ class _PlantListScreenState extends State<PlantListScreen> {
                     }
 
                     return isCustomSort
-                        ? _buildReorderableListView(context, sortedPlants, settings)
+                        ? _buildReorderableListView(
+                            context,
+                            sortedPlants,
+                            settings,
+                          )
                         : _buildListView(displayedPlants);
                   },
                 ),
@@ -332,9 +338,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
             tooltip: '植物を追加',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const AddPlantScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const AddPlantScreen()),
               );
             },
             child: const Icon(Icons.add),
@@ -442,24 +446,22 @@ class _PlantListScreenState extends State<PlantListScreen> {
     List<Plant> plants,
     int oldIndex,
     int newIndex,
-  SettingsProvider settings,
+    SettingsProvider settings,
   ) {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
-    
+
     final List<String> newOrder = plants.map((p) => p.id).toList();
     final plantId = newOrder.removeAt(oldIndex);
     newOrder.insert(newIndex, plantId);
-    
+
     settings.setCustomSortOrder(newOrder);
   }
 
   void _navigateToDetail(Plant plant) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => PlantDetailScreen(plant: plant),
-      ),
+      MaterialPageRoute(builder: (context) => PlantDetailScreen(plant: plant)),
     );
   }
 
@@ -540,9 +542,7 @@ class _PlantListTile extends StatelessWidget {
 
   void _navigateToDetail(BuildContext context, Plant plant) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => PlantDetailScreen(plant: plant),
-      ),
+      MaterialPageRoute(builder: (context) => PlantDetailScreen(plant: plant)),
     );
   }
 }
@@ -594,7 +594,10 @@ class _PlantGridCard extends StatelessWidget {
             Expanded(
               flex: 2,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -602,8 +605,8 @@ class _PlantGridCard extends StatelessWidget {
                     Text(
                       plant.name,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -612,11 +615,10 @@ class _PlantGridCard extends StatelessWidget {
                       Text(
                         plant.variety!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.6),
-                            ),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -655,7 +657,9 @@ class _LocationBadge extends StatelessWidget {
     final name = locations.where((l) => l.id == id).firstOrNull?.name;
     if (name == null) return const SizedBox.shrink();
 
-    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6);
+    final color = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.6);
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Row(
@@ -666,10 +670,9 @@ class _LocationBadge extends StatelessWidget {
           Flexible(
             child: Text(
               name,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: color),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: color),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -703,10 +706,7 @@ class _OverdueBadge extends StatelessWidget {
     return Container(
       width: 26,
       height: 26,
-      decoration: BoxDecoration(
-        color: scheme.error,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: scheme.error, shape: BoxShape.circle),
       child: Icon(Icons.priority_high, size: 18, color: scheme.onError),
     );
   }
@@ -738,7 +738,9 @@ class _WateringStatusText extends StatelessWidget {
         Flexible(
           child: Text(
             AppDateUtils.formatDateDifference(next),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: color),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

@@ -39,7 +39,9 @@ class _LightMeterScreenState extends State<LightMeterScreen> {
       }
       setState(() => _result = result);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('撮影に失敗しました: ${describeError(e)}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('撮影に失敗しました: ${describeError(e)}')),
+      );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }

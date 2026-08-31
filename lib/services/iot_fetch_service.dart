@@ -36,28 +36,30 @@ class IotFetchService {
       try {
         final List<SensorData> devices;
         if (mapping.source == SensorSource.natureRemo) {
-          natureRemoDevices ??=
-              await _iot.fetchNatureRemoData(settings.natureRemoToken);
+          natureRemoDevices ??= await _iot.fetchNatureRemoData(
+            settings.natureRemoToken,
+          );
           devices = natureRemoDevices;
         } else {
           switchBotDevices ??= await _iot.fetchSwitchBotData(
-              settings.switchBotToken, settings.switchBotSecret);
+            settings.switchBotToken,
+            settings.switchBotSecret,
+          );
           devices = switchBotDevices;
         }
 
         // マッピングのデバイスIDに一致するデバイスを探す
         final device = devices.firstWhere(
           (d) => d.deviceId == mapping.deviceId,
-          orElse: () =>
-              throw StateError('デバイスが見つかりません: ${mapping.deviceName}'),
+          orElse: () => throw StateError('デバイスが見つかりません: ${mapping.deviceName}'),
         );
 
         // locationId が設定されている場合はその場所に属する植物全員に自動追従、
         // 未設定の場合は個別に選択された plantIds を使用する
         final targetPlantIds = mapping.locationId != null
             ? allPlants
-                .where((p) => p.locationId == mapping.locationId)
-                .map((p) => p.id)
+                  .where((p) => p.locationId == mapping.locationId)
+                  .map((p) => p.id)
             : mapping.plantIds;
 
         // 紐づく植物ごとにセンサーログを保存

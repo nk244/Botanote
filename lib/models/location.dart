@@ -41,11 +41,7 @@ class Location {
   }
 
   /// フィールドを部分的に更新した新しい Location を返す。
-  Location copyWith({
-    String? name,
-    bool? isOutdoor,
-    DateTime? updatedAt,
-  }) {
+  Location copyWith({String? name, bool? isOutdoor, DateTime? updatedAt}) {
     return Location(
       id: id,
       name: name ?? this.name,

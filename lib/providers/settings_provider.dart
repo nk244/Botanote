@@ -163,8 +163,7 @@ class SettingsProvider with ChangeNotifier {
   }
 
   /// デバイス-植物マッピングを更新する。
-  Future<void> updateDeviceMappings(
-      List<SensorDeviceMapping> mappings) async {
+  Future<void> updateDeviceMappings(List<SensorDeviceMapping> mappings) async {
     _settings = _settings.copyWith(sensorDeviceMappings: mappings);
     await _settingsService.saveSettings(_settings);
     notifyListeners();
@@ -179,9 +178,7 @@ class SettingsProvider with ChangeNotifier {
 
   /// センサー最終自動取得日時を更新する。null でクリアする。
   Future<void> updateLastSensorFetchAt(DateTime? time) async {
-    _settings = _settings.copyWith(
-      lastSensorFetchAt: time?.toIso8601String(),
-    );
+    _settings = _settings.copyWith(lastSensorFetchAt: time?.toIso8601String());
     await _settingsService.saveSettings(_settings);
     notifyListeners();
   }
@@ -191,7 +188,9 @@ class SettingsProvider with ChangeNotifier {
   /// [deviceIds] に含まれるデバイスは [locationId] を設定し、現在この場所に
   /// 紐づいているが [deviceIds] に含まれないデバイスは紐づけを解除する。
   Future<void> assignSensorsToLocation(
-      String locationId, Set<String> deviceIds) async {
+    String locationId,
+    Set<String> deviceIds,
+  ) async {
     final updated = _settings.sensorDeviceMappings.map((mapping) {
       final shouldBelong = deviceIds.contains(mapping.deviceId);
       final currentlyBelongs = mapping.locationId == locationId;
@@ -211,8 +210,9 @@ class SettingsProvider with ChangeNotifier {
   /// 管理場所削除時に、その場所を参照しているセンサーマッピングの
   /// locationId をクリアする。
   Future<void> clearLocationFromSensorMappings(String locationId) async {
-    final hasReference =
-        _settings.sensorDeviceMappings.any((m) => m.locationId == locationId);
+    final hasReference = _settings.sensorDeviceMappings.any(
+      (m) => m.locationId == locationId,
+    );
     if (!hasReference) return;
 
     final updated = _settings.sensorDeviceMappings.map((mapping) {

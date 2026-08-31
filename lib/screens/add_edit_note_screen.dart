@@ -38,8 +38,11 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
   void initState() {
     super.initState();
     _titleController = TextEditingController(text: widget.note?.title ?? '');
-    _contentController = TextEditingController(text: widget.note?.content ?? '');
-    _selectedPlantIds = widget.note?.plantIds ??
+    _contentController = TextEditingController(
+      text: widget.note?.content ?? '',
+    );
+    _selectedPlantIds =
+        widget.note?.plantIds ??
         (widget.initialPlantId != null ? [widget.initialPlantId!] : []);
     _selectedImagePaths = widget.note?.imagePaths ?? [];
     _tags = List<String>.from(widget.note?.tags ?? const <String>[]);
@@ -77,8 +80,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
     return Consumer<NoteProvider>(
       builder: (context, noteProv, _) {
         // 未使用の既存タグだけを候補として出す
-        final suggestions =
-            noteProv.allTags.where((t) => !_tags.contains(t)).take(12).toList();
+        final suggestions = noteProv.allTags
+            .where((t) => !_tags.contains(t))
+            .take(12)
+            .toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,11 +111,13 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
                 spacing: 6,
                 runSpacing: 4,
                 children: _tags
-                    .map((tag) => Chip(
-                          label: Text('#$tag'),
-                          visualDensity: VisualDensity.compact,
-                          onDeleted: () => setState(() => _tags.remove(tag)),
-                        ))
+                    .map(
+                      (tag) => Chip(
+                        label: Text('#$tag'),
+                        visualDensity: VisualDensity.compact,
+                        onDeleted: () => setState(() => _tags.remove(tag)),
+                      ),
+                    )
                     .toList(),
               ),
             ],
@@ -118,19 +125,22 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
               const SizedBox(height: 8),
               Text(
                 '使ったことのあるタグ',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 4),
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
                 children: suggestions
-                    .map((tag) => ActionChip(
-                          label: Text('#$tag'),
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => _addTag(tag),
-                        ))
+                    .map(
+                      (tag) => ActionChip(
+                        label: Text('#$tag'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _addTag(tag),
+                      ),
+                    )
                     .toList(),
               ),
             ],
@@ -177,7 +187,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5)),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.5),
+            ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -186,9 +199,12 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
               const SizedBox(width: 8),
               Text('作成日', style: Theme.of(context).textTheme.bodyMedium),
               const Spacer(),
-              Text(formatted,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.primary)),
+              Text(
+                formatted,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
               const Icon(Icons.arrow_drop_down, size: 20),
             ],
           ),
@@ -239,9 +255,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         title: Text(widget.note == null ? 'ノート作成' : 'ノート編集'),
         actions: [
           IconButton(
-              onPressed: _save,
-              icon: const Icon(Icons.save),
-              tooltip: '保存'),
+            onPressed: _save,
+            icon: const Icon(Icons.save),
+            tooltip: '保存',
+          ),
         ],
       ),
       body: Form(
@@ -267,37 +284,45 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
             const SizedBox(height: 16),
 
             // 植物選択
-            Consumer<PlantProvider>(builder: (context, plantProv, _) {
-              final selectedNames = plantProv.plants
-                  .where((p) => _selectedPlantIds.contains(p.id))
-                  .map((p) => p.name)
-                  .toList();
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text('植物', style: Theme.of(context).textTheme.titleSmall),
-                      const Spacer(),
-                      TextButton.icon(
-                        onPressed: () => _selectPlants(context, plantProv),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('選択'),
-                      ),
-                    ],
-                  ),
-                  if (selectedNames.isEmpty)
-                    Text('選択されていません',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)))
-                  else
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: selectedNames
-                          .map((name) => Chip(
+            Consumer<PlantProvider>(
+              builder: (context, plantProv, _) {
+                final selectedNames = plantProv.plants
+                    .where((p) => _selectedPlantIds.contains(p.id))
+                    .map((p) => p.name)
+                    .toList();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '植物',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: () => _selectPlants(context, plantProv),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('選択'),
+                        ),
+                      ],
+                    ),
+                    if (selectedNames.isEmpty)
+                      Text(
+                        '選択されていません',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: selectedNames
+                            .map(
+                              (name) => Chip(
                                 label: Text(name),
                                 avatar: const Icon(Icons.eco, size: 14),
                                 visualDensity: VisualDensity.compact,
@@ -307,12 +332,14 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
                                       .id;
                                   setState(() => _selectedPlantIds.remove(id));
                                 },
-                              ))
-                          .toList(),
-                    ),
-                ],
-              );
-            }),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                  ],
+                );
+              },
+            ),
             const SizedBox(height: 16),
 
             // タグ（Issue #278）
@@ -341,7 +368,10 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
                 if (_selectedImagePaths.isNotEmpty)
                   TextButton.icon(
                     onPressed: _shareFirstImageForDiagnosis,
-                    icon: const Icon(Icons.health_and_safety_outlined, size: 18),
+                    icon: const Icon(
+                      Icons.health_and_safety_outlined,
+                      size: 18,
+                    ),
                     label: const Text('Claudeに送って診断'),
                   ),
                 TextButton.icon(
@@ -355,7 +385,9 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _selectedImagePaths.map((p) => _buildImageThumb(p)).toList(),
+                children: _selectedImagePaths
+                    .map((p) => _buildImageThumb(p))
+                    .toList(),
               ),
             const SizedBox(height: 80),
           ],
@@ -387,12 +419,19 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')),
+      );
     }
   }
 
   Widget _buildImageThumb(String path) {
-    final image = Image.file(File(path), width: 72, height: 72, fit: BoxFit.cover);
+    final image = Image.file(
+      File(path),
+      width: 72,
+      height: 72,
+      fit: BoxFit.cover,
+    );
 
     return Stack(
       children: [
@@ -402,14 +441,20 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
           top: 0,
           child: InkWell(
             onTap: () => setState(() => _selectedImagePaths.remove(path)),
-            child: const CircleAvatar(radius: 10, child: Icon(Icons.close, size: 12)),
+            child: const CircleAvatar(
+              radius: 10,
+              child: Icon(Icons.close, size: 12),
+            ),
           ),
-        )
+        ),
       ],
     );
   }
 
-  Future<void> _selectPlants(BuildContext context, PlantProvider plantProv) async {
+  Future<void> _selectPlants(
+    BuildContext context,
+    PlantProvider plantProv,
+  ) async {
     // 植物データが未ロードの場合は先にロードする
     if (plantProv.plants.isEmpty) await plantProv.loadPlants();
     if (!context.mounted) return;
@@ -452,11 +497,15 @@ class _AddEditNoteScreenState extends State<AddEditNoteScreen> {
 
     final picker = ImagePicker();
     if (source == ImageSource.camera) {
-      final x = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+      final x = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
       if (x != null) setState(() => _selectedImagePaths.add(x.path));
     } else {
       final xs = await picker.pickMultiImage(imageQuality: 80);
-      if (xs.isNotEmpty) setState(() => _selectedImagePaths.addAll(xs.map((e) => e.path)));
+      if (xs.isNotEmpty)
+        setState(() => _selectedImagePaths.addAll(xs.map((e) => e.path)));
     }
   }
 }

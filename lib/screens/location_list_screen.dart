@@ -10,7 +10,10 @@ import 'location_detail_screen.dart';
 class LocationListScreen extends StatelessWidget {
   const LocationListScreen({super.key});
 
-  Future<void> _showEditDialog(BuildContext context, {Location? location}) async {
+  Future<void> _showEditDialog(
+    BuildContext context, {
+    Location? location,
+  }) async {
     final nameController = TextEditingController(text: location?.name ?? '');
     bool isOutdoor = location?.isOutdoor ?? false;
 
@@ -94,7 +97,8 @@ class LocationListScreen extends StatelessWidget {
       builder: (context) => AlertDialog(
         title: const Text('削除の確認'),
         content: Text(
-            '「${location.name}」を削除してもよろしいですか？\nこの場所が設定されている植物は「未設定」に戻ります。'),
+          '「${location.name}」を削除してもよろしいですか？\nこの場所が設定されている植物は「未設定」に戻ります。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -124,7 +128,8 @@ class LocationListScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('置き場所管理')),
       body: Consumer<LocationProvider>(
         builder: (context, locationProvider, _) {
-          if (locationProvider.isLoading && locationProvider.locations.isEmpty) {
+          if (locationProvider.isLoading &&
+              locationProvider.locations.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
           if (locationProvider.locations.isEmpty) {
@@ -135,7 +140,9 @@ class LocationListScreen extends StatelessWidget {
                   Icon(
                     Icons.home_outlined,
                     size: 64,
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -160,8 +167,7 @@ class LocationListScreen extends StatelessWidget {
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                 child: ListTile(
-                  leading: Icon(
-                      location.isOutdoor ? Icons.deck : Icons.home),
+                  leading: Icon(location.isOutdoor ? Icons.deck : Icons.home),
                   title: Text(location.name),
                   subtitle: Text(location.isOutdoor ? '屋外' : '屋内'),
                   onTap: () => Navigator.of(context).push(

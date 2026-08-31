@@ -40,12 +40,15 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
   void initState() {
     super.initState();
     final settings = context.read<SettingsProvider>().settings;
-    _natureRemoController =
-        TextEditingController(text: settings.natureRemoToken);
-    _switchBotTokenController =
-        TextEditingController(text: settings.switchBotToken);
-    _switchBotSecretController =
-        TextEditingController(text: settings.switchBotSecret);
+    _natureRemoController = TextEditingController(
+      text: settings.natureRemoToken,
+    );
+    _switchBotTokenController = TextEditingController(
+      text: settings.switchBotToken,
+    );
+    _switchBotSecretController = TextEditingController(
+      text: settings.switchBotSecret,
+    );
     _mappings = List.from(settings.sensorDeviceMappings);
     _fetchIntervalHours = settings.sensorFetchIntervalHours;
   }
@@ -72,14 +75,14 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       // 間隔・マッピング変更をバックグラウンド定期タスクへ即座に反映する
       await SensorAutoFetchService.reschedule(provider.settings);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('設定を保存しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('設定を保存しました')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存に失敗しました: ${describeError(e)}')));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -88,9 +91,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
   Future<void> _testNatureRemo() async {
     final token = _natureRemoController.text.trim();
     if (token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('APIトークンを入力してください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('APIトークンを入力してください')));
       return;
     }
     setState(() => _isTestingNatureRemo = true);
@@ -100,16 +103,16 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       final names = devices.map((d) => d.deviceName).join('、');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(devices.isEmpty
-              ? '接続しました（温湿度センサーが見つかりません）'
-              : '接続成功: $names'),
+          content: Text(
+            devices.isEmpty ? '接続しました（温湿度センサーが見つかりません）' : '接続成功: $names',
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接続失敗: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('接続失敗: ${describeError(e)}')));
     } finally {
       if (mounted) setState(() => _isTestingNatureRemo = false);
     }
@@ -119,9 +122,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     final token = _switchBotTokenController.text.trim();
     final secret = _switchBotSecretController.text.trim();
     if (token.isEmpty || secret.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('トークンとシークレットを入力してください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('トークンとシークレットを入力してください')));
       return;
     }
     setState(() => _isTestingSwitchBot = true);
@@ -131,16 +134,16 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       final names = devices.map((d) => d.deviceName).join('、');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(devices.isEmpty
-              ? '接続しました（温湿度センサーが見つかりません）'
-              : '接続成功: $names'),
+          content: Text(
+            devices.isEmpty ? '接続しました（温湿度センサーが見つかりません）' : '接続成功: $names',
+          ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('接続失敗: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('接続失敗: ${describeError(e)}')));
     } finally {
       if (mounted) setState(() => _isTestingSwitchBot = false);
     }
@@ -153,9 +156,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     final switchBotSecret = _switchBotSecretController.text.trim();
 
     if (natureRemoToken.isEmpty && switchBotToken.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('APIトークンを入力してから取得してください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('APIトークンを入力してから取得してください')));
       return;
     }
 
@@ -177,8 +180,10 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       }
       if (switchBotToken.isNotEmpty && switchBotSecret.isNotEmpty) {
         try {
-          final devices =
-              await iot.fetchSwitchBotData(switchBotToken, switchBotSecret);
+          final devices = await iot.fetchSwitchBotData(
+            switchBotToken,
+            switchBotSecret,
+          );
           allDevices.addAll(devices);
         } catch (e) {
           errors.add(describeError(e));
@@ -191,9 +196,11 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
         // 取得0件でも、エラーがあれば「見つからない」ではなく実際の原因を出す。
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errors.isEmpty
-                ? 'デバイスが見つかりませんでした'
-                : '取得に失敗しました: ${errors.join(' / ')}'),
+            content: Text(
+              errors.isEmpty
+                  ? 'デバイスが見つかりませんでした'
+                  : '取得に失敗しました: ${errors.join(' / ')}',
+            ),
           ),
         );
         return;
@@ -202,9 +209,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
       // 一部のサービスだけ成功した場合は、成功分を反映しつつ失敗も知らせる。
       if (errors.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('一部の取得に失敗しました: ${errors.join(' / ')}'),
-          ),
+          SnackBar(content: Text('一部の取得に失敗しました: ${errors.join(' / ')}')),
         );
       }
 
@@ -213,12 +218,14 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
         for (final device in allDevices) {
           final exists = _mappings.any((m) => m.deviceId == device.deviceId);
           if (!exists) {
-            _mappings.add(SensorDeviceMapping(
-              deviceId: device.deviceId,
-              deviceName: device.deviceName,
-              source: device.source,
-              plantIds: [],
-            ));
+            _mappings.add(
+              SensorDeviceMapping(
+                deviceId: device.deviceId,
+                deviceName: device.deviceName,
+                source: device.source,
+                plantIds: [],
+              ),
+            );
           }
         }
       });
@@ -231,7 +238,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
   Future<void> _showLocationUnlinkDialog(SensorDeviceMapping mapping) async {
     final locationName =
         context.read<LocationProvider>().getLocationName(mapping.locationId) ??
-            '不明な場所';
+        '不明な場所';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -271,9 +278,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     final plants = plantProvider.plants;
 
     if (plants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('植物が登録されていません')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('植物が登録されていません')));
       return;
     }
 
@@ -295,9 +302,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                 final isSelected = selectedIds.contains(plant.id);
                 return CheckboxListTile(
                   title: Text(plant.name),
-                  subtitle: plant.variety != null
-                      ? Text(plant.variety!)
-                      : null,
+                  subtitle: plant.variety != null ? Text(plant.variety!) : null,
                   value: isSelected,
                   onChanged: (checked) {
                     setDialogState(() {
@@ -331,7 +336,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     setState(() {
       final idx = _mappings.indexWhere((m) => m.deviceId == mapping.deviceId);
       if (idx >= 0) {
-        _mappings[idx] = _mappings[idx].copyWith(plantIds: selectedIds.toList());
+        _mappings[idx] = _mappings[idx].copyWith(
+          plantIds: selectedIds.toList(),
+        );
       }
     });
   }
@@ -351,10 +358,7 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 )
-              : TextButton(
-                  onPressed: _save,
-                  child: const Text('保存'),
-                ),
+              : TextButton(onPressed: _save, child: const Text('保存')),
         ],
       ),
       body: ListView(
@@ -383,9 +387,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           children: [
             Text(
               'Nature Remo',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -395,12 +399,14 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                 labelText: 'APIトークン',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureNatureRemo
-                      ? Icons.visibility_off
-                      : Icons.visibility),
+                  icon: Icon(
+                    _obscureNatureRemo
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                  ),
                   tooltip: _obscureNatureRemo ? 'トークンを表示' : 'トークンを隠す',
-                  onPressed: () => setState(
-                      () => _obscureNatureRemo = !_obscureNatureRemo),
+                  onPressed: () =>
+                      setState(() => _obscureNatureRemo = !_obscureNatureRemo),
                 ),
               ),
             ),
@@ -431,9 +437,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           children: [
             Text(
               'SwitchBot',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -443,12 +449,15 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                 labelText: 'APIトークン',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureSwitchBotToken
-                      ? Icons.visibility_off
-                      : Icons.visibility),
+                  icon: Icon(
+                    _obscureSwitchBotToken
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                  ),
                   tooltip: _obscureSwitchBotToken ? 'トークンを表示' : 'トークンを隠す',
-                  onPressed: () => setState(() =>
-                      _obscureSwitchBotToken = !_obscureSwitchBotToken),
+                  onPressed: () => setState(
+                    () => _obscureSwitchBotToken = !_obscureSwitchBotToken,
+                  ),
                 ),
               ),
             ),
@@ -460,12 +469,15 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                 labelText: 'シークレット',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureSwitchBotSecret
-                      ? Icons.visibility_off
-                      : Icons.visibility),
+                  icon: Icon(
+                    _obscureSwitchBotSecret
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                  ),
                   tooltip: _obscureSwitchBotSecret ? 'シークレットを表示' : 'シークレットを隠す',
-                  onPressed: () => setState(() =>
-                      _obscureSwitchBotSecret = !_obscureSwitchBotSecret),
+                  onPressed: () => setState(
+                    () => _obscureSwitchBotSecret = !_obscureSwitchBotSecret,
+                  ),
                 ),
               ),
             ),
@@ -497,9 +509,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           children: [
             Text(
               'デバイスと植物の紐づけ',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
@@ -534,8 +546,10 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     // 管理場所に連動している場合は場所名バッジを表示し、タップで連動解除ダイアログを開く
     if (mapping.locationId != null) {
       final locationName =
-          context.read<LocationProvider>().getLocationName(mapping.locationId) ??
-              '不明な場所';
+          context.read<LocationProvider>().getLocationName(
+            mapping.locationId,
+          ) ??
+          '不明な場所';
       return ListTile(
         contentPadding: EdgeInsets.zero,
         leading: const Icon(Icons.device_hub),
@@ -592,9 +606,9 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
           children: [
             Text(
               '自動取得',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
@@ -610,10 +624,12 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
                 border: OutlineInputBorder(),
               ),
               items: intervalOptions
-                  .map((opt) => DropdownMenuItem<int>(
-                        value: opt.hours,
-                        child: Text(opt.label),
-                      ))
+                  .map(
+                    (opt) => DropdownMenuItem<int>(
+                      value: opt.hours,
+                      child: Text(opt.label),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) {
                 if (v != null) setState(() => _fetchIntervalHours = v);
@@ -659,4 +675,3 @@ class _IotSettingsScreenState extends State<IotSettingsScreen> {
     );
   }
 }
-

@@ -21,7 +21,8 @@ class ClaudeShareService {
   static Future<void> shareForBulkIdentification(String imagePath) async {
     await Share.shareXFiles(
       [XFile(imagePath)],
-      text: 'この写真に写っている植物をすべて挙げてください。'
+      text:
+          'この写真に写っている植物をすべて挙げてください。'
           '1行に1つ、「名前 / 品種」の形式で、名前は和名または流通名でお願いします。'
           '品種が分からない場合は名前だけで構いません。'
           '説明文や見出しは付けず、一覧だけを返してください。',
@@ -33,7 +34,8 @@ class ClaudeShareService {
   static Future<void> shareForIdentification(String imagePath) async {
     await Share.shareXFiles(
       [XFile(imagePath)],
-      text: 'この植物の写真から、植物の一般的な名前（和名または流通名）と、'
+      text:
+          'この植物の写真から、植物の一般的な名前（和名または流通名）と、'
           '分かる場合は品種名を教えてください。',
       subject: '植物名の同定',
     );

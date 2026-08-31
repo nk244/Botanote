@@ -32,20 +32,24 @@ class PlantGrowthTimelineScreen extends StatelessWidget {
     final entries = <_TimelinePhoto>[];
 
     if (plant.imagePath != null) {
-      entries.add(_TimelinePhoto(
-        imagePath: plant.imagePath!,
-        date: plant.purchaseDate ?? plant.createdAt,
-        caption: '登録時の写真',
-      ));
+      entries.add(
+        _TimelinePhoto(
+          imagePath: plant.imagePath!,
+          date: plant.purchaseDate ?? plant.createdAt,
+          caption: '登録時の写真',
+        ),
+      );
     }
 
     for (final note in notes) {
       for (final path in note.imagePaths) {
-        entries.add(_TimelinePhoto(
-          imagePath: path,
-          date: note.createdAt,
-          caption: note.title,
-        ));
+        entries.add(
+          _TimelinePhoto(
+            imagePath: path,
+            date: note.createdAt,
+            caption: note.title,
+          ),
+        );
       }
     }
 
@@ -97,8 +101,10 @@ class PlantGrowthTimelineScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(DateFormat('yyyy/MM/dd').format(before.date),
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    DateFormat('yyyy/MM/dd').format(before.date),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 4),
                   AspectRatio(
                     aspectRatio: 1,
@@ -117,8 +123,10 @@ class PlantGrowthTimelineScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(DateFormat('yyyy/MM/dd').format(after.date),
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    DateFormat('yyyy/MM/dd').format(after.date),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 4),
                   AspectRatio(
                     aspectRatio: 1,
@@ -173,10 +181,9 @@ class PlantGrowthTimelineScreen extends StatelessWidget {
                       Icon(
                         Icons.auto_awesome_motion_outlined,
                         size: 64,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.5),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -211,22 +218,22 @@ class PlantGrowthTimelineScreen extends StatelessWidget {
                       child: Tooltip(
                         message: photo.caption,
                         child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: PlantImageWidget(
-                              imagePath: photo.imagePath,
-                              width: double.infinity,
-                              height: double.infinity,
-                              borderRadius: BorderRadius.circular(8),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: PlantImageWidget(
+                                imagePath: photo.imagePath,
+                                width: double.infinity,
+                                height: double.infinity,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DateFormat('yyyy/MM/dd').format(photo.date),
-                            style: Theme.of(context).textTheme.bodySmall,
-                            textAlign: TextAlign.center,
-                          ),
+                            const SizedBox(height: 4),
+                            Text(
+                              DateFormat('yyyy/MM/dd').format(photo.date),
+                              style: Theme.of(context).textTheme.bodySmall,
+                              textAlign: TextAlign.center,
+                            ),
                           ],
                         ),
                       ),

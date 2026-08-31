@@ -242,7 +242,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         return !nextDay.isAfter(selectedDay);
       }
       // 未来の日付
-      return nextDay.isAtSameMomentAs(selectedDay) || nextDay.isBefore(todayDay);
+      return nextDay.isAtSameMomentAs(selectedDay) ||
+          nextDay.isBefore(todayDay);
     }
 
     // 水やり・肥料・活力剤のいずれかが必要な植物
@@ -254,10 +255,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
     final settings = context.read<SettingsProvider>();
     final allPlants = {...plantsWithRecords, ...plantsNeedingAction}.toList();
-    allPlants.sort((a, b) => _comparePlantsFor(
-      a, b, logStatus, nextWateringDateCache,
-      settings.plantSortOrder, settings.customSortOrder,
-    ));
+    allPlants.sort(
+      (a, b) => _comparePlantsFor(
+        a,
+        b,
+        logStatus,
+        nextWateringDateCache,
+        settings.plantSortOrder,
+        settings.customSortOrder,
+      ),
+    );
     return allPlants;
   }
 
@@ -275,7 +282,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     // 完了済みは下に並ぶ
     if (aCompleted && !bCompleted) return 1;
     if (!aCompleted && bCompleted) return -1;
-    
+
     switch (sortOrder) {
       case PlantSortOrder.nameAsc:
         return a.name.compareTo(b.name);
@@ -335,7 +342,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         return aNext.compareTo(bNext);
     }
   }
-
 
   Future<void> _bulkLog() async {
     if (_selectedPlantIds.isEmpty) return;
@@ -410,10 +416,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     final plantProvider = context.read<PlantProvider>();
 
     // 水やりの場合、他の記録（肥料・活力剤）があるか確認
-    final hasOtherLogs = (logType == LogType.watering) &&
+    final hasOtherLogs =
+        (logType == LogType.watering) &&
         logStatus.hasOtherLogs(plantId, LogType.watering);
 
-    final logTypesToDelete = await _confirmDeletion(hasOtherLogs, plantId, logType, logStatus);
+    final logTypesToDelete = await _confirmDeletion(
+      hasOtherLogs,
+      plantId,
+      logType,
+      logStatus,
+    );
     if (logTypesToDelete == null) return;
 
     final deletedLogs = await plantProvider.deleteMultipleLogsForDate(
@@ -464,9 +476,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         ],
       ),
     );
-    
+
     if (deleteAll == null) return null;
-    
+
     return deleteAll ? logStatus.getActiveLogTypes(plantId) : [logType];
   }
 
@@ -507,9 +519,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             tooltip: '設定',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
           ),
@@ -540,122 +550,149 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       child: SafeArea(
         top: false,
         child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Log type selection chips
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(16),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Log type selection chips
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('登録する記録', style: Theme.of(context).textTheme.labelSmall),
+                  const SizedBox(height: 8),
+                  Consumer<SettingsProvider>(
+                    builder: (context, settings, _) {
+                      final colors = settings.logTypeColors;
+                      return Wrap(
+                        spacing: 8,
+                        children: [
+                          FilterChip(
+                            label: const Text('水やり'),
+                            avatar: const Icon(Icons.water_drop, size: 18),
+                            selected: _selectedBulkLogTypes.contains(
+                              LogType.watering,
+                            ),
+                            selectedColor: Color(colors.wateringBg),
+                            checkmarkColor: Color(colors.wateringFg),
+                            labelStyle: TextStyle(
+                              color:
+                                  _selectedBulkLogTypes.contains(
+                                    LogType.watering,
+                                  )
+                                  ? Color(colors.wateringFg)
+                                  : null,
+                              fontWeight:
+                                  _selectedBulkLogTypes.contains(
+                                    LogType.watering,
+                                  )
+                                  ? FontWeight.w600
+                                  : null,
+                            ),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedBulkLogTypes.add(LogType.watering);
+                                } else if (_selectedBulkLogTypes.length > 1) {
+                                  _selectedBulkLogTypes.remove(
+                                    LogType.watering,
+                                  );
+                                }
+                              });
+                            },
+                          ),
+                          FilterChip(
+                            label: const Text('肥料'),
+                            avatar: const Icon(Icons.grass, size: 18),
+                            selected: _selectedBulkLogTypes.contains(
+                              LogType.fertilizer,
+                            ),
+                            selectedColor: Color(colors.fertilizerBg),
+                            checkmarkColor: Color(colors.fertilizerFg),
+                            labelStyle: TextStyle(
+                              color:
+                                  _selectedBulkLogTypes.contains(
+                                    LogType.fertilizer,
+                                  )
+                                  ? Color(colors.fertilizerFg)
+                                  : null,
+                              fontWeight:
+                                  _selectedBulkLogTypes.contains(
+                                    LogType.fertilizer,
+                                  )
+                                  ? FontWeight.w600
+                                  : null,
+                            ),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedBulkLogTypes.add(LogType.fertilizer);
+                                } else if (_selectedBulkLogTypes.length > 1) {
+                                  _selectedBulkLogTypes.remove(
+                                    LogType.fertilizer,
+                                  );
+                                }
+                              });
+                            },
+                          ),
+                          FilterChip(
+                            label: const Text('活力剤'),
+                            avatar: const Icon(Icons.favorite, size: 18),
+                            selected: _selectedBulkLogTypes.contains(
+                              LogType.vitalizer,
+                            ),
+                            selectedColor: Color(colors.vitalizerBg),
+                            checkmarkColor: Color(colors.vitalizerFg),
+                            labelStyle: TextStyle(
+                              color:
+                                  _selectedBulkLogTypes.contains(
+                                    LogType.vitalizer,
+                                  )
+                                  ? Color(colors.vitalizerFg)
+                                  : null,
+                              fontWeight:
+                                  _selectedBulkLogTypes.contains(
+                                    LogType.vitalizer,
+                                  )
+                                  ? FontWeight.w600
+                                  : null,
+                            ),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedBulkLogTypes.add(LogType.vitalizer);
+                                } else if (_selectedBulkLogTypes.length > 1) {
+                                  _selectedBulkLogTypes.remove(
+                                    LogType.vitalizer,
+                                  );
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '登録する記録',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Consumer<SettingsProvider>(
-                        builder: (context, settings, _) {
-                          final colors = settings.logTypeColors;
-                          return Wrap(
-                            spacing: 8,
-                            children: [
-                              FilterChip(
-                                label: const Text('水やり'),
-                                avatar: const Icon(Icons.water_drop, size: 18),
-                                selected: _selectedBulkLogTypes.contains(LogType.watering),
-                                selectedColor: Color(colors.wateringBg),
-                                checkmarkColor: Color(colors.wateringFg),
-                                labelStyle: TextStyle(
-                                  color: _selectedBulkLogTypes.contains(LogType.watering)
-                                      ? Color(colors.wateringFg)
-                                      : null,
-                                  fontWeight: _selectedBulkLogTypes.contains(LogType.watering)
-                                      ? FontWeight.w600
-                                      : null,
-                                ),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _selectedBulkLogTypes.add(LogType.watering);
-                                    } else if (_selectedBulkLogTypes.length > 1) {
-                                      _selectedBulkLogTypes.remove(LogType.watering);
-                                    }
-                                  });
-                                },
-                              ),
-                              FilterChip(
-                                label: const Text('肥料'),
-                                avatar: const Icon(Icons.grass, size: 18),
-                                selected: _selectedBulkLogTypes.contains(LogType.fertilizer),
-                                selectedColor: Color(colors.fertilizerBg),
-                                checkmarkColor: Color(colors.fertilizerFg),
-                                labelStyle: TextStyle(
-                                  color: _selectedBulkLogTypes.contains(LogType.fertilizer)
-                                      ? Color(colors.fertilizerFg)
-                                      : null,
-                                  fontWeight: _selectedBulkLogTypes.contains(LogType.fertilizer)
-                                      ? FontWeight.w600
-                                      : null,
-                                ),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _selectedBulkLogTypes.add(LogType.fertilizer);
-                                    } else if (_selectedBulkLogTypes.length > 1) {
-                                      _selectedBulkLogTypes.remove(LogType.fertilizer);
-                                    }
-                                  });
-                                },
-                              ),
-                              FilterChip(
-                                label: const Text('活力剤'),
-                                avatar: const Icon(Icons.favorite, size: 18),
-                                selected: _selectedBulkLogTypes.contains(LogType.vitalizer),
-                                selectedColor: Color(colors.vitalizerBg),
-                                checkmarkColor: Color(colors.vitalizerFg),
-                                labelStyle: TextStyle(
-                                  color: _selectedBulkLogTypes.contains(LogType.vitalizer)
-                                      ? Color(colors.vitalizerFg)
-                                      : null,
-                                  fontWeight: _selectedBulkLogTypes.contains(LogType.vitalizer)
-                                      ? FontWeight.w600
-                                      : null,
-                                ),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _selectedBulkLogTypes.add(LogType.vitalizer);
-                                    } else if (_selectedBulkLogTypes.length > 1) {
-                                      _selectedBulkLogTypes.remove(LogType.vitalizer);
-                                    }
-                                  });
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Action button
-                FilledButton.icon(
-                  onPressed: _bulkLog,
-                  icon: const Icon(Icons.check),
-                  label: Text('${_selectedPlantIds.length}件登録'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    minimumSize: const Size(double.infinity, 48),
-                  ),
-                ),
-              ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Action button
+            FilledButton.icon(
+              onPressed: _bulkLog,
+              icon: const Icon(Icons.check),
+              label: Text('${_selectedPlantIds.length}件登録'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                minimumSize: const Size(double.infinity, 48),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -693,7 +730,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             // 行えるため、操作手段は失われない。
             Semantics(
               container: true,
-              label: 'カレンダー。日付を変更するには、下の日付欄をタップして'
+              label:
+                  'カレンダー。日付を変更するには、下の日付欄をタップして'
                   '日付を選ぶか、「前の日」「次の日」のボタンを使ってください。',
               child: ExcludeSemantics(
                 child: TableCalendar(
@@ -766,7 +804,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                       shape: BoxShape.circle,
                     ),
                     todayDecoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.5),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withValues(alpha: 0.5),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -785,21 +825,25 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _CalendarLegendDot(
-                      color: Theme.of(context).colorScheme.primary, label: '記録'),
+                    color: Theme.of(context).colorScheme.primary,
+                    label: '記録',
+                  ),
                   const SizedBox(width: 16),
                   _CalendarLegendDot(
-                      color: Theme.of(context).colorScheme.tertiary, label: '予定'),
+                    color: Theme.of(context).colorScheme.tertiary,
+                    label: '予定',
+                  ),
                   const SizedBox(width: 16),
                   // 予定超過（Issue #275）
                   _CalendarLegendDot(
-                      color: Theme.of(context).colorScheme.error, label: '予定超過'),
+                    color: Theme.of(context).colorScheme.error,
+                    label: '予定超過',
+                  ),
                 ],
               ),
             ),
             const Divider(height: 1),
-            Expanded(
-              child: _buildDatePage(_selectedDate),
-            ),
+            Expanded(child: _buildDatePage(_selectedDate)),
           ],
         );
       },
@@ -861,11 +905,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     // loadPlants() 完了前にキャッシュされると空データが表示され続けるため。
     if (plantProvider.isLoading || !plantProvider.isInitialized) {
       return _DatePageData(
-        logStatus: DailyLogStatus(
-          watered: {},
-          fertilized: {},
-          vitalized: {},
-        ),
+        logStatus: DailyLogStatus(watered: {}, fertilized: {}, vitalized: {}),
         nextWateringDateCache: {},
         nextFertilizerDateCache: {},
         nextVitalizerDateCache: {},
@@ -885,28 +925,43 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     for (final plant in plants) {
       // 全ログを1回のDBクエリで取得し、種別ごとに振り分ける
       final allLogs = await plantProvider.getAllLogsForPlant(plant.id);
-      final wateringLogs =
-          allLogs.where((l) => l.type == LogType.watering).toList();
-      final fertLogs =
-          allLogs.where((l) => l.type == LogType.fertilizer).toList();
-      final vitLogs =
-          allLogs.where((l) => l.type == LogType.vitalizer).toList();
+      final wateringLogs = allLogs
+          .where((l) => l.type == LogType.watering)
+          .toList();
+      final fertLogs = allLogs
+          .where((l) => l.type == LogType.fertilizer)
+          .toList();
+      final vitLogs = allLogs
+          .where((l) => l.type == LogType.vitalizer)
+          .toList();
 
       // 次回予定日はDBアクセスなしで同期計算
-      final nextWatering =
-          plantProvider.calcNextWateringDateFromLogs(plant, wateringLogs);
+      final nextWatering = plantProvider.calcNextWateringDateFromLogs(
+        plant,
+        wateringLogs,
+      );
       nextWateringDateCache[plant.id] = nextWatering;
-      nextFertilizerDateCache[plant.id] =
-          plantProvider.calcNextFertilizerDateFromLogs(
-              plant, fertLogs, wateringLogs, nextWatering);
-      nextVitalizerDateCache[plant.id] =
-          plantProvider.calcNextVitalizerDateFromLogs(
-              plant, vitLogs, wateringLogs, nextWatering);
+      nextFertilizerDateCache[plant.id] = plantProvider
+          .calcNextFertilizerDateFromLogs(
+            plant,
+            fertLogs,
+            wateringLogs,
+            nextWatering,
+          );
+      nextVitalizerDateCache[plant.id] = plantProvider
+          .calcNextVitalizerDateFromLogs(
+            plant,
+            vitLogs,
+            wateringLogs,
+            nextWatering,
+          );
 
       // 指定日のログ有無を判定
-      bool hasOnDate(List<LogEntry> logs) => logs.any((l) =>
-          !l.date.isBefore(startOfDay) &&
-          l.date.isBefore(endOfDay.add(const Duration(seconds: 1))));
+      bool hasOnDate(List<LogEntry> logs) => logs.any(
+        (l) =>
+            !l.date.isBefore(startOfDay) &&
+            l.date.isBefore(endOfDay.add(const Duration(seconds: 1))),
+      );
       wateredMap[plant.id] = hasOnDate(wateringLogs);
       fertilizedMap[plant.id] = hasOnDate(fertLogs);
       vitalizedMap[plant.id] = hasOnDate(vitLogs);
@@ -959,8 +1014,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             final nextFertilizerDateCache = data.nextFertilizerDateCache;
             final nextVitalizerDateCache = data.nextVitalizerDateCache;
             final plantsForDate = _getPlantsForDate(
-              plantProvider.plants, date, logStatus,
-              nextWateringDateCache, nextFertilizerDateCache, nextVitalizerDateCache,
+              plantProvider.plants,
+              date,
+              logStatus,
+              nextWateringDateCache,
+              nextFertilizerDateCache,
+              nextVitalizerDateCache,
             );
 
             return Column(
@@ -970,23 +1029,33 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 // 中身だけ切り替える（Issue #316）
                 if (isToday)
                   _buildStatusSummaryBand(
-                    plantsForDate, logStatus,
-                    nextWateringDateCache, nextFertilizerDateCache,
+                    plantsForDate,
+                    logStatus,
+                    nextWateringDateCache,
+                    nextFertilizerDateCache,
                     nextVitalizerDateCache,
                   )
-                else if (date.isBefore(AppDateUtils.getDateOnly(DateTime.now())))
+                else if (date.isBefore(
+                  AppDateUtils.getDateOnly(DateTime.now()),
+                ))
                   _buildPastDateSummaryBand(logStatus)
                 else
                   _buildFutureDateSummaryBand(
-                    plantsForDate, date,
-                    nextWateringDateCache, nextFertilizerDateCache,
+                    plantsForDate,
+                    date,
+                    nextWateringDateCache,
+                    nextFertilizerDateCache,
                     nextVitalizerDateCache,
                   ),
                 Expanded(
                   child: _buildPlantList(
-                    plantsForDate, isToday, logStatus,
-                    nextWateringDateCache, nextFertilizerDateCache,
-                    nextVitalizerDateCache, date,
+                    plantsForDate,
+                    isToday,
+                    logStatus,
+                    nextWateringDateCache,
+                    nextFertilizerDateCache,
+                    nextVitalizerDateCache,
+                    date,
                   ),
                 ),
               ],
@@ -996,8 +1065,6 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       },
     );
   }
-
-
 
   Widget _buildDateHeader(DateTime date, bool isToday) {
     return Container(
@@ -1012,7 +1079,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             onPressed: () {
               if (_isCalendarView) {
                 final prev = AppDateUtils.getDateOnly(
-                    date.subtract(const Duration(days: 1)));
+                  date.subtract(const Duration(days: 1)),
+                );
                 setState(() {
                   _selectedDate = prev;
                   _focusedDay = prev;
@@ -1052,7 +1120,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             onPressed: () {
               if (_isCalendarView) {
                 final next = AppDateUtils.getDateOnly(
-                    date.add(const Duration(days: 1)));
+                  date.add(const Duration(days: 1)),
+                );
                 setState(() {
                   _selectedDate = next;
                   _focusedDay = next;
@@ -1110,11 +1179,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     for (final plant in plantsForDate) {
       if (logStatus.hasAnyLog(plant.id)) recordedCount++;
       if (logStatus.isWatered(plant.id)) continue;
-      if (_isPastDue(plant.id, nextWateringDateCache, nextFertilizerDateCache,
-          nextVitalizerDateCache)) {
+      if (_isPastDue(
+        plant.id,
+        nextWateringDateCache,
+        nextFertilizerDateCache,
+        nextVitalizerDateCache,
+      )) {
         overdueCount++;
-      } else if (_isDueOn(plant.id, today, nextWateringDateCache,
-          nextFertilizerDateCache, nextVitalizerDateCache)) {
+      } else if (_isDueOn(
+        plant.id,
+        today,
+        nextWateringDateCache,
+        nextFertilizerDateCache,
+        nextVitalizerDateCache,
+      )) {
         dueTodayCount++;
       }
     }
@@ -1288,16 +1366,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 Text(
                   '$count',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: tileForeground,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    color: tileForeground,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(width: 2),
-                Text('件',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: tileForeground)),
+                Text(
+                  '件',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: tileForeground),
+                ),
               ],
             ),
             Row(
@@ -1310,9 +1389,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: tileForeground,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      color: tileForeground,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -1342,10 +1421,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             child: Text(
               '先の日付を見ています。記録は当日になってから、'
               'または「この日の記録を追加」から行えます。',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
         ],
@@ -1399,16 +1477,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           child: ListView.builder(
             controller: _listScrollController,
             padding: const EdgeInsets.only(
-                left: 8, right: 8, top: 8, bottom: 80),
+              left: 8,
+              right: 8,
+              top: 8,
+              bottom: 80,
+            ),
             itemCount: items.length,
             itemBuilder: (context, index) {
               final item = items[index];
               final plant = item.plant;
               if (plant != null) {
                 return _buildPlantCard(
-                    plant, logStatus,
-                    nextWateringDateCache, nextFertilizerDateCache,
-                    nextVitalizerDateCache, date);
+                  plant,
+                  logStatus,
+                  nextWateringDateCache,
+                  nextFertilizerDateCache,
+                  nextVitalizerDateCache,
+                  date,
+                );
               }
               if (item.isAllDone) return _buildAllDoneMessage();
               if (item.completedCount != null) {
@@ -1476,8 +1562,13 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       final dueThatDay = <Plant>[];
       final stillOverdue = <Plant>[];
       for (final plant in plantsForDate) {
-        if (_isDueOn(plant.id, day, nextWateringDateCache,
-            nextFertilizerDateCache, nextVitalizerDateCache)) {
+        if (_isDueOn(
+          plant.id,
+          day,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+        )) {
           dueThatDay.add(plant);
         } else {
           stillOverdue.add(plant);
@@ -1495,11 +1586,20 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       final upcoming = <Plant>[];
 
       for (final plant in incompletePlants) {
-        if (_isPastDue(plant.id, nextWateringDateCache,
-            nextFertilizerDateCache, nextVitalizerDateCache)) {
+        if (_isPastDue(
+          plant.id,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+        )) {
           overdue.add(plant);
-        } else if (_isDueOn(plant.id, today, nextWateringDateCache,
-            nextFertilizerDateCache, nextVitalizerDateCache)) {
+        } else if (_isDueOn(
+          plant.id,
+          today,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+        )) {
           dueToday.add(plant);
         } else {
           upcoming.add(plant);
@@ -1509,10 +1609,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       // 予定超過だけは、件数が増えるとどれから手を付ければよいか分からなくなるため
       // 遅れが大きい順に並べ替える。他のセクションはアプリの並び順設定に従う（Issue #302）。
       overdue.sort((a, b) {
-        final aDate = _earliestDueDate(a.id, nextWateringDateCache,
-            nextFertilizerDateCache, nextVitalizerDateCache);
-        final bDate = _earliestDueDate(b.id, nextWateringDateCache,
-            nextFertilizerDateCache, nextVitalizerDateCache);
+        final aDate = _earliestDueDate(
+          a.id,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+        );
+        final bDate = _earliestDueDate(
+          b.id,
+          nextWateringDateCache,
+          nextFertilizerDateCache,
+          nextVitalizerDateCache,
+        );
         if (aDate == null && bDate == null) return 0;
         if (aDate == null) return 1;
         if (bDate == null) return -1;
@@ -1547,18 +1655,14 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         children: [
           Icon(Icons.task_alt, size: 56, color: scheme.primary),
           const SizedBox(height: 12),
-          Text(
-            '今日のケアは完了しました',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text('今日のケアは完了しました', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
             'お疲れさまでした。予定はすべて記録済みです。',
             textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: scheme.onSurfaceVariant),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -1580,9 +1684,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -1659,7 +1763,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   }
 
   Widget _buildBulkSelectionHeader(List<Plant> incompletePlants) {
-    final allSelected = incompletePlants.every((plant) => _selectedPlantIds.contains(plant.id));
+    final allSelected = incompletePlants.every(
+      (plant) => _selectedPlantIds.contains(plant.id),
+    );
     final someSelected = _selectedPlantIds.isNotEmpty && !allSelected;
 
     return Container(
@@ -1727,16 +1833,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             Icon(
               Icons.eco_outlined,
               size: 64,
-              color:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
             Text(
               hasNoPlants
                   ? 'まずは植物を登録しましょう'
                   : isToday
-                      ? '今日は水やりの予定と記録がありません'
-                      : 'この日は水やりの予定と記録がありません',
+                  ? '今日は水やりの予定と記録がありません'
+                  : 'この日は水やりの予定と記録がありません',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -1764,9 +1871,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
   /// 植物の追加画面へ遷移する（Issue #277 の空状態導線）。
   Future<void> _navigateToAddPlant() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AddPlantScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AddPlantScreen()));
     if (!mounted) return;
     await context.read<PlantProvider>().loadPlants();
   }
@@ -1792,11 +1899,13 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           // 今日以外を見ているときは、その日に対する操作だと分かる文言にする（Issue #316）
           label: Text(
             !AppDateUtils.isSameDay(
-                    _selectedDate, AppDateUtils.getDateOnly(DateTime.now()))
+                  _selectedDate,
+                  AppDateUtils.getDateOnly(DateTime.now()),
+                )
                 ? 'この日の記録を追加'
                 : hasPlants
-                    ? 'その他の植物に水やり'
-                    : '水やり記録をつける',
+                ? 'その他の植物に水やり'
+                : '水やり記録をつける',
           ),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1829,9 +1938,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       ),
     );
     if (goToAdd == true && mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => const AddPlantScreen()),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (context) => const AddPlantScreen()));
     }
   }
 
@@ -1846,8 +1955,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     // 現在の日付データを直接DBから取得して未予定植物を判定する
     final data = await _loadDatePageData(_selectedDate);
     final plantsForDate = _getPlantsForDate(
-      sortedPlants, _selectedDate, data.logStatus,
-      data.nextWateringDateCache, data.nextFertilizerDateCache, data.nextVitalizerDateCache,
+      sortedPlants,
+      _selectedDate,
+      data.logStatus,
+      data.nextWateringDateCache,
+      data.nextFertilizerDateCache,
+      data.nextVitalizerDateCache,
     ).toSet();
 
     // 植物が1件も登録されていない場合は、未予定判定より先に案内する。
@@ -1865,9 +1978,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
     if (unscheduledPlants.isEmpty) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('すべての植物が表示されています')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('すべての植物が表示されています')));
       return;
     }
     if (!context.mounted) return;
@@ -1895,7 +2008,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       if (selectedLogTypes != null && selectedLogTypes.isNotEmpty && mounted) {
         // 選択した全植物 × 全ログ種別を一括登録する
         final plantIds = selectedPlants.map((p) => p.id).toList();
-        await plantProvider.bulkRecordLogs(plantIds, selectedLogTypes.toList(), _selectedDate);
+        await plantProvider.bulkRecordLogs(
+          plantIds,
+          selectedLogTypes.toList(),
+          _selectedDate,
+        );
         await _refreshAfterLogChange();
 
         final logTypeNames = selectedLogTypes
@@ -1933,7 +2050,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     // ただし今日以外の日を見ているときは、今日基準の強調を出すと
     // 何の日付を見ているのか分からなくなるため出さない（Issue #299, #301）。
     final isViewingToday = AppDateUtils.isSameDay(selectedDay, today);
-    final isPastDue = isViewingToday &&
+    final isPastDue =
+        isViewingToday &&
         _isPastDue(
           plant.id,
           nextWateringDateCache,
@@ -1943,60 +2061,54 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     final scheme = Theme.of(context).colorScheme;
 
     final tile = ListTile(
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!hasAnyLog)
-              Checkbox(
-                value: isSelected,
-                onChanged: (value) => _togglePlantSelection(plant.id, value),
-              ),
-            PlantImageWidget(plant: plant),
-          ],
-        ),
-        // 長い名前で1枚のカードが画面を占有しないよう2行で省略する（Issue #306）。
-        // 全文は植物詳細で確認できる。
-        title: Text(
-          plant.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: _buildPlantSubtitle(
-          plant,
-          nextWateringDate,
-          nextFertilizerDate,
-          nextVitalizerDate,
-          selectedDay,
-          hasAnyLog,
-          isWatered,
-          isFertilized,
-          isVitalized,
-          logStatus,
-        ),
-        // 予定がある未記録の植物には、その場で記録できるボタンを出す（Issue #294）。
-        // 今日以外を見ているときは何を記録するのか判断できないため出さない（Issue #299, #301）。
-        // 一括選択中も、個別記録と一括記録のどちらを操作しているのか
-        // 分からなくなるため出さない（Issue #312）。
-        trailing: (!isViewingToday || _selectedPlantIds.isNotEmpty)
-            ? null
-            : _buildQuickRecordButton(
-                plant,
-                logStatus,
-                nextWateringDateCache,
-                nextFertilizerDateCache,
-                nextVitalizerDateCache,
-                isPastDue,
-              ),
-        onTap: () => _navigateToPlantDetail(plant),
-      );
+      leading: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!hasAnyLog)
+            Checkbox(
+              value: isSelected,
+              onChanged: (value) => _togglePlantSelection(plant.id, value),
+            ),
+          PlantImageWidget(plant: plant),
+        ],
+      ),
+      // 長い名前で1枚のカードが画面を占有しないよう2行で省略する（Issue #306）。
+      // 全文は植物詳細で確認できる。
+      title: Text(plant.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: _buildPlantSubtitle(
+        plant,
+        nextWateringDate,
+        nextFertilizerDate,
+        nextVitalizerDate,
+        selectedDay,
+        hasAnyLog,
+        isWatered,
+        isFertilized,
+        isVitalized,
+        logStatus,
+      ),
+      // 予定がある未記録の植物には、その場で記録できるボタンを出す（Issue #294）。
+      // 今日以外を見ているときは何を記録するのか判断できないため出さない（Issue #299, #301）。
+      // 一括選択中も、個別記録と一括記録のどちらを操作しているのか
+      // 分からなくなるため出さない（Issue #312）。
+      trailing: (!isViewingToday || _selectedPlantIds.isNotEmpty)
+          ? null
+          : _buildQuickRecordButton(
+              plant,
+              logStatus,
+              nextWateringDateCache,
+              nextFertilizerDateCache,
+              nextVitalizerDateCache,
+              isPastDue,
+            ),
+      onTap: () => _navigateToPlantDetail(plant),
+    );
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       elevation: isSelected ? 4 : 1,
       clipBehavior: Clip.antiAlias,
-      color: isSelected
-          ? scheme.primaryContainer.withValues(alpha: 0.3)
-          : null,
+      color: isSelected ? scheme.primaryContainer.withValues(alpha: 0.3) : null,
       // アクセントラインは Stack で重ねる。Row + CrossAxisAlignment.stretch だと
       // ListView 内で高さが非制約になり、子に無限高さが渡ってレイアウトが壊れる。
       child: Stack(
@@ -2045,8 +2157,9 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         tooltip: '${_getLogTypeName(logType)}を記録',
         style: IconButton.styleFrom(
           backgroundColor: isPastDue ? scheme.primary : scheme.primaryContainer,
-          foregroundColor:
-              isPastDue ? scheme.onPrimary : scheme.onPrimaryContainer,
+          foregroundColor: isPastDue
+              ? scheme.onPrimary
+              : scheme.onPrimaryContainer,
         ),
         onPressed: () => _recordSingleLog(plant, logType),
       ),
@@ -2143,9 +2256,12 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
               spacing: 4,
               runSpacing: 4,
               children: [
-                if (isWatered) _buildLogChip(plant.id, LogType.watering, logStatus),
-                if (isFertilized) _buildLogChip(plant.id, LogType.fertilizer, logStatus),
-                if (isVitalized) _buildLogChip(plant.id, LogType.vitalizer, logStatus),
+                if (isWatered)
+                  _buildLogChip(plant.id, LogType.watering, logStatus),
+                if (isFertilized)
+                  _buildLogChip(plant.id, LogType.fertilizer, logStatus),
+                if (isVitalized)
+                  _buildLogChip(plant.id, LogType.vitalizer, logStatus),
               ],
             ),
           ),
@@ -2166,7 +2282,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
   ) {
     final scheme = Theme.of(context).colorScheme;
     bool isDueOnSelectedDay(DateTime? d) =>
-        d != null && AppDateUtils.isSameDay(AppDateUtils.getDateOnly(d), selectedDay);
+        d != null &&
+        AppDateUtils.isSameDay(AppDateUtils.getDateOnly(d), selectedDay);
 
     final chips = <Widget>[
       if (isDueOnSelectedDay(nextWateringDate))
@@ -2244,7 +2361,11 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     );
   }
 
-  Widget _buildLogChip(String plantId, LogType logType, DailyLogStatus logStatus) {
+  Widget _buildLogChip(
+    String plantId,
+    LogType logType,
+    DailyLogStatus logStatus,
+  ) {
     final config = _getLogChipConfig(logType);
     return ActionChip(
       label: Row(
@@ -2259,11 +2380,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             ),
           ),
           const SizedBox(width: 4),
-          Icon(
-            Icons.close,
-            size: 12,
-            color: config.foregroundColor(context),
-          ),
+          Icon(Icons.close, size: 12, color: config.foregroundColor(context)),
         ],
       ),
       avatar: Icon(
@@ -2281,7 +2398,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
   _LogChipConfig _getLogChipConfig(LogType logType) {
     final colors = context.read<SettingsProvider>().logTypeColors;
-    
+
     switch (logType) {
       case LogType.watering:
         return _LogChipConfig(
@@ -2323,7 +2440,8 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         // 水やりログ画面からの遷移はログタブ（index=1）を直接開く (#127)
-        builder: (context) => PlantDetailScreen(plant: plant, initialTabIndex: 1),
+        builder: (context) =>
+            PlantDetailScreen(plant: plant, initialTabIndex: 1),
       ),
     );
     // データ変更があった場合のみ再ロードする（ログを見ただけなら不要）
@@ -2457,31 +2575,31 @@ class _LogListItem {
   final bool isAllDone;
 
   const _LogListItem.header(String label, Color color)
-      : headerLabel = label,
-        headerColor = color,
-        plant = null,
-        completedCount = null,
-        isAllDone = false;
+    : headerLabel = label,
+      headerColor = color,
+      plant = null,
+      completedCount = null,
+      isAllDone = false;
 
   const _LogListItem.plant(this.plant)
-      : headerLabel = null,
-        headerColor = null,
-        completedCount = null,
-        isAllDone = false;
+    : headerLabel = null,
+      headerColor = null,
+      completedCount = null,
+      isAllDone = false;
 
   const _LogListItem.completed(int count)
-      : headerLabel = null,
-        headerColor = null,
-        plant = null,
-        completedCount = count,
-        isAllDone = false;
+    : headerLabel = null,
+      headerColor = null,
+      plant = null,
+      completedCount = count,
+      isAllDone = false;
 
   const _LogListItem.allDone()
-      : headerLabel = null,
-        headerColor = null,
-        plant = null,
-        completedCount = null,
-        isAllDone = true;
+    : headerLabel = null,
+      headerColor = null,
+      plant = null,
+      completedCount = null,
+      isAllDone = true;
 }
 
 /// ログチップの設定
@@ -2519,7 +2637,8 @@ class _LogTypeSelectionDialog extends StatefulWidget {
   const _LogTypeSelectionDialog();
 
   @override
-  State<_LogTypeSelectionDialog> createState() => _LogTypeSelectionDialogState();
+  State<_LogTypeSelectionDialog> createState() =>
+      _LogTypeSelectionDialogState();
 }
 
 class _LogTypeSelectionDialogState extends State<_LogTypeSelectionDialog> {

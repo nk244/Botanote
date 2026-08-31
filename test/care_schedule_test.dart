@@ -116,12 +116,20 @@ void main() {
 
       expect(
         provider.calcNextFertilizerDateFromLogs(
-            plant, const <LogEntry>[], waterings.take(1).toList(), null),
+          plant,
+          const <LogEntry>[],
+          waterings.take(1).toList(),
+          null,
+        ),
         DateTime(2028, 9, 10),
       );
       expect(
         provider.calcNextFertilizerDateFromLogs(
-            plant, const <LogEntry>[], waterings, null),
+          plant,
+          const <LogEntry>[],
+          waterings,
+          null,
+        ),
         DateTime(2028, 9, 10),
       );
     });
@@ -130,19 +138,17 @@ void main() {
   group('肥料の次回予定日（水やりN回に1回）', () {
     test('N回に到達したら期限は最後の水やり日（超過を隠さない）', () {
       final provider = PlantProvider();
-      final plant =
-          buildPlant(wateringIntervalDays: 3, fertilizerEveryNWaterings: 3);
-
-      final result = provider.calcNextFertilizerDateFromLogs(
-        plant,
-        const <LogEntry>[],
-        [
-          log(LogType.watering, DateTime(2028, 8, 11)),
-          log(LogType.watering, DateTime(2028, 8, 14)),
-          log(LogType.watering, DateTime(2028, 8, 17)),
-        ],
-        DateTime(2028, 8, 20),
+      final plant = buildPlant(
+        wateringIntervalDays: 3,
+        fertilizerEveryNWaterings: 3,
       );
+
+      final result = provider
+          .calcNextFertilizerDateFromLogs(plant, const <LogEntry>[], [
+            log(LogType.watering, DateTime(2028, 8, 11)),
+            log(LogType.watering, DateTime(2028, 8, 14)),
+            log(LogType.watering, DateTime(2028, 8, 17)),
+          ], DateTime(2028, 8, 20));
 
       // 3回目で期限到達。Nサイクル先へ飛ばさず最後の水やり日を返す
       expect(result, DateTime(2028, 8, 17));
@@ -150,18 +156,16 @@ void main() {
 
     test('途中の回数なら残り回数ぶん先の日付を返す', () {
       final provider = PlantProvider();
-      final plant =
-          buildPlant(wateringIntervalDays: 3, fertilizerEveryNWaterings: 3);
-
-      final result = provider.calcNextFertilizerDateFromLogs(
-        plant,
-        const <LogEntry>[],
-        [
-          log(LogType.watering, DateTime(2028, 8, 11)),
-          log(LogType.watering, DateTime(2028, 8, 14)),
-        ],
-        DateTime(2028, 8, 17),
+      final plant = buildPlant(
+        wateringIntervalDays: 3,
+        fertilizerEveryNWaterings: 3,
       );
+
+      final result = provider
+          .calcNextFertilizerDateFromLogs(plant, const <LogEntry>[], [
+            log(LogType.watering, DateTime(2028, 8, 11)),
+            log(LogType.watering, DateTime(2028, 8, 14)),
+          ], DateTime(2028, 8, 17));
 
       // 残り1回 → 最後の水やり日 8/14 + 3日
       expect(result, DateTime(2028, 8, 17));
@@ -169,8 +173,10 @@ void main() {
 
     test('水やりが1回も無ければN回ぶん先の日付を返す', () {
       final provider = PlantProvider();
-      final plant =
-          buildPlant(wateringIntervalDays: 3, fertilizerEveryNWaterings: 3);
+      final plant = buildPlant(
+        wateringIntervalDays: 3,
+        fertilizerEveryNWaterings: 3,
+      );
 
       final result = provider.calcNextFertilizerDateFromLogs(
         plant,

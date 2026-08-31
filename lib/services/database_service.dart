@@ -69,8 +69,7 @@ class DatabaseService {
             'vitalizerEveryNWaterings',
           ]) {
             try {
-              await db.execute(
-                  'ALTER TABLE plants ADD COLUMN $col INTEGER');
+              await db.execute('ALTER TABLE plants ADD COLUMN $col INTEGER');
             } catch (_) {
               // 既にカラムが存在する場合は無視
             }
@@ -96,13 +95,15 @@ class DatabaseService {
           // plants テーブルに季節調整（冬季の間隔延長）カラムを追加
           try {
             await db.execute(
-                'ALTER TABLE plants ADD COLUMN seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0');
+              'ALTER TABLE plants ADD COLUMN seasonalAdjustmentEnabled INTEGER NOT NULL DEFAULT 0',
+            );
           } catch (_) {
             // 既にカラムが存在する場合は無視
           }
           try {
             await db.execute(
-                'ALTER TABLE plants ADD COLUMN dormantSeasonIntervalMultiplier REAL');
+              'ALTER TABLE plants ADD COLUMN dormantSeasonIntervalMultiplier REAL',
+            );
           } catch (_) {
             // 既にカラムが存在する場合は無視
           }
@@ -111,7 +112,8 @@ class DatabaseService {
           // plants テーブルに屋外フラグを追加（天気連動ケアアラート、Issue #176）
           try {
             await db.execute(
-                'ALTER TABLE plants ADD COLUMN isOutdoor INTEGER NOT NULL DEFAULT 0');
+              'ALTER TABLE plants ADD COLUMN isOutdoor INTEGER NOT NULL DEFAULT 0',
+            );
           } catch (_) {
             // 既にカラムが存在する場合は無視
           }
@@ -138,7 +140,8 @@ class DatabaseService {
           // 残り続けていた（DB肥大・カレンダーの幽霊ログ日付・バックアップ汚染）。
           // 参照先の植物が存在しない孤児ログをここで一括削除する。
           await db.execute(
-              'DELETE FROM logs WHERE plantId NOT IN (SELECT id FROM plants)');
+            'DELETE FROM logs WHERE plantId NOT IN (SELECT id FROM plants)',
+          );
         }
         if (oldVersion < 9) {
           // 名前順の並び替えを五十音順にするための読み仮名（Issue #257）。
@@ -255,8 +258,11 @@ class DatabaseService {
       final batch = txn.batch();
       for (final entry in rowsByTable.entries) {
         for (final row in entry.value) {
-          batch.insert(entry.key, row,
-              conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+            entry.key,
+            row,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         }
       }
       await batch.commit(noResult: true);
@@ -268,8 +274,11 @@ class DatabaseService {
   /// 植物を挙録（同一IDが存在する場合は上書き）する。
   Future<void> insertPlant(Plant plant) async {
     final db = await database;
-    await db.insert('plants', plant.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'plants',
+      plant.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// すべての植物を更新日時の降順で取得する。
@@ -341,8 +350,11 @@ class DatabaseService {
   /// ログを挿入する。
   Future<void> insertLog(LogEntry log) async {
     final db = await database;
-    await db.insert('logs', log.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'logs',
+      log.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// すべてのログを日付の降順で取得する。
@@ -369,7 +381,9 @@ class DatabaseService {
 
   /// 指定植物かつ種別のログを取得する。
   Future<List<LogEntry>> getLogsByPlantAndType(
-      String plantId, LogType type) async {
+    String plantId,
+    LogType type,
+  ) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'logs',
@@ -382,21 +396,12 @@ class DatabaseService {
 
   Future<void> updateLog(LogEntry log) async {
     final db = await database;
-    await db.update(
-      'logs',
-      log.toMap(),
-      where: 'id = ?',
-      whereArgs: [log.id],
-    );
+    await db.update('logs', log.toMap(), where: 'id = ?', whereArgs: [log.id]);
   }
 
   Future<void> deleteLog(String id) async {
     final db = await database;
-    await db.delete(
-      'logs',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await db.delete('logs', where: 'id = ?', whereArgs: [id]);
   }
 
   // ── Location CRUD（Issue #180） ─────────────────────────────
@@ -404,8 +409,11 @@ class DatabaseService {
   /// 置き場所を挿入する。
   Future<void> insertLocation(Location location) async {
     final db = await database;
-    await db.insert('locations', location.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'locations',
+      location.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// すべての置き場所を名前順で取得する。
@@ -418,8 +426,12 @@ class DatabaseService {
   /// 置き場所情報を更新する。
   Future<void> updateLocation(Location location) async {
     final db = await database;
-    await db.update('locations', location.toMap(),
-        where: 'id = ?', whereArgs: [location.id]);
+    await db.update(
+      'locations',
+      location.toMap(),
+      where: 'id = ?',
+      whereArgs: [location.id],
+    );
   }
 
   /// 指定IDの置き場所を削除し、その場所が設定されていた植物の
@@ -427,8 +439,12 @@ class DatabaseService {
   Future<void> deleteLocation(String id) async {
     final db = await database;
     await db.transaction((txn) async {
-      await txn.update('plants', {'locationId': null},
-          where: 'locationId = ?', whereArgs: [id]);
+      await txn.update(
+        'plants',
+        {'locationId': null},
+        where: 'locationId = ?',
+        whereArgs: [id],
+      );
       await txn.delete('locations', where: 'id = ?', whereArgs: [id]);
     });
   }
@@ -438,20 +454,32 @@ class DatabaseService {
   /// ノートを挿入する。
   Future<void> insertNote(Note note) async {
     final db = await database;
-    await db.insert('notes', note.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'notes',
+      note.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// すべてのノートを更新日時の降順で取得する。
   Future<List<Note>> getAllNotes() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('notes', orderBy: 'updatedAt DESC');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      orderBy: 'updatedAt DESC',
+    );
     return List.generate(maps.length, (i) => Note.fromMap(maps[i]));
   }
 
   /// ノート情報を更新する。
   Future<void> updateNote(Note note) async {
     final db = await database;
-    await db.update('notes', note.toMap(), where: 'id = ?', whereArgs: [note.id]);
+    await db.update(
+      'notes',
+      note.toMap(),
+      where: 'id = ?',
+      whereArgs: [note.id],
+    );
   }
 
   /// 指定IDのノートを削除する。
@@ -512,7 +540,8 @@ class DatabaseService {
       if (plant.wateringIntervalDays == null) continue;
 
       // 最終水やりログ日を起算日とする。ログが無ければ購入日または登録日。
-      final baseDate = lastWateredByPlantId[plant.id] ??
+      final baseDate =
+          lastWateredByPlantId[plant.id] ??
           plant.purchaseDate ??
           plant.createdAt;
 
@@ -544,8 +573,11 @@ class DatabaseService {
   /// センサーログを挿入する。
   Future<void> insertSensorLog(SensorLog log) async {
     final db = await database;
-    await db.insert('sensor_logs', log.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+      'sensor_logs',
+      log.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// すべてのセンサーログを計測日時の降順で取得する。

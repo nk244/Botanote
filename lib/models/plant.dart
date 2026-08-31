@@ -121,7 +121,8 @@ class Plant {
       vitalizerEveryNWaterings: map['vitalizerEveryNWaterings'] as int?,
       isOutdoor: (map['isOutdoor'] as int?) == 1,
       locationId: map['locationId'] as String?,
-      seasonalAdjustmentEnabled: (map['seasonalAdjustmentEnabled'] as int?) == 1,
+      seasonalAdjustmentEnabled:
+          (map['seasonalAdjustmentEnabled'] as int?) == 1,
       dormantSeasonIntervalMultiplier:
           map['dormantSeasonIntervalMultiplier'] as double?,
       createdAt: DateTime.parse(map['createdAt'] as String),
@@ -152,11 +153,16 @@ class Plant {
     return Plant(
       id: id,
       name: name ?? this.name,
-      nameReading:
-          nameReading == _sentinel ? this.nameReading : nameReading as String?,
+      nameReading: nameReading == _sentinel
+          ? this.nameReading
+          : nameReading as String?,
       variety: variety == _sentinel ? this.variety : variety as String?,
-      purchaseDate: purchaseDate == _sentinel ? this.purchaseDate : purchaseDate as DateTime?,
-      purchaseLocation: purchaseLocation == _sentinel ? this.purchaseLocation : purchaseLocation as String?,
+      purchaseDate: purchaseDate == _sentinel
+          ? this.purchaseDate
+          : purchaseDate as DateTime?,
+      purchaseLocation: purchaseLocation == _sentinel
+          ? this.purchaseLocation
+          : purchaseLocation as String?,
       imagePath: imagePath == _sentinel ? this.imagePath : imagePath as String?,
       wateringIntervalDays: wateringIntervalDays == _sentinel
           ? this.wateringIntervalDays
@@ -174,10 +180,13 @@ class Plant {
           ? this.vitalizerEveryNWaterings
           : vitalizerEveryNWaterings as int?,
       isOutdoor: isOutdoor ?? this.isOutdoor,
-      locationId: locationId == _sentinel ? this.locationId : locationId as String?,
+      locationId: locationId == _sentinel
+          ? this.locationId
+          : locationId as String?,
       seasonalAdjustmentEnabled:
           seasonalAdjustmentEnabled ?? this.seasonalAdjustmentEnabled,
-      dormantSeasonIntervalMultiplier: dormantSeasonIntervalMultiplier == _sentinel
+      dormantSeasonIntervalMultiplier:
+          dormantSeasonIntervalMultiplier == _sentinel
           ? this.dormantSeasonIntervalMultiplier
           : dormantSeasonIntervalMultiplier as double?,
       createdAt: createdAt,

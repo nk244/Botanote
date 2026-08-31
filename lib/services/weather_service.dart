@@ -50,32 +50,40 @@ class WeatherService {
 
       final maxTemp = (maxTempList[dayIndex] as num?)?.toDouble();
       if (maxTemp != null && maxTemp >= _heatWaveThresholdC) {
-        alerts.add('明日は猛暑日（最高${maxTemp.round()}℃）の予報です。'
-            '屋外の植物は水切れ・葉焼けに注意し、朝夕の水やりを検討してください。');
+        alerts.add(
+          '明日は猛暑日（最高${maxTemp.round()}℃）の予報です。'
+          '屋外の植物は水切れ・葉焼けに注意し、朝夕の水やりを検討してください。',
+        );
       }
 
       final minTemp = minTempList != null && minTempList.length > dayIndex
           ? (minTempList[dayIndex] as num?)?.toDouble()
           : null;
       if (minTemp != null && minTemp <= _frostThresholdC) {
-        alerts.add('明日は最低${minTemp.round()}℃まで冷え込む予報です。'
-            '霜に弱い屋外の植物は室内への移動や防寒対策を検討してください。');
+        alerts.add(
+          '明日は最低${minTemp.round()}℃まで冷え込む予報です。'
+          '霜に弱い屋外の植物は室内への移動や防寒対策を検討してください。',
+        );
       }
 
       final precip = precipList != null && precipList.length > dayIndex
           ? (precipList[dayIndex] as num?)?.toDouble()
           : null;
       if (precip != null && precip >= _heavyRainThresholdMm) {
-        alerts.add('明日は${precip.round()}mmの大雨が予想されています。'
-            '鉢の水はけを確認し、必要であれば軒下に移動してください。');
+        alerts.add(
+          '明日は${precip.round()}mmの大雨が予想されています。'
+          '鉢の水はけを確認し、必要であれば軒下に移動してください。',
+        );
       }
 
       final uv = uvList != null && uvList.length > dayIndex
           ? (uvList[dayIndex] as num?)?.toDouble()
           : null;
       if (uv != null && uv >= _highUvThreshold) {
-        alerts.add('明日は強い紫外線（UVインデックス${uv.round()}）の予報です。'
-            '直射日光に弱い植物は遮光を検討してください。');
+        alerts.add(
+          '明日は強い紫外線（UVインデックス${uv.round()}）の予報です。'
+          '直射日光に弱い植物は遮光を検討してください。',
+        );
       }
 
       return alerts;

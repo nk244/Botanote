@@ -74,9 +74,9 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
       await ClaudeShareService.shareForBulkIdentification(path);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('共有に失敗しました: ${describeError(e)}')));
     }
   }
 
@@ -178,7 +178,9 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
                 label: const Text('写真を選ぶ'),
               ),
               FilledButton.tonalIcon(
-                onPressed: _imagePath == null ? null : _shareForBulkIdentification,
+                onPressed: _imagePath == null
+                    ? null
+                    : _shareForBulkIdentification,
                 icon: const Icon(Icons.auto_awesome),
                 label: const Text('Claudeで判別'),
               ),
@@ -195,7 +197,8 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               alignLabelWithHint: true,
-              hintText: 'モンステラ / デリシオサ\n'
+              hintText:
+                  'モンステラ / デリシオサ\n'
                   'サンスベリア（ローレンチー）\n'
                   'ポトス',
               helperText: '1行に1つ。「名前 / 品種」「名前（品種）」の形式にも対応します',
@@ -228,8 +231,9 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: FilledButton.icon(
-                  onPressed:
-                      (_isSaving || selectedCount == 0) ? null : _saveAll,
+                  onPressed: (_isSaving || selectedCount == 0)
+                      ? null
+                      : _saveAll,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 18,
@@ -256,8 +260,9 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
           backgroundColor: theme.colorScheme.primaryContainer,
           child: Text(
             '$step',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onPrimaryContainer,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -279,7 +284,8 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
               leading: const Icon(Icons.water_drop_outlined),
               title: const Text('水やり間隔（全件に適用）'),
               subtitle: Text(
-                  _wateringInterval == null ? '未設定' : '$_wateringInterval日ごと'),
+                _wateringInterval == null ? '未設定' : '$_wateringInterval日ごと',
+              ),
               trailing: _wateringInterval == null
                   ? const Icon(Icons.chevron_right)
                   : IconButton(
@@ -383,13 +389,17 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
               title: const Text('未設定'),
               onTap: () => Navigator.of(ctx).pop(''),
             ),
-            ...locations.map((location) => ListTile(
-                  leading: Icon(location.isOutdoor
+            ...locations.map(
+              (location) => ListTile(
+                leading: Icon(
+                  location.isOutdoor
                       ? Icons.wb_sunny_outlined
-                      : Icons.home_outlined),
-                  title: Text(location.name),
-                  onTap: () => Navigator.of(ctx).pop(location.id),
-                )),
+                      : Icons.home_outlined,
+                ),
+                title: Text(location.name),
+                onTap: () => Navigator.of(ctx).pop(location.id),
+              ),
+            ),
           ],
         ),
       ),
@@ -446,8 +456,8 @@ class PlantDraft {
   bool selected;
 
   PlantDraft({required String name, String? variety, this.selected = true})
-      : nameController = TextEditingController(text: name),
-        varietyController = TextEditingController(text: variety ?? '');
+    : nameController = TextEditingController(text: name),
+      varietyController = TextEditingController(text: variety ?? '');
 
   void dispose() {
     nameController.dispose();
@@ -472,7 +482,10 @@ List<PlantDraft> parsePlantList(String raw) {
     if (text.isEmpty) continue;
 
     // 行頭の箇条書き記号・番号を落とす
-    text = text.replaceFirst(RegExp(r'^\s*(?:[-*・●○]|\d+[.)、]|\(\d+\))\s*'), '');
+    text = text.replaceFirst(
+      RegExp(r'^\s*(?:[-*・●○]|\d+[.)、]|\(\d+\))\s*'),
+      '',
+    );
     // Markdown の強調記号を落とす
     text = text.replaceAll('**', '').trim();
     if (text.isEmpty) continue;

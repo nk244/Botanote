@@ -21,8 +21,9 @@ void main() {
         },
       ),
     };
-    final jsonBytes =
-        utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
+    final jsonBytes = utf8.encode(
+      const JsonEncoder.withIndent('  ').convert(data),
+    );
 
     final archive = Archive();
     archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
@@ -32,8 +33,11 @@ void main() {
     final decoded = ZipDecoder().decodeBytes(zipBytes);
     final entry = decoded.findFile('data.json');
 
-    expect(entry, isNotNull,
-        reason: 'ZipEncoder が生成した ZIP から data.json を取得できること');
+    expect(
+      entry,
+      isNotNull,
+      reason: 'ZipEncoder が生成した ZIP から data.json を取得できること',
+    );
     final restored = utf8.decode(entry!.content as List<int>);
     expect(restored, equals(utf8.decode(jsonBytes)));
   });

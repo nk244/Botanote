@@ -3,8 +3,7 @@ import 'package:bota_note/utils/japanese_sort_utils.dart';
 
 /// 名前だけのリストを五十音順に並べたものを返すテスト用ヘルパー。
 List<String> _sortedByName(List<String> names) {
-  final copy = [...names]
-    ..sort((a, b) => compareJapanese(a, null, b, null));
+  final copy = [...names]..sort((a, b) => compareJapanese(a, null, b, null));
   return copy;
 }
 
@@ -18,41 +17,26 @@ List<String> _sortedWithReading(List<(String, String?)> entries) {
 void main() {
   group('compareJapanese', () {
     test('ひらがなは五十音順に並ぶ', () {
-      expect(
-        _sortedByName(['さくら', 'あさがお', 'かすみそう']),
-        ['あさがお', 'かすみそう', 'さくら'],
-      );
+      expect(_sortedByName(['さくら', 'あさがお', 'かすみそう']), ['あさがお', 'かすみそう', 'さくら']);
     });
 
     test('カタカナはひらがなと同じ読み位置に並ぶ', () {
-      expect(
-        _sortedByName(['サクラ', 'あさがお', 'カスミソウ']),
-        ['あさがお', 'カスミソウ', 'サクラ'],
-      );
+      expect(_sortedByName(['サクラ', 'あさがお', 'カスミソウ']), ['あさがお', 'カスミソウ', 'サクラ']);
     });
 
     test('濁点・半濁点は清音と同じ位置で比較される', () {
       // が・か は同値扱いなので、2文字目の「き」「く」で決まる
-      expect(
-        _sortedByName(['がく', 'かき']),
-        ['かき', 'がく'],
-      );
+      expect(_sortedByName(['がく', 'かき']), ['かき', 'がく']);
     });
 
     test('長音・中黒は無視される', () {
       // 「アガベ・チタノタ」→「あかへちたのた」、「アガベ」→「あかへ」
-      expect(
-        _sortedByName(['アガベ・チタノタ', 'アガベ']),
-        ['アガベ', 'アガベ・チタノタ'],
-      );
+      expect(_sortedByName(['アガベ・チタノタ', 'アガベ']), ['アガベ', 'アガベ・チタノタ']);
     });
 
     test('小書き文字は大書きと同じ位置で比較される', () {
       // 「きゃ」→「きや」なので「きは」より後ろ
-      expect(
-        _sortedByName(['きゃく', 'きはい']),
-        ['きはい', 'きゃく'],
-      );
+      expect(_sortedByName(['きゃく', 'きはい']), ['きはい', 'きゃく']);
     });
 
     test('読み仮名が入力されていれば漢字名でも五十音順に並ぶ', () {
@@ -79,17 +63,14 @@ void main() {
     });
 
     test('読み仮名が空文字の場合は名前で比較する', () {
-      expect(
-        _sortedWithReading([('さくら', '   '), ('あさがお', '')]),
-        ['あさがお', 'さくら'],
-      );
+      expect(_sortedWithReading([('さくら', '   '), ('あさがお', '')]), [
+        'あさがお',
+        'さくら',
+      ]);
     });
 
     test('半角カナは全角カナと同じ位置で比較される', () {
-      expect(
-        _sortedByName(['ｻｸﾗ', 'あさがお']),
-        ['あさがお', 'ｻｸﾗ'],
-      );
+      expect(_sortedByName(['ｻｸﾗ', 'あさがお']), ['あさがお', 'ｻｸﾗ']);
     });
   });
 

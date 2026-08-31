@@ -92,10 +92,14 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => PlantProvider()),
-        ChangeNotifierProvider(create: (_) => SettingsProvider()..loadSettings()),
+        ChangeNotifierProvider(
+          create: (_) => SettingsProvider()..loadSettings(),
+        ),
         ChangeNotifierProvider(create: (_) => NoteProvider()),
         ChangeNotifierProvider(create: (_) => SensorLogProvider()),
-        ChangeNotifierProvider(create: (_) => LocationProvider()..loadLocations()),
+        ChangeNotifierProvider(
+          create: (_) => LocationProvider()..loadLocations(),
+        ),
       ],
       child: Consumer<SettingsProvider>(
         builder: (context, settingsProvider, _) {
@@ -130,10 +134,11 @@ class MyApp extends StatelessWidget {
             // しまうため、読み込みが終わるまではローディングを出す。
             home: !settingsProvider.isLoaded
                 ? const Scaffold(
-                    body: Center(child: CircularProgressIndicator()))
+                    body: Center(child: CircularProgressIndicator()),
+                  )
                 : settingsProvider.onboardingCompleted
-                    ? const HomeScreen()
-                    : const OnboardingScreen(),
+                ? const HomeScreen()
+                : const OnboardingScreen(),
             debugShowCheckedModeBanner: false,
           );
         },

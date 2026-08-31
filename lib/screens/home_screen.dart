@@ -81,9 +81,9 @@ class _HomeScreenState extends State<HomeScreen> {
       await settingsProvider.loadSettings();
 
       if (!mounted || count == 0) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('センサーデータを自動取得しました（$count件）')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('センサーデータを自動取得しました（$count件）')));
     } catch (e) {
       // エラーはサイレントに無視せずログに残す
       debugPrint('起動時センサー自動取得エラー: $e');
@@ -93,10 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) async {
