@@ -9,6 +9,7 @@ import '../providers/location_provider.dart';
 import '../providers/plant_provider.dart';
 import '../services/claude_share_service.dart';
 import '../utils/error_utils.dart';
+import '../widgets/interval_preset_chips.dart';
 
 /// 複数の植物をまとめて登録する画面（Issue #66）。
 ///
@@ -34,6 +35,9 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
 
   /// 貼り付けたテキストから読み取った登録候補
   final List<PlantDraft> _drafts = [];
+
+  /// 直近の読み取りで同名として1件にまとめた行の数（Issue #329）
+  int _mergedDuplicateCount = 0;
 
   /// 全候補に共通で設定する水やり間隔（null = 未設定）
   int? _wateringInterval;
@@ -82,8 +86,8 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
 
   /// 貼り付けたテキストを1行1植物として読み取る。
   void _parsePastedText() {
-    final drafts = parsePlantList(_pastedTextController.text);
-    if (drafts.isEmpty) {
+    final result = parsePlantListDetailed(_pastedTextController.text);
+    if (result.drafts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('植物名を読み取れませんでした。1行に1つずつ入力してください')),
       );
@@ -95,7 +99,8 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
       }
       _drafts
         ..clear()
-        ..addAll(drafts);
+        ..addAll(result.drafts);
+      _mergedDuplicateCount = result.mergedDuplicateCount;
     });
   }
 
@@ -219,6 +224,12 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
             const SizedBox(height: 24),
             _buildStepHeader(context, 3, '内容を確認して登録'),
             const SizedBox(height: 8),
+            // 同名行をまとめたことを知らせる（Issue #329）。
+            // 同じ品種を複数鉢持っている場合、行数どおりに登録されないため。
+            if (_mergedDuplicateCount > 0) ...[
+              _buildMergedDuplicateNotice(context),
+              const SizedBox(height: 8),
+            ],
             _buildCommonSettings(context),
             const SizedBox(height: 8),
             ..._drafts.map(_buildDraftTile),
@@ -227,27 +238,63 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
       ),
       bottomNavigationBar: _drafts.isEmpty
           ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: FilledButton.icon(
-                  onPressed: (_isSaving || selectedCount == 0)
-                      ? null
-                      : _saveAll,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check),
-                  label: Text('$selectedCount件を登録'),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 48),
+          // 入力欄にフォーカスがあると登録ボタンがソフトキーボードに完全に隠れ、
+          // 名前を直してそのまま登録できなかった。キーボードの高さぶん
+          // 持ち上げる（Issue #331）
+          : Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: FilledButton.icon(
+                    onPressed: (_isSaving || selectedCount == 0)
+                        ? null
+                        : _saveAll,
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.check),
+                    label: Text('$selectedCount件を登録'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
                   ),
                 ),
               ),
             ),
+    );
+  }
+
+  /// 同名行をまとめたことを知らせる注記（Issue #329）。
+  Widget _buildMergedDuplicateNotice(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '同じ名前の行が$_mergedDuplicateCount件あったため1件にまとめました。\n'
+              '同じ品種を複数鉢登録したい場合は、品種名や置き場所を書き分けてください。',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -336,28 +383,40 @@ class _BulkAddPlantsScreenState extends State<BulkAddPlantsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('水やり間隔'),
-          content: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton.filledTonal(
-                icon: const Icon(Icons.remove),
-                tooltip: '1日減らす',
-                onPressed: days <= 1
-                    ? null
-                    : () => setDialogState(() => days--),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.remove),
+                    tooltip: '1日減らす',
+                    onPressed: days <= 1
+                        ? null
+                        : () => setDialogState(() => days--),
+                  ),
+                  SizedBox(
+                    width: 96,
+                    child: Text(
+                      '$days日ごと',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(ctx).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    icon: const Icon(Icons.add),
+                    tooltip: '1日増やす',
+                    onPressed: () => setDialogState(() => days++),
+                  ),
+                ],
               ),
-              SizedBox(
-                width: 96,
-                child: Text(
-                  '$days日ごと',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(ctx).textTheme.titleLarge,
-                ),
-              ),
-              IconButton.filledTonal(
-                icon: const Icon(Icons.add),
-                tooltip: '1日増やす',
-                onPressed: () => setDialogState(() => days++),
+              const SizedBox(height: 12),
+              // ±1日だけだと 30日・60日にするのに数十回タップが必要だった（Issue #330）
+              buildIntervalPresetChips(
+                context,
+                current: days,
+                onSelected: (value) => setDialogState(() => days = value),
               ),
             ],
           ),
@@ -465,7 +524,30 @@ class PlantDraft {
   }
 }
 
+/// [parsePlantListDetailed] の結果。
+class PlantListParseResult {
+  /// 登録候補
+  final List<PlantDraft> drafts;
+
+  /// 同名として1件にまとめられた行の数（Issue #329）。
+  ///
+  /// 同じ品種を複数鉢持っている利用者が同じ名前を並べた場合、黙って
+  /// 減らすと気づけないため、件数を画面で知らせるために返す。
+  final int mergedDuplicateCount;
+
+  const PlantListParseResult({
+    required this.drafts,
+    required this.mergedDuplicateCount,
+  });
+}
+
 /// 貼り付けテキストを植物の登録候補に変換する（Issue #66）。
+///
+/// 重複をまとめた件数も必要な場合は [parsePlantListDetailed] を使う。
+List<PlantDraft> parsePlantList(String raw) =>
+    parsePlantListDetailed(raw).drafts;
+
+/// 貼り付けテキストを植物の登録候補に変換し、重複の統合件数も返す。
 ///
 /// 1行1植物とみなし、以下を取り除く/切り分ける:
 /// - 行頭の箇条書き記号・番号（`- `, `* `, `1. `, `1) ` など）
@@ -473,9 +555,10 @@ class PlantDraft {
 /// - `名前 / 品種`、`名前（品種）`、`名前 (品種)` の区切り
 ///
 /// 空行と、区切り線のような記号だけの行は無視する。
-List<PlantDraft> parsePlantList(String raw) {
+PlantListParseResult parsePlantListDetailed(String raw) {
   final drafts = <PlantDraft>[];
   final seen = <String>{};
+  var mergedDuplicateCount = 0;
 
   for (final line in raw.split('\n')) {
     var text = line.trim();
@@ -515,12 +598,20 @@ List<PlantDraft> parsePlantList(String raw) {
     }
 
     if (name.isEmpty) continue;
-    // 同じ名前が複数行に出てきた場合は1件にまとめる
+    // 同じ名前が複数行に出てきた場合は1件にまとめる。
+    // 写真からの判別結果に同じ株が重複して並ぶことがあるための処理なので、
+    // 統合自体は残しつつ、まとめた件数を呼び出し側へ返す（Issue #329）。
     final key = '$name|${variety ?? ''}';
-    if (!seen.add(key)) continue;
+    if (!seen.add(key)) {
+      mergedDuplicateCount++;
+      continue;
+    }
 
     drafts.add(PlantDraft(name: name, variety: variety));
   }
 
-  return drafts;
+  return PlantListParseResult(
+    drafts: drafts,
+    mergedDuplicateCount: mergedDuplicateCount,
+  );
 }

@@ -36,15 +36,16 @@ class SettingsProvider with ChangeNotifier {
     _settings = await _settingsService.loadSettings();
     _isLoaded = true;
     notifyListeners();
-    // アプリ起動時に通知設定が有効ならスマートスケジュールを実行する
-    // （OSが再起動するとスケジュール済み通知が消えるため）
-    if (_settings.notificationEnabled) {
-      await NotificationService.scheduleSmartWateringReminder(
-        hour: _settings.notificationHour,
-        minute: _settings.notificationMinute,
-      );
-    }
-    // 天気連動ケアアラートが有効なら起動時に再スケジュールする（Issue #176）
+    // 水やりリマインダーの張り直しはここでは行わない（Issue #339）。
+    // OS再起動でスケジュール済み通知が消えるケースを含め、アプリ起動時は
+    // PlantProvider.loadPlants() が必ず走り、その中で
+    // NotificationService.scheduleSmartWateringReminder() を呼んでいる。
+    // 通知時刻は NotificationService が SharedPreferences から読むため、
+    // ここで hour/minute を渡す必要もない。両方から呼ぶと起動のたびに
+    // 同じDBクエリとアラーム登録が二重に走る。
+    //
+    // 天気連動ケアアラートが有効なら起動時に再スケジュールする（Issue #176）。
+    // こちらは他に起動時の呼び出し元がないため残す。
     if (_settings.weatherAlertsEnabled) {
       await NotificationService.scheduleWeatherAlert(
         enabled: true,

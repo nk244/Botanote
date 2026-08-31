@@ -33,6 +33,13 @@ class PlantProvider with ChangeNotifier {
 
   final Map<String, DateTime?> _nextWateringCache = {};
 
+  /// 次回肥料・活力剤予定日のキャッシュ（Issue #322）。
+  ///
+  /// 植物一覧が水やりの超過しか表示できなかったのは、この2つを
+  /// [loadPlants] 時に持っていなかったため。
+  final Map<String, DateTime?> _nextFertilizerCache = {};
+  final Map<String, DateTime?> _nextVitalizerCache = {};
+
   /// カレンダー表示用：ログが存在する日付のセット（時刻なし）
   Set<DateTime> _logDatesCache = {};
 
@@ -54,6 +61,33 @@ class PlantProvider with ChangeNotifier {
   /// 一覧画面などで各植物の水やり状態をまとめて表示する用途に使う（Issue #233）。
   DateTime? cachedNextWateringDate(String plantId) =>
       _nextWateringCache[plantId];
+
+  /// 指定した植物の次回肥料予定日をキャッシュから返す（Issue #322）。
+  DateTime? cachedNextFertilizerDate(String plantId) =>
+      _nextFertilizerCache[plantId];
+
+  /// 指定した植物の次回活力剤予定日をキャッシュから返す（Issue #322）。
+  DateTime? cachedNextVitalizerDate(String plantId) =>
+      _nextVitalizerCache[plantId];
+
+  /// 指定した植物で、予定日を過ぎたまま記録されていない種別の一覧を返す。
+  ///
+  /// 「予定日 < 今日」を超過とし、当日ちょうどは含めない。水やりログ画面の
+  /// 判定（Issue #298）と揃えている。一覧画面が水やり以外の遅れにも
+  /// 気づけるようにするための材料（Issue #322）。
+  List<LogType> overdueCareTypes(String plantId, {DateTime? now}) {
+    final today = _dateOnly(now ?? DateTime.now());
+    bool isOverdue(DateTime? next) =>
+        next != null && _dateOnly(next).isBefore(today);
+
+    return [
+      if (isOverdue(_nextWateringCache[plantId])) LogType.watering,
+      if (isOverdue(_nextFertilizerCache[plantId])) LogType.fertilizer,
+      if (isOverdue(_nextVitalizerCache[plantId])) LogType.vitalizer,
+    ];
+  }
+
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   /// 未来を含む「いずれかの植物の次回水やり予定日」の集合を返す（時刻なし）。
   ///
@@ -105,14 +139,48 @@ class PlantProvider with ChangeNotifier {
     try {
       _plants = await _db.getAllPlants();
 
-      // 次回水やり日キャッシュを更新
-      for (var plant in _plants) {
-        _nextWateringCache[plant.id] = await calculateNextWateringDate(
-          plant.id,
+      // 全ログを1クエリで取り、植物ごとに仕分けてから3種別の次回予定日を求める。
+      // 以前は植物1件ごとに calculateNextWateringDate() が DB を引いていたが、
+      // 鉢数に比例してクエリが増えるうえ、肥料・活力剤の予定日は取れなかった
+      // （植物一覧が水やりの超過しか出せない原因。Issue #322）。
+      final allLogs = await _db.getAllLogs();
+      final logsByPlant = <String, List<LogEntry>>{};
+      for (final log in allLogs) {
+        (logsByPlant[log.plantId] ??= <LogEntry>[]).add(log);
+      }
+
+      _nextWateringCache.clear();
+      _nextFertilizerCache.clear();
+      _nextVitalizerCache.clear();
+      for (final plant in _plants) {
+        final logs = logsByPlant[plant.id] ?? const <LogEntry>[];
+        final wateringLogs = logs
+            .where((l) => l.type == LogType.watering)
+            .toList();
+        final fertilizerLogs = logs
+            .where((l) => l.type == LogType.fertilizer)
+            .toList();
+        final vitalizerLogs = logs
+            .where((l) => l.type == LogType.vitalizer)
+            .toList();
+
+        final nextWatering = calcNextWateringDateFromLogs(plant, wateringLogs);
+        _nextWateringCache[plant.id] = nextWatering;
+        _nextFertilizerCache[plant.id] = calcNextFertilizerDateFromLogs(
+          plant,
+          fertilizerLogs,
+          wateringLogs,
+          nextWatering,
+        );
+        _nextVitalizerCache[plant.id] = calcNextVitalizerDateFromLogs(
+          plant,
+          vitalizerLogs,
+          wateringLogs,
+          nextWatering,
         );
       }
+
       // カレンダー表示用のログ日付セットを更新
-      final allLogs = await _db.getAllLogs();
       _logDatesCache = allLogs
           .map((l) => DateTime(l.date.year, l.date.month, l.date.day))
           .toSet();
@@ -431,12 +499,15 @@ class PlantProvider with ChangeNotifier {
 
   /// 複数植物 × 複数ログ種別を一括挿入し、最後に loadPlants を 1回呼び出す。
   /// 画面のチラツキを防止するために一括登録時に使用する。
-  Future<void> bulkRecordLogs(
+  /// 戻り値は登録したログの一覧。[deleteLogs] に渡すと一括記録を取り消せる
+  /// （Issue #328 の「元に戻す」用）。
+  Future<List<LogEntry>> bulkRecordLogs(
     List<String> plantIds,
     List<LogType> logTypes,
     DateTime date,
   ) async {
     final now = DateTime.now();
+    final created = <LogEntry>[];
     for (final plantId in plantIds) {
       for (final logType in logTypes) {
         final log = LogEntry(
@@ -449,10 +520,22 @@ class PlantProvider with ChangeNotifier {
           updatedAt: now,
         );
         await _db.insertLog(log);
+        created.add(log);
       }
     }
     // 全挿入完了後に1回だけ再読み込み
     await loadPlants();
+    return created;
+  }
+
+  /// 指定したログを ID 指定でまとめて削除する（Issue #328 の「元に戻す」）。
+  ///
+  /// [bulkRecordLogs] が返したログをそのまま渡すことで、一括記録だけを
+  /// 取り消せる。既に消えている ID が混ざっても何も起きない。
+  Future<void> deleteLogs(List<LogEntry> logs) async {
+    for (final log in logs) {
+      await _db.deleteLog(log.id);
+    }
   }
 
   /// 今日水やり予定の植物が1つ以上あるか返す。

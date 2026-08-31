@@ -287,60 +287,79 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
         .map((e) => e.value)
         .fold(0, (a, b) => a > b ? a : b);
     const chartHeight = 120.0;
-    // 6ヶ月までは画面幅いっぱいに広げ、それ以上は横スクロールにして
-    // 棒とラベルが潰れないようにする（Issue #290）
-    const monthsWithoutScroll = 6;
-    const barSlotWidth = 52.0;
-    final needsScroll = monthly.length > monthsWithoutScroll;
+    if (monthly.isEmpty) return const SizedBox(height: chartHeight + 40);
 
-    final bars = monthly.asMap().entries.map((indexed) {
-      final i = indexed.key;
-      final entry = indexed.value;
-      final prevMonth = i > 0 ? monthly[i - 1].key : null;
-      final barHeight = maxCount == 0
-          ? 0.0
-          : chartHeight * entry.value / maxCount;
-      final bar = Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text('${entry.value}', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Container(
-            height: barHeight < 4 && entry.value > 0 ? 4 : barHeight,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(4),
-              ),
-            ),
+    // 横スクロールにすると「全期間」でも一度に7〜8ヶ月しか見えず、長期の
+    // 推移を俯瞰できなかった（Issue #326）。表示幅に全月を収め、幅が
+    // 足りなくなったぶんは件数ラベルと月ラベルの密度を落として対応する。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slotWidth = constraints.maxWidth / monthly.length;
+        // ラベルが重ならない最小幅の目安
+        final showValueLabels = slotWidth >= 34;
+        final monthLabelStep = slotWidth >= 44
+            ? 1
+            : slotWidth >= 22
+            ? 2
+            : (44 / slotWidth).ceil();
+
+        return SizedBox(
+          height: chartHeight + 40,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: monthly.asMap().entries.map((indexed) {
+              final i = indexed.key;
+              final entry = indexed.value;
+              final prevMonth = i > 0 ? monthly[i - 1].key : null;
+              final barHeight = maxCount == 0
+                  ? 0.0
+                  : chartHeight * entry.value / maxCount;
+              // ラベルを間引く場合は、最新月が必ず出るよう末尾から数える
+              final showMonthLabel =
+                  (monthly.length - 1 - i) % monthLabelStep == 0;
+
+              return Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (showValueLabels)
+                      Text(
+                        '${entry.value}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    if (showValueLabels) const SizedBox(height: 4),
+                    Container(
+                      height: barHeight < 4 && entry.value > 0 ? 4 : barHeight,
+                      margin: EdgeInsets.symmetric(
+                        horizontal: slotWidth >= 20 ? 4 : 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 16,
+                      child: showMonthLabel
+                          ? FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _monthLabel(entry.key, prevMonth),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
-          const SizedBox(height: 4),
-          Text(
-            _monthLabel(entry.key, prevMonth),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      );
-      return needsScroll
-          ? SizedBox(width: barSlotWidth, child: bar)
-          : Expanded(child: bar);
-    }).toList();
-
-    final chart = Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisSize: needsScroll ? MainAxisSize.min : MainAxisSize.max,
-      children: bars,
-    );
-
-    return SizedBox(
-      height: chartHeight + 40,
-      child: needsScroll
-          ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: chart,
-            )
-          : chart,
+        );
+      },
     );
   }
 

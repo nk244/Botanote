@@ -159,17 +159,27 @@ class LocationListScreen extends StatelessWidget {
             );
           }
 
+          // 置き場所ごとの鉢数を一覧でも把握できるようにする（Issue #336）。
+          // 植物一覧のフィルタチップには件数が出ているのに、置き場所を
+          // 管理するこの画面には出ていなかった。
+          final plants = context.watch<PlantProvider>().plants;
+
           return ListView.builder(
             padding: const EdgeInsets.all(8),
             itemCount: locationProvider.locations.length,
             itemBuilder: (context, index) {
               final location = locationProvider.locations[index];
+              final plantCount = plants
+                  .where((p) => p.locationId == location.id)
+                  .length;
               return Card(
                 margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                 child: ListTile(
                   leading: Icon(location.isOutdoor ? Icons.deck : Icons.home),
                   title: Text(location.name),
-                  subtitle: Text(location.isOutdoor ? '屋外' : '屋内'),
+                  subtitle: Text(
+                    '${location.isOutdoor ? '屋外' : '屋内'}・$plantCount鉢',
+                  ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => LocationDetailScreen(location: location),

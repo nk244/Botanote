@@ -79,8 +79,9 @@ class SensorLog {
       deviceName: map['deviceName'] as String,
       temperature: map['temperature'] as double?,
       humidity: map['humidity'] as double?,
-      recordedAt: DateTime.parse(map['recordedAt'] as String),
-      createdAt: DateTime.parse(map['createdAt'] as String),
+      // UTC 表記（末尾 Z）でも日付がずれないようローカル時刻へ揃える（Issue #338）
+      recordedAt: DateTime.parse(map['recordedAt'] as String).toLocal(),
+      createdAt: DateTime.parse(map['createdAt'] as String).toLocal(),
     );
   }
 }

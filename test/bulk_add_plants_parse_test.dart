@@ -65,4 +65,26 @@ void main() {
       expect(parsePlantList('   \n\n  '), isEmpty);
     });
   });
+
+  group('parsePlantListDetailed', () {
+    test('まとめた重複行の件数を返す（Issue #329）', () {
+      // 同じ品種を3鉢持っている利用者が3行貼り付けても1件しか登録されない。
+      // 黙って減らさず、まとめた件数を画面で知らせるための情報。
+      final result = parsePlantListDetailed('パキラ\nパキラ\nパキラ');
+      expect(result.drafts.length, 1);
+      expect(result.mergedDuplicateCount, 2);
+    });
+
+    test('重複が無ければ0件を返す', () {
+      final result = parsePlantListDetailed('モンステラ\nポトス');
+      expect(result.drafts.length, 2);
+      expect(result.mergedDuplicateCount, 0);
+    });
+
+    test('名前が同じでも品種が違えば重複として数えない', () {
+      final result = parsePlantListDetailed('モンステラ / デリシオサ\nモンステラ / アダンソニー');
+      expect(result.drafts.length, 2);
+      expect(result.mergedDuplicateCount, 0);
+    });
+  });
 }

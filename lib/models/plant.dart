@@ -109,8 +109,9 @@ class Plant {
       name: map['name'] as String,
       nameReading: map['nameReading'] as String?,
       variety: map['variety'] as String?,
+      // UTC 表記（末尾 Z）でも日付がずれないようローカル時刻へ揃える（Issue #338）
       purchaseDate: map['purchaseDate'] != null
-          ? DateTime.parse(map['purchaseDate'] as String)
+          ? DateTime.parse(map['purchaseDate'] as String).toLocal()
           : null,
       purchaseLocation: map['purchaseLocation'] as String?,
       imagePath: map['imagePath'] as String?,
@@ -125,8 +126,8 @@ class Plant {
           (map['seasonalAdjustmentEnabled'] as int?) == 1,
       dormantSeasonIntervalMultiplier:
           map['dormantSeasonIntervalMultiplier'] as double?,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      createdAt: DateTime.parse(map['createdAt'] as String).toLocal(),
+      updatedAt: DateTime.parse(map['updatedAt'] as String).toLocal(),
     );
   }
 

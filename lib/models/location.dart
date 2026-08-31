@@ -35,8 +35,9 @@ class Location {
       id: map['id'] as String,
       name: map['name'] as String,
       isOutdoor: (map['isOutdoor'] as int?) == 1,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      // UTC 表記（末尾 Z）でも日付がずれないようローカル時刻へ揃える（Issue #338）
+      createdAt: DateTime.parse(map['createdAt'] as String).toLocal(),
+      updatedAt: DateTime.parse(map['updatedAt'] as String).toLocal(),
     );
   }
 

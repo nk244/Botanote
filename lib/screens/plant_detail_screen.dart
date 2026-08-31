@@ -67,9 +67,41 @@ class PlantDetailScreen extends StatefulWidget {
   State<PlantDetailScreen> createState() => _PlantDetailScreenState();
 }
 
+/// ログタブの種別フィルタ（Issue #325）。
+enum _LogTabFilter {
+  all,
+  watering,
+  fertilizer,
+  vitalizer,
+
+  /// 植え替え・剪定・葉水・掃除（記録専用のケア種別）
+  other;
+
+  /// この絞り込みが [type] を含むかどうか。
+  bool matches(LogType type) {
+    switch (this) {
+      case _LogTabFilter.all:
+        return true;
+      case _LogTabFilter.watering:
+        return type == LogType.watering;
+      case _LogTabFilter.fertilizer:
+        return type == LogType.fertilizer;
+      case _LogTabFilter.vitalizer:
+        return type == LogType.vitalizer;
+      case _LogTabFilter.other:
+        return type != LogType.watering &&
+            type != LogType.fertilizer &&
+            type != LogType.vitalizer;
+    }
+  }
+}
+
 class _PlantDetailScreenState extends State<PlantDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  /// ログタブで選択中の種別フィルタ（Issue #325）
+  _LogTabFilter _logFilter = _LogTabFilter.all;
 
   /// 表示中の植物。編集画面から戻った際に最新の内容へ差し替える（Issue #243）。
   late Plant _plant;
@@ -758,6 +790,39 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
     );
   }
 
+  /// ログタブの種別フィルタ（Issue #325）。
+  ///
+  /// 2年以上使うと1鉢あたり200件を超え、件数の大半を占める水やりに
+  /// 埋もれて「去年の植え替えはいつか」を探せなくなるため。
+  Widget _buildLogTypeFilterChips() {
+    Widget chip(String label, _LogTabFilter value) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: _logFilter == value,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) => setState(() => _logFilter = value),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        children: [
+          chip('すべて', _LogTabFilter.all),
+          chip('水やり', _LogTabFilter.watering),
+          chip('肥料', _LogTabFilter.fertilizer),
+          chip('活力剤', _LogTabFilter.vitalizer),
+          chip('その他', _LogTabFilter.other),
+        ],
+      ),
+    );
+  }
+
   Widget _buildUnifiedLogTab() {
     // 全ログを日付降順でマージ
     final allLogs = [
@@ -816,24 +881,90 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
       );
     }
 
+    // 種別で絞り込む（Issue #325）
+    final filteredLogs = allLogs
+        .where((log) => _logFilter.matches(log.type))
+        .toList();
+
     // 同日のログをグループ化（日付降順）
     final groupedByDate = <DateTime, List<LogEntry>>{};
-    for (final log in allLogs) {
+    for (final log in filteredLogs) {
       final day = DateTime(log.date.year, log.date.month, log.date.day);
       groupedByDate.putIfAbsent(day, () => []).add(log);
     }
     final sortedDays = groupedByDate.keys.toList()
       ..sort((a, b) => b.compareTo(a));
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: sortedDays.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) return recordCareButton;
-        final day = sortedDays[index - 1];
-        final logs = groupedByDate[day]!;
-        return _buildGroupedLogRow(day, logs);
-      },
+    // 年月の見出しを挟んで、長いログでも時期の当たりを付けられるようにする
+    // （Issue #325）。日付行だけを何百件も並べると遡りようがない。
+    final rows = <Widget>[];
+    DateTime? currentMonth;
+    for (final day in sortedDays) {
+      final month = DateTime(day.year, day.month);
+      if (currentMonth != month) {
+        currentMonth = month;
+        rows.add(_buildLogMonthHeader(month, groupedByDate, sortedDays));
+      }
+      rows.add(_buildGroupedLogRow(day, groupedByDate[day]!));
+    }
+
+    return Column(
+      children: [
+        recordCareButton,
+        _buildLogTypeFilterChips(),
+        if (rows.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'この種別の記録はありません',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: rows.length,
+              itemBuilder: (context, index) => rows[index],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// ログタブの年月見出し（Issue #325）。その月の件数も添える。
+  Widget _buildLogMonthHeader(
+    DateTime month,
+    Map<DateTime, List<LogEntry>> groupedByDate,
+    List<DateTime> sortedDays,
+  ) {
+    final count = sortedDays
+        .where((d) => d.year == month.year && d.month == month.month)
+        .fold<int>(0, (sum, d) => sum + groupedByDate[d]!.length);
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+      child: Row(
+        children: [
+          Text(
+            '${month.year}年${month.month}月',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: scheme.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$count件',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(color: scheme.outlineVariant)),
+        ],
+      ),
     );
   }
 

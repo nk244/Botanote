@@ -386,8 +386,11 @@ class NotificationService {
       androidScheduleMode: scheduleMode,
     );
 
+    // 当日に登録した場合も "for tomorrow" と出ていて挙動を追いにくかった（Issue #339）
     debugPrint(
-      'NotificationService: smart scheduled for tomorrow at $notifHour:${notifMinute.toString().padLeft(2, '0')}',
+      'NotificationService: smart scheduled for '
+      '${targetIsToday ? "today" : "tomorrow"} at '
+      '$notifHour:${notifMinute.toString().padLeft(2, '0')}',
     );
   }
 
@@ -463,7 +466,18 @@ class NotificationService {
     try {
       final db = DatabaseService();
       final plants = await db.getAllPlants();
-      final hasOutdoorPlants = plants.any((p) => p.isOutdoor);
+      // 「屋外」は植物側のフラグと置き場所側のフラグの2箇所で設定できる。
+      // 置き場所の追加ダイアログは「屋外＝天気連動ケアアラートの対象になります」
+      // と明記しているため、置き場所が屋外なら対象に含める（Issue #321）。
+      final outdoorLocationIds = <String>{
+        for (final location in await db.getAllLocations())
+          if (location.isOutdoor) location.id,
+      };
+      final hasOutdoorPlants = plants.any(
+        (p) =>
+            p.isOutdoor ||
+            (p.locationId != null && outdoorLocationIds.contains(p.locationId)),
+      );
       if (!hasOutdoorPlants) {
         await plugin.cancel(id: _weatherAlertNotificationId);
         return;

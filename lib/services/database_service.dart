@@ -357,6 +357,23 @@ class DatabaseService {
     );
   }
 
+  /// ログ行を [LogEntry] に変換する。読み取れない行は飛ばす（Issue #319）。
+  ///
+  /// 未対応の種別名が1行でも混ざると、以前は一覧の取得ごと例外で落ちていた。
+  /// 1行の異常でその植物のログがすべて見えなくなるのを避ける。
+  List<LogEntry> _mapLogRows(List<Map<String, dynamic>> maps) {
+    final logs = <LogEntry>[];
+    for (final map in maps) {
+      final log = LogEntry.tryFromMap(map);
+      if (log == null) {
+        debugPrint('DatabaseService: ログを1件読み飛ばしました (type=${map['type']})');
+        continue;
+      }
+      logs.add(log);
+    }
+    return logs;
+  }
+
   /// すべてのログを日付の降順で取得する。
   Future<List<LogEntry>> getAllLogs() async {
     final db = await database;
@@ -364,7 +381,7 @@ class DatabaseService {
       'logs',
       orderBy: 'date DESC',
     );
-    return List.generate(maps.length, (i) => LogEntry.fromMap(maps[i]));
+    return _mapLogRows(maps);
   }
 
   /// 指定植物のログを取得する。
@@ -376,7 +393,7 @@ class DatabaseService {
       whereArgs: [plantId],
       orderBy: 'date DESC',
     );
-    return List.generate(maps.length, (i) => LogEntry.fromMap(maps[i]));
+    return _mapLogRows(maps);
   }
 
   /// 指定植物かつ種別のログを取得する。
@@ -391,7 +408,7 @@ class DatabaseService {
       whereArgs: [plantId, type.name],
       orderBy: 'date DESC',
     );
-    return List.generate(maps.length, (i) => LogEntry.fromMap(maps[i]));
+    return _mapLogRows(maps);
   }
 
   Future<void> updateLog(LogEntry log) async {

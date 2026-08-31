@@ -128,15 +128,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       setState(() => _isRestoring = false);
 
-      final imageWarning = result.imageWarning;
+      // 写真の未復元（Issue #289）と、読み取れず飛ばしたレコード（Issue #319）は
+      // 成功メッセージに紛れないよう警告として並べる。
+      final warnings = [
+        if (result.skippedWarning != null) result.skippedWarning!,
+        if (result.imageWarning != null) result.imageWarning!,
+      ];
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('復元しました'),
           content: Text(
-            imageWarning == null
+            warnings.isEmpty
                 ? '以下のデータを復元しました。\n\n$result'
-                : '以下のデータを復元しました。\n\n$result\n\n⚠ $imageWarning',
+                : '以下のデータを復元しました。\n\n$result\n\n'
+                      '${warnings.map((w) => '⚠ $w').join('\n\n')}',
           ),
           actions: [
             FilledButton(
