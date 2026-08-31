@@ -966,14 +966,22 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
             return Column(
               children: [
                 _buildDateHeader(date, isToday),
+                // 日付を移動しても骨格が変わらないよう、3タイルの形は保ったまま
+                // 中身だけ切り替える（Issue #316）
                 if (isToday)
                   _buildStatusSummaryBand(
                     plantsForDate, logStatus,
                     nextWateringDateCache, nextFertilizerDateCache,
                     nextVitalizerDateCache,
                   )
-                else if (logStatus.hasAnyRecords)
-                  _buildSummaryFor(logStatus),
+                else if (date.isBefore(AppDateUtils.getDateOnly(DateTime.now())))
+                  _buildPastDateSummaryBand(logStatus)
+                else
+                  _buildFutureDateSummaryBand(
+                    plantsForDate, date,
+                    nextWateringDateCache, nextFertilizerDateCache,
+                    nextVitalizerDateCache,
+                  ),
                 Expanded(
                   child: _buildPlantList(
                     plantsForDate, isToday, logStatus,
@@ -1144,6 +1152,108 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     );
   }
 
+  /// 過去日のサマリー帯。その日に記録した件数を種別ごとに出す（Issue #316）。
+  ///
+  /// 今日の帯と同じ3タイルの形を保ち、色は surfaceContainerHighest に統一して
+  /// 「過ぎた日を見ている」ことが分かるようにする。
+  Widget _buildPastDateSummaryBand(DailyLogStatus logStatus) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          _buildSummaryTile(
+            label: '水やり',
+            count: logStatus.wateredCount,
+            icon: Icons.water_drop,
+            background: scheme.surfaceContainerHighest,
+            foreground: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          _buildSummaryTile(
+            label: '肥料',
+            count: logStatus.fertilizedCount,
+            icon: Icons.grass,
+            background: scheme.surfaceContainerHighest,
+            foreground: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          _buildSummaryTile(
+            label: '活力剤',
+            count: logStatus.vitalizedCount,
+            icon: Icons.favorite,
+            background: scheme.surfaceContainerHighest,
+            foreground: scheme.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 未来日のサマリー帯。その日が予定日になっている件数を種別ごとに出す（Issue #316）。
+  ///
+  /// 今日の「予定超過（error）／今日の予定（primary）」とは別系統の tertiary を使い、
+  /// 先の日付を見ていることが色でも分かるようにする。
+  Widget _buildFutureDateSummaryBand(
+    List<Plant> plantsForDate,
+    DateTime date,
+    Map<String, DateTime?> nextWateringDateCache,
+    Map<String, DateTime?> nextFertilizerDateCache,
+    Map<String, DateTime?> nextVitalizerDateCache,
+  ) {
+    final day = AppDateUtils.getDateOnly(date);
+    var wateringCount = 0;
+    var fertilizerCount = 0;
+    var vitalizerCount = 0;
+
+    for (final plant in plantsForDate) {
+      final watering = _dueDateOnly(plant.id, nextWateringDateCache);
+      final fertilizer = _dueDateOnly(plant.id, nextFertilizerDateCache);
+      final vitalizer = _dueDateOnly(plant.id, nextVitalizerDateCache);
+      if (watering != null && AppDateUtils.isSameDay(watering, day)) {
+        wateringCount++;
+      }
+      if (fertilizer != null && AppDateUtils.isSameDay(fertilizer, day)) {
+        fertilizerCount++;
+      }
+      if (vitalizer != null && AppDateUtils.isSameDay(vitalizer, day)) {
+        vitalizerCount++;
+      }
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          _buildSummaryTile(
+            label: '水やり',
+            count: wateringCount,
+            icon: Icons.water_drop,
+            background: scheme.tertiaryContainer,
+            foreground: scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 8),
+          _buildSummaryTile(
+            label: '肥料',
+            count: fertilizerCount,
+            icon: Icons.grass,
+            background: scheme.tertiaryContainer,
+            foreground: scheme.onTertiaryContainer,
+          ),
+          const SizedBox(width: 8),
+          _buildSummaryTile(
+            label: '活力剤',
+            count: vitalizerCount,
+            icon: Icons.favorite,
+            background: scheme.tertiaryContainer,
+            foreground: scheme.onTertiaryContainer,
+          ),
+        ],
+      ),
+    );
+  }
+
   /// サマリー帯の1タイル。
   ///
   /// テーマ色によっては「予定超過（error）」と「今日の予定（primary）」が
@@ -1213,48 +1323,33 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     );
   }
 
-  Widget _buildSummaryFor(DailyLogStatus logStatus) {
+  /// 未来日を見ていることを伝える注記（Issue #316）。
+  Widget _buildFutureDateNotice() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(16),
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 8,
-        alignment: WrapAlignment.center,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (logStatus.wateredCount > 0)
-            _buildSummaryItem(
-              Icons.water_drop,
-              '${logStatus.wateredCount}件の水やり',
+          Icon(Icons.info_outline, size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '先の日付を見ています。記録は当日になってから、'
+              'または「この日の記録を追加」から行えます。',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
             ),
-          if (logStatus.fertilizedCount > 0)
-            _buildSummaryItem(
-              Icons.grass,
-              '${logStatus.fertilizedCount}件の肥料',
-            ),
-          if (logStatus.vitalizedCount > 0)
-            _buildSummaryItem(
-              Icons.favorite,
-              '${logStatus.vitalizedCount}件の活力剤',
-            ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildSummaryItem(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onPrimaryContainer,
-              ),
-        ),
-      ],
     );
   }
 
@@ -1280,18 +1375,26 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         .toList();
 
     final items = _buildLogListItems(
+      plantsForDate,
       incompletePlants,
       completedPlants,
       isToday,
+      date,
+      logStatus,
       nextWateringDateCache,
       nextFertilizerDateCache,
       nextVitalizerDateCache,
     );
 
+    final isFutureDate =
+        !isToday && !date.isBefore(AppDateUtils.getDateOnly(DateTime.now()));
+
     return Column(
       children: [
         if (incompletePlants.isNotEmpty)
           _buildBulkSelectionHeader(incompletePlants),
+        // 先の日付では記録できないと誤解されないよう、追加手段を1行で示す（Issue #316）
+        if (isFutureDate) _buildFutureDateNotice(),
         Expanded(
           child: ListView.builder(
             controller: _listScrollController,
@@ -1326,18 +1429,64 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
 
   /// リストに並べる要素（セクション見出し・植物カード・記録済みの折りたたみ）を組み立てる。
   ///
-  /// 今日を見ているときだけ「予定超過」「今日の予定」に分ける。過去日・未来日では
-  /// 「今日から見た遅れ」を見出しにすると誤解を招くため、従来どおり一列に並べる（Issue #294）。
+  /// 見出しは表示中の日付を基準にする。今日は「予定超過／今日の予定」、
+  /// 過去日は「この日の記録／この日は記録なし」、未来日は
+  /// 「この日の予定／予定日を過ぎたまま」に分ける（Issue #294, #316）。
   List<_LogListItem> _buildLogListItems(
+    List<Plant> plantsForDate,
     List<Plant> incompletePlants,
     List<Plant> completedPlants,
     bool isToday,
+    DateTime date,
+    DailyLogStatus logStatus,
     Map<String, DateTime?> nextWateringDateCache,
     Map<String, DateTime?> nextFertilizerDateCache,
     Map<String, DateTime?> nextVitalizerDateCache,
   ) {
     final scheme = Theme.of(context).colorScheme;
     final items = <_LogListItem>[];
+
+    void addSectionFor(String label, Color color, List<Plant> plants) {
+      if (plants.isEmpty) return;
+      items.add(_LogListItem.header(label, color));
+      items.addAll(plants.map(_LogListItem.plant));
+    }
+
+    final today = AppDateUtils.getDateOnly(DateTime.now());
+    final day = AppDateUtils.getDateOnly(date);
+
+    if (!isToday && day.isBefore(today)) {
+      // 過去日: その日に記録があったかどうかで分ける
+      addSectionFor(
+        'この日の記録',
+        scheme.primary,
+        plantsForDate.where((p) => logStatus.hasAnyLog(p.id)).toList(),
+      );
+      addSectionFor(
+        'この日は記録なし',
+        scheme.outline,
+        plantsForDate.where((p) => !logStatus.hasAnyLog(p.id)).toList(),
+      );
+      return items;
+    }
+
+    if (!isToday) {
+      // 未来日: その日が予定日のものと、今日より前で放置されているものを分ける。
+      // 後者に「この日に水やり」と出すのは誤りになるため一緒にしない。
+      final dueThatDay = <Plant>[];
+      final stillOverdue = <Plant>[];
+      for (final plant in plantsForDate) {
+        if (_isDueOn(plant.id, day, nextWateringDateCache,
+            nextFertilizerDateCache, nextVitalizerDateCache)) {
+          dueThatDay.add(plant);
+        } else {
+          stillOverdue.add(plant);
+        }
+      }
+      addSectionFor('この日の予定', scheme.tertiary, dueThatDay);
+      addSectionFor('予定日を過ぎたまま', scheme.error, stillOverdue);
+      return items;
+    }
 
     if (isToday) {
       final today = AppDateUtils.getDateOnly(DateTime.now());
@@ -1370,23 +1519,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         return aDate.compareTo(bDate);
       });
 
-      void addSection(String label, Color color, List<Plant> plants) {
-        if (plants.isEmpty) return;
-        items.add(_LogListItem.header(label, color));
-        items.addAll(plants.map(_LogListItem.plant));
-      }
-
-      addSection('予定超過', scheme.error, overdue);
-      addSection('今日の予定', scheme.primary, dueToday);
-      addSection('これからの予定', scheme.outline, upcoming);
-    } else {
-      items.addAll(incompletePlants.map(_LogListItem.plant));
+      addSectionFor('予定超過', scheme.error, overdue);
+      addSectionFor('今日の予定', scheme.primary, dueToday);
+      addSectionFor('これからの予定', scheme.outline, upcoming);
     }
 
     if (completedPlants.isNotEmpty) {
       // 今日やることが残っていないなら、片付いたことを明示する（Issue #305）。
       // 植物が0鉢のときの空状態とは別物なので、記録済みがある場合のみ出す。
-      if (isToday && incompletePlants.isEmpty) {
+      if (incompletePlants.isEmpty) {
         items.add(const _LogListItem.allDone());
       }
       items.add(_LogListItem.completed(completedPlants.length));
@@ -1648,7 +1789,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         child: OutlinedButton.icon(
           onPressed: _showUnscheduledWateringDialog,
           icon: const Icon(Icons.add),
-          label: Text(hasPlants ? 'その他の植物に水やり' : '水やり記録をつける'),
+          // 今日以外を見ているときは、その日に対する操作だと分かる文言にする（Issue #316）
+          label: Text(
+            !AppDateUtils.isSameDay(
+                    _selectedDate, AppDateUtils.getDateOnly(DateTime.now()))
+                ? 'この日の記録を追加'
+                : hasPlants
+                    ? 'その他の植物に水やり'
+                    : '水やり記録をつける',
+          ),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 16),
             minimumSize: const Size(double.infinity, 48),
@@ -1978,6 +2127,15 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
                 ),
             ],
           ),
+        // 未来日は、その日が予定日の種別だけを「この日に〜」として出す。
+        // 今日基準の日数（「3日前」等）は出さない（Issue #316）。
+        if (!isViewingToday && !selectedDay.isBefore(today))
+          _buildFutureDateChips(
+            selectedDay,
+            nextWateringDate,
+            nextFertilizerDate,
+            nextVitalizerDate,
+          ),
         if (hasAnyLog)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -1993,6 +2151,58 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           ),
       ],
     );
+  }
+
+  /// 未来日のカードに出す予定チップ（Issue #316）。
+  ///
+  /// その日が予定日になっている種別だけを「この日に水やり」の形で示す。
+  /// 予定日が今日より前のまま残っているものは日数を出さず、
+  /// 過ぎていることだけを伝える。
+  Widget _buildFutureDateChips(
+    DateTime selectedDay,
+    DateTime? nextWateringDate,
+    DateTime? nextFertilizerDate,
+    DateTime? nextVitalizerDate,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    bool isDueOnSelectedDay(DateTime? d) =>
+        d != null && AppDateUtils.isSameDay(AppDateUtils.getDateOnly(d), selectedDay);
+
+    final chips = <Widget>[
+      if (isDueOnSelectedDay(nextWateringDate))
+        _buildScheduleChip(
+          icon: Icons.water_drop,
+          label: 'この日に水やり',
+          isOverdue: false,
+          normalColor: scheme.tertiary,
+        ),
+      if (isDueOnSelectedDay(nextFertilizerDate))
+        _buildScheduleChip(
+          icon: Icons.grass,
+          label: 'この日に肥料',
+          isOverdue: false,
+          normalColor: scheme.tertiary,
+        ),
+      if (isDueOnSelectedDay(nextVitalizerDate))
+        _buildScheduleChip(
+          icon: Icons.favorite,
+          label: 'この日に活力剤',
+          isOverdue: false,
+          normalColor: scheme.tertiary,
+        ),
+    ];
+
+    if (chips.isEmpty) {
+      // その日が予定日ではないのに並んでいる＝予定日を過ぎたまま残っているもの
+      return _buildScheduleChip(
+        icon: Icons.priority_high,
+        label: '予定日を過ぎています',
+        isOverdue: true,
+        normalColor: scheme.error,
+      );
+    }
+
+    return Wrap(spacing: 8, runSpacing: 2, children: chips);
   }
 
   /// 予定日チップ（アイコン＋テキスト）を構築する (#125)
