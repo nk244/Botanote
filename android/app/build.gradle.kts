@@ -56,6 +56,18 @@ android {
                 signingConfigs.getByName("release")
             else
                 signingConfigs.getByName("debug")
+
+            // リソース縮小を無効にする。
+            //
+            // 通知アイコン ic_notification は Dart 側の文字列からしか参照されず
+            // （lib/services/notification_service.dart の '@drawable/ic_notification'）、
+            // flutter_local_notifications が実行時に名前でリソースを解決する。
+            // 縮小が有効だとこの drawable が未使用と判定されて削除・名前変更されるため、
+            // リリースビルドでのみ PlatformException(invalid_icon) が発生し、
+            // 水やりリマインダーが動かず、通知の再スケジュールを伴うインポートも失敗する。
+            // res/raw/keep.xml では防ぎきれなかったため、縮小自体を止める。
+            // コード縮小（R8）は有効なままにする。
+            isShrinkResources = false
         }
     }
 
