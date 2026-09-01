@@ -25,14 +25,20 @@ Future<bool> confirmClaudeShare(BuildContext context) async {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('このあと共有先を選ぶ画面が開きます。'
-              '一覧から「Claude」を選ぶと、質問文つきで写真が送られます。'),
+          Text(
+            'このあと共有先を選ぶ画面が開きます。'
+            '一覧から「Claude」を選ぶと、質問文つきで写真が送られます。',
+          ),
           SizedBox(height: 12),
-          Text('Claudeアプリが一覧に出てこない場合は、'
-              'ストアからインストールしてからお試しください。'),
+          Text(
+            'Claudeアプリが一覧に出てこない場合は、'
+            'ストアからインストールしてからお試しください。',
+          ),
           SizedBox(height: 12),
-          Text('※ 回答はClaudeアプリ側に表示されます。'
-              'この画面には自動で反映されないため、必要な内容は手動で書き写してください。'),
+          Text(
+            '※ 回答はClaudeアプリ側に表示されます。'
+            'この画面には自動で反映されないため、必要な内容は手動で書き写してください。',
+          ),
         ],
       ),
       actions: [

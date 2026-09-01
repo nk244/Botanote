@@ -47,8 +47,9 @@ class _ImageCropScreenState extends State<ImageCropScreen> {
       if (mounted) Navigator.of(context).pop(CropResult(outFile.path));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('保存に失敗しました: ${describeError(e)}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存に失敗しました: ${describeError(e)}')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isCropping = false);

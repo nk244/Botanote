@@ -10,16 +10,12 @@ class DailyLogStatus {
     required Map<String, bool> watered,
     required Map<String, bool> fertilized,
     required Map<String, bool> vitalized,
-  })  : _watered = watered,
-        _fertilized = fertilized,
-        _vitalized = vitalized;
+  }) : _watered = watered,
+       _fertilized = fertilized,
+       _vitalized = vitalized;
 
   factory DailyLogStatus.empty() {
-    return DailyLogStatus(
-      watered: {},
-      fertilized: {},
-      vitalized: {},
-    );
+    return DailyLogStatus(watered: {}, fertilized: {}, vitalized: {});
   }
 
   bool isWatered(String plantId) => _watered[plantId] ?? false;
@@ -64,7 +60,9 @@ class DailyLogStatus {
         return isWatered(plantId) || isFertilized(plantId);
       default:
         // 記録専用のケアタイプ（Issue #175）はスケジュール管理対象外
-        return isWatered(plantId) || isFertilized(plantId) || isVitalized(plantId);
+        return isWatered(plantId) ||
+            isFertilized(plantId) ||
+            isVitalized(plantId);
     }
   }
 

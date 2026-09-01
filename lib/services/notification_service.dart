@@ -24,10 +24,14 @@ import 'weather_service.dart';
 /// 戻り値の Future は呼び出し側からは await されないが、非同期にしておかないと
 /// DB書き込みの完了前にIsolateが破棄されうるため `async` で最後まで待つ。
 @pragma('vm:entry-point')
-Future<void> notificationBackgroundHandler(NotificationResponse response) async {
+Future<void> notificationBackgroundHandler(
+  NotificationResponse response,
+) async {
   if (response.actionId != NotificationService.wateringDoneActionId) return;
-  debugPrint('NotificationService: background action received '
-      '(${response.actionId})');
+  debugPrint(
+    'NotificationService: background action received '
+    '(${response.actionId})',
+  );
   DartPluginRegistrant.ensureInitialized();
   await NotificationService.recordWateringForDuePlants();
 }
@@ -62,8 +66,9 @@ class NotificationService {
       debugPrint('NotificationService: failed to get timezone, using UTC: $e');
     }
 
-    const androidSettings =
-        AndroidInitializationSettings('@drawable/ic_notification');
+    const androidSettings = AndroidInitializationSettings(
+      '@drawable/ic_notification',
+    );
     // iOS/macOS では通知カテゴリにアクションを登録する（Issue #276）
     final darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -73,10 +78,7 @@ class NotificationService {
         DarwinNotificationCategory(
           'watering',
           actions: <DarwinNotificationAction>[
-            DarwinNotificationAction.plain(
-              wateringDoneActionId,
-              '水やり完了',
-            ),
+            DarwinNotificationAction.plain(wateringDoneActionId, '水やり完了'),
           ],
         ),
       ],
@@ -98,8 +100,10 @@ class NotificationService {
   /// フォアグラウンド（アプリ起動中）で通知アクションを受け取ったときの処理。
   static void _handleNotificationResponse(NotificationResponse response) {
     if (response.actionId != wateringDoneActionId) return;
-    debugPrint('NotificationService: foreground action received '
-        '(${response.actionId})');
+    debugPrint(
+      'NotificationService: foreground action received '
+      '(${response.actionId})',
+    );
     // UIスレッドを止めないため await せずに流す（完了は debugPrint で追える）
     recordWateringForDuePlants();
   }
@@ -118,27 +122,34 @@ class NotificationService {
 
       const uuid = Uuid();
       for (final plant in duePlants) {
-        final existing =
-            await db.getLogsByPlantAndType(plant.id, LogType.watering);
-        final alreadyLogged = existing.any((log) =>
-            log.date.year == now.year &&
-            log.date.month == now.month &&
-            log.date.day == now.day);
+        final existing = await db.getLogsByPlantAndType(
+          plant.id,
+          LogType.watering,
+        );
+        final alreadyLogged = existing.any(
+          (log) =>
+              log.date.year == now.year &&
+              log.date.month == now.month &&
+              log.date.day == now.day,
+        );
         if (alreadyLogged) continue;
 
-        await db.insertLog(LogEntry(
-          id: uuid.v4(),
-          plantId: plant.id,
-          type: LogType.watering,
-          date: now,
-          createdAt: now,
-          updatedAt: now,
-        ));
+        await db.insertLog(
+          LogEntry(
+            id: uuid.v4(),
+            plantId: plant.id,
+            type: LogType.watering,
+            date: now,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
       }
 
       debugPrint(
-          'NotificationService: recorded watering from notification action '
-          '(${duePlants.length} plants checked)');
+        'NotificationService: recorded watering from notification action '
+        '(${duePlants.length} plants checked)',
+      );
 
       // 記録内容が変わったので次回のリマインダーを組み直す
       await scheduleSmartWateringReminder();
@@ -152,7 +163,8 @@ class NotificationService {
     // Android 13+
     final androidImpl = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidImpl != null) {
       // 通知権限（Android 13+）
       final granted = await androidImpl.requestNotificationsPermission();
@@ -164,7 +176,8 @@ class NotificationService {
     // iOS / macOS
     final darwinImpl = _plugin
         .resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
+          IOSFlutterLocalNotificationsPlugin
+        >();
     if (darwinImpl != null) {
       final granted = await darwinImpl.requestPermissions(
         alert: true,
@@ -184,7 +197,8 @@ class NotificationService {
   Future<bool> areNotificationsEnabled() async {
     final androidImpl = _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidImpl != null) {
       final enabled = await androidImpl.areNotificationsEnabled();
       return enabled ?? true;
@@ -236,7 +250,9 @@ class NotificationService {
     }
 
     if (!notifEnabled) {
-      debugPrint('NotificationService: notifications disabled, skipping smart schedule');
+      debugPrint(
+        'NotificationService: notifications disabled, skipping smart schedule',
+      );
       return;
     }
 
@@ -245,11 +261,15 @@ class NotificationService {
     // 「翌日だけ」を見ていると、予定日当日にスケジューリングが走った場合に
     // その日の通知が登録されず、通知が丸1日遅れてしまう。
     final now = DateTime.now();
-    final todayNotifyTime =
-        DateTime(now.year, now.month, now.day, notifHour, notifMinute);
+    final todayNotifyTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      notifHour,
+      notifMinute,
+    );
     final bool targetIsToday = now.isBefore(todayNotifyTime);
-    final targetDate =
-        targetIsToday ? now : now.add(const Duration(days: 1));
+    final targetDate = targetIsToday ? now : now.add(const Duration(days: 1));
 
     bool hasDuePlants = false;
     // 通知本文に載せる対象植物名（DBエラー時は空のまま汎用文言にフォールバック）
@@ -260,8 +280,10 @@ class NotificationService {
       final duePlants = await db.getPlantsDueOn(targetDate);
       hasDuePlants = duePlants.isNotEmpty;
       duePlantNames = duePlants.map((p) => p.name).toList();
-      debugPrint('NotificationService: plants due on '
-          '${targetIsToday ? "today" : "tomorrow"} = ${duePlants.length}');
+      debugPrint(
+        'NotificationService: plants due on '
+        '${targetIsToday ? "today" : "tomorrow"} = ${duePlants.length}',
+      );
     } catch (e) {
       debugPrint('NotificationService: DB check failed, scheduling anyway: $e');
       // DBエラー時は安全側として通知を登録する
@@ -278,8 +300,9 @@ class NotificationService {
     } catch (_) {}
 
     // 初期化（バックグラウンドIsolate用）
-    const androidSettings =
-        AndroidInitializationSettings('@drawable/ic_notification');
+    const androidSettings = AndroidInitializationSettings(
+      '@drawable/ic_notification',
+    );
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -297,7 +320,8 @@ class NotificationService {
 
     if (!hasDuePlants) {
       debugPrint(
-          'NotificationService: no plants due on target day, notification cancelled');
+        'NotificationService: no plants due on target day, notification cancelled',
+      );
       return;
     }
 
@@ -343,7 +367,8 @@ class NotificationService {
     AndroidScheduleMode scheduleMode = AndroidScheduleMode.inexact;
     final androidImpl = plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidImpl != null) {
       final hasExact = await androidImpl.canScheduleExactNotifications();
       if (hasExact ?? false) {
@@ -361,8 +386,12 @@ class NotificationService {
       androidScheduleMode: scheduleMode,
     );
 
+    // 当日に登録した場合も "for tomorrow" と出ていて挙動を追いにくかった（Issue #339）
     debugPrint(
-        'NotificationService: smart scheduled for tomorrow at $notifHour:${notifMinute.toString().padLeft(2, '0')}');
+      'NotificationService: smart scheduled for '
+      '${targetIsToday ? "today" : "tomorrow"} at '
+      '$notifHour:${notifMinute.toString().padLeft(2, '0')}',
+    );
   }
 
   /// 水やり通知をキャンセルする。
@@ -411,8 +440,9 @@ class NotificationService {
       tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
     } catch (_) {}
 
-    const androidSettings =
-        AndroidInitializationSettings('@drawable/ic_notification');
+    const androidSettings = AndroidInitializationSettings(
+      '@drawable/ic_notification',
+    );
     const darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
@@ -436,7 +466,18 @@ class NotificationService {
     try {
       final db = DatabaseService();
       final plants = await db.getAllPlants();
-      final hasOutdoorPlants = plants.any((p) => p.isOutdoor);
+      // 「屋外」は植物側のフラグと置き場所側のフラグの2箇所で設定できる。
+      // 置き場所の追加ダイアログは「屋外＝天気連動ケアアラートの対象になります」
+      // と明記しているため、置き場所が屋外なら対象に含める（Issue #321）。
+      final outdoorLocationIds = <String>{
+        for (final location in await db.getAllLocations())
+          if (location.isOutdoor) location.id,
+      };
+      final hasOutdoorPlants = plants.any(
+        (p) =>
+            p.isOutdoor ||
+            (p.locationId != null && outdoorLocationIds.contains(p.locationId)),
+      );
       if (!hasOutdoorPlants) {
         await plugin.cancel(id: _weatherAlertNotificationId);
         return;
@@ -488,7 +529,8 @@ class NotificationService {
     AndroidScheduleMode scheduleMode = AndroidScheduleMode.inexact;
     final androidImpl = plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidImpl != null) {
       final hasExact = await androidImpl.canScheduleExactNotifications();
       if (hasExact ?? false) {
@@ -505,7 +547,9 @@ class NotificationService {
       androidScheduleMode: scheduleMode,
     );
 
-    debugPrint('NotificationService: weather alert scheduled (${alerts.length}件)');
+    debugPrint(
+      'NotificationService: weather alert scheduled (${alerts.length}件)',
+    );
   }
 
   /// 天気連動ケアアラート通知をキャンセルする。

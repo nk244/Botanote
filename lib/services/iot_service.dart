@@ -71,22 +71,22 @@ class IotService {
       throw Exception('Nature Remo のAPIトークンが設定されていません');
     }
 
-    final response = await http.get(
-      Uri.parse('https://api.nature.global/1/devices'),
-      headers: {'Authorization': 'Bearer $token'},
-    ).timeout(_timeout);
+    final response = await http
+        .get(
+          Uri.parse('https://api.nature.global/1/devices'),
+          headers: {'Authorization': 'Bearer $token'},
+        )
+        .timeout(_timeout);
 
     if (response.statusCode != 200) {
       throw Exception(_httpErrorMessage('Nature Remo', response.statusCode));
     }
 
-    final List<dynamic> devices =
-        jsonDecode(response.body) as List<dynamic>;
+    final List<dynamic> devices = jsonDecode(response.body) as List<dynamic>;
 
     return devices.map((d) {
       final map = d as Map<String, dynamic>;
-      final events =
-          map['newest_events'] as Map<String, dynamic>? ?? {};
+      final events = map['newest_events'] as Map<String, dynamic>? ?? {};
 
       // 温度: newest_events.te.val
       final teEvent = events['te'] as Map<String, dynamic>?;
@@ -124,14 +124,17 @@ class IotService {
     }
 
     // デバイス一覧を取得する
-    final deviceListResponse = await http.get(
-      Uri.parse('https://api.switch-bot.com/v1.1/devices'),
-      headers: _buildSwitchBotHeaders(token, secret),
-    ).timeout(_timeout);
+    final deviceListResponse = await http
+        .get(
+          Uri.parse('https://api.switch-bot.com/v1.1/devices'),
+          headers: _buildSwitchBotHeaders(token, secret),
+        )
+        .timeout(_timeout);
 
     if (deviceListResponse.statusCode != 200) {
       throw Exception(
-          _httpErrorMessage('SwitchBot', deviceListResponse.statusCode));
+        _httpErrorMessage('SwitchBot', deviceListResponse.statusCode),
+      );
     }
 
     final deviceListBody =
@@ -150,32 +153,35 @@ class IotService {
       if (deviceId.isEmpty) continue;
 
       try {
-        final statusResponse = await http.get(
-          Uri.parse(
-              'https://api.switch-bot.com/v1.1/devices/$deviceId/status'),
-          headers: _buildSwitchBotHeaders(token, secret),
-        ).timeout(_timeout);
+        final statusResponse = await http
+            .get(
+              Uri.parse(
+                'https://api.switch-bot.com/v1.1/devices/$deviceId/status',
+              ),
+              headers: _buildSwitchBotHeaders(token, secret),
+            )
+            .timeout(_timeout);
 
         if (statusResponse.statusCode != 200) continue;
 
         final statusBody =
             jsonDecode(statusResponse.body) as Map<String, dynamic>;
-        final body =
-            statusBody['body'] as Map<String, dynamic>? ?? {};
+        final body = statusBody['body'] as Map<String, dynamic>? ?? {};
 
-        final double? temperature =
-            (body['temperature'] as num?)?.toDouble();
+        final double? temperature = (body['temperature'] as num?)?.toDouble();
         final double? humidity = (body['humidity'] as num?)?.toDouble();
 
         // 温度か湿度のどちらかを持つデバイスのみ結果に含める
         if (temperature != null || humidity != null) {
-          results.add(SensorData(
-            deviceId: deviceId,
-            deviceName: deviceName,
-            temperature: temperature,
-            humidity: humidity,
-            source: SensorSource.switchBot,
-          ));
+          results.add(
+            SensorData(
+              deviceId: deviceId,
+              deviceName: deviceName,
+              temperature: temperature,
+              humidity: humidity,
+              source: SensorSource.switchBot,
+            ),
+          );
         }
       } catch (_) {
         // 個別デバイスの取得失敗は無視して次のデバイスへ

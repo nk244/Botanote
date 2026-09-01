@@ -50,9 +50,9 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取得に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('取得に失敗しました: ${describeError(e)}')));
     } finally {
       if (mounted) setState(() => _isFetching = false);
     }
@@ -95,7 +95,8 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
   Widget _buildBody(SensorLogProvider sensorProvider) {
     final settings = context.watch<SettingsProvider>().settings;
     final mappings = settings.sensorDeviceMappings;
-    final hasToken = settings.natureRemoToken.isNotEmpty ||
+    final hasToken =
+        settings.natureRemoToken.isNotEmpty ||
         (settings.switchBotToken.isNotEmpty &&
             settings.switchBotSecret.isNotEmpty);
 
@@ -134,7 +135,9 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
             child: ListView(
               padding: const EdgeInsets.all(12),
               children: [
-                ...linked.map((m) => _buildDeviceCard(m, latestLogs[m.deviceId])),
+                ...linked.map(
+                  (m) => _buildDeviceCard(m, latestLogs[m.deviceId]),
+                ),
                 if (unlinked.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   _buildSectionLabel('植物が未設定のデバイス'),
@@ -181,14 +184,14 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
               Text(
                 '前回',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                  color: Theme.of(context).colorScheme.outline,
+                ),
               ),
               Text(
                 lastLabel,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                  color: Theme.of(context).colorScheme.outline,
+                ),
               ),
             ],
           ),
@@ -231,16 +234,16 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
                   child: Text(
                     mapping.deviceName,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 if (updatedText != null)
                   Text(
                     updatedText,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
               ],
             ),
@@ -260,21 +263,21 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
                 Text(
                   _sourceName(mapping.source),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
                 ),
                 if (plantCount > 0) ...[
                   Text(
                     '  ·  ',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                   Text(
                     '植物 $plantCount株',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                 ] else ...[
                   const Spacer(),
@@ -286,7 +289,8 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
                     ),
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                          builder: (_) => const IotSettingsScreen()),
+                        builder: (_) => const IotSettingsScreen(),
+                      ),
                     ),
                     child: const Text('植物を設定'),
                   ),
@@ -314,11 +318,11 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
         Text(
           value,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: hasData
-                    ? Theme.of(context).colorScheme.onSurface
-                    : Theme.of(context).colorScheme.outline,
-              ),
+            fontWeight: FontWeight.bold,
+            color: hasData
+                ? Theme.of(context).colorScheme.onSurface
+                : Theme.of(context).colorScheme.outline,
+          ),
         ),
       ],
     );
@@ -330,17 +334,17 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            ),
+          color: Theme.of(context).colorScheme.outline,
+        ),
       ),
     );
   }
 
   Widget _buildIotSettingsButton() {
     return OutlinedButton.icon(
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const IotSettingsScreen()),
-      ),
+      onPressed: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const IotSettingsScreen())),
       icon: const Icon(Icons.settings),
       label: const Text('IoT設定を開く'),
     );
@@ -361,10 +365,9 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
             Icon(
               icon,
               size: 64,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withValues(alpha: 0.3),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(

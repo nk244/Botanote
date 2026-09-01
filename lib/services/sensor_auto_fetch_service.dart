@@ -16,7 +16,8 @@ class SensorAutoFetchService {
   ///
   /// 取得間隔が0（無効）またはデバイスマッピングが空の場合はタスクを解除する。
   static Future<void> reschedule(AppSettings settings) async {
-    final enabled = settings.sensorFetchIntervalHours > 0 &&
+    final enabled =
+        settings.sensorFetchIntervalHours > 0 &&
         settings.sensorDeviceMappings.isNotEmpty;
 
     if (!enabled) {
@@ -28,9 +29,7 @@ class SensorAutoFetchService {
       taskName,
       taskName,
       frequency: Duration(hours: settings.sensorFetchIntervalHours),
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-      ),
+      constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
     );
   }

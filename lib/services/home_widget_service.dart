@@ -19,7 +19,7 @@ class HomeWidgetService {
       final summary = plants.isEmpty
           ? '今日の水やりはありません'
           : plants.take(3).map((p) => p.name).join('、') +
-              (plants.length > 3 ? ' 他${plants.length - 3}件' : '');
+                (plants.length > 3 ? ' 他${plants.length - 3}件' : '');
 
       await HomeWidget.saveWidgetData<int>(_countKey, count);
       await HomeWidget.saveWidgetData<String>(_summaryKey, summary);

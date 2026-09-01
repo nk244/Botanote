@@ -189,53 +189,56 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _logs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.bar_chart,
-                        size: 64,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.5),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'まだケアの記録がありません',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '水やり・肥料等を記録すると、ここで振り返れます',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.bar_chart,
+                    size: 64,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.5),
                   ),
-                )
-              : Consumer<PlantProvider>(
-                  builder: (context, plantProvider, _) {
-                    return ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _buildPeriodSelector(context),
-                        const SizedBox(height: 20),
-                        Text('月別ケア件数（$_periodCaption）',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 12),
-                        _buildMonthlyChart(context),
-                        const SizedBox(height: 24),
-                        Text('種別ごとの件数（$_periodCaption）',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 12),
-                        _buildTypeCounts(context),
-                        const SizedBox(height: 24),
-                        _buildPlantRankingSection(context, plantProvider.plants),
-                      ],
-                    );
-                  },
-                ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'まだケアの記録がありません',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '水やり・肥料等を記録すると、ここで振り返れます',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            )
+          : Consumer<PlantProvider>(
+              builder: (context, plantProvider, _) {
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _buildPeriodSelector(context),
+                    const SizedBox(height: 20),
+                    Text(
+                      '月別ケア件数（$_periodCaption）',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMonthlyChart(context),
+                    const SizedBox(height: 24),
+                    Text(
+                      '種別ごとの件数（$_periodCaption）',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTypeCounts(context),
+                    const SizedBox(height: 24),
+                    _buildPlantRankingSection(context, plantProvider.plants),
+                  ],
+                );
+              },
+            ),
     );
   }
 
@@ -245,10 +248,12 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
       width: double.infinity,
       child: SegmentedButton<StatsPeriod>(
         segments: StatsPeriod.values
-            .map((period) => ButtonSegment<StatsPeriod>(
-                  value: period,
-                  label: Text(_periodLabel(period)),
-                ))
+            .map(
+              (period) => ButtonSegment<StatsPeriod>(
+                value: period,
+                label: Text(_periodLabel(period)),
+              ),
+            )
             .toList(),
         selected: {_period},
         showSelectedIcon: false,
@@ -278,61 +283,83 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
 
   Widget _buildMonthlyChart(BuildContext context) {
     final monthly = _monthlyCounts();
-    final maxCount = monthly.map((e) => e.value).fold(0, (a, b) => a > b ? a : b);
+    final maxCount = monthly
+        .map((e) => e.value)
+        .fold(0, (a, b) => a > b ? a : b);
     const chartHeight = 120.0;
-    // 6ヶ月までは画面幅いっぱいに広げ、それ以上は横スクロールにして
-    // 棒とラベルが潰れないようにする（Issue #290）
-    const monthsWithoutScroll = 6;
-    const barSlotWidth = 52.0;
-    final needsScroll = monthly.length > monthsWithoutScroll;
+    if (monthly.isEmpty) return const SizedBox(height: chartHeight + 40);
 
-    final bars = monthly.asMap().entries.map((indexed) {
-      final i = indexed.key;
-      final entry = indexed.value;
-      final prevMonth = i > 0 ? monthly[i - 1].key : null;
-      final barHeight =
-          maxCount == 0 ? 0.0 : chartHeight * entry.value / maxCount;
-      final bar = Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text('${entry.value}', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Container(
-            height: barHeight < 4 && entry.value > 0 ? 4 : barHeight,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(4),
-              ),
-            ),
+    // 横スクロールにすると「全期間」でも一度に7〜8ヶ月しか見えず、長期の
+    // 推移を俯瞰できなかった（Issue #326）。表示幅に全月を収め、幅が
+    // 足りなくなったぶんは件数ラベルと月ラベルの密度を落として対応する。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final slotWidth = constraints.maxWidth / monthly.length;
+        // ラベルが重ならない最小幅の目安
+        final showValueLabels = slotWidth >= 34;
+        final monthLabelStep = slotWidth >= 44
+            ? 1
+            : slotWidth >= 22
+            ? 2
+            : (44 / slotWidth).ceil();
+
+        return SizedBox(
+          height: chartHeight + 40,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: monthly.asMap().entries.map((indexed) {
+              final i = indexed.key;
+              final entry = indexed.value;
+              final prevMonth = i > 0 ? monthly[i - 1].key : null;
+              final barHeight = maxCount == 0
+                  ? 0.0
+                  : chartHeight * entry.value / maxCount;
+              // ラベルを間引く場合は、最新月が必ず出るよう末尾から数える
+              final showMonthLabel =
+                  (monthly.length - 1 - i) % monthLabelStep == 0;
+
+              return Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (showValueLabels)
+                      Text(
+                        '${entry.value}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    if (showValueLabels) const SizedBox(height: 4),
+                    Container(
+                      height: barHeight < 4 && entry.value > 0 ? 4 : barHeight,
+                      margin: EdgeInsets.symmetric(
+                        horizontal: slotWidth >= 20 ? 4 : 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 16,
+                      child: showMonthLabel
+                          ? FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _monthLabel(entry.key, prevMonth),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
-          const SizedBox(height: 4),
-          Text(
-            _monthLabel(entry.key, prevMonth),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      );
-      return needsScroll
-          ? SizedBox(width: barSlotWidth, child: bar)
-          : Expanded(child: bar);
-    }).toList();
-
-    final chart = Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisSize: needsScroll ? MainAxisSize.min : MainAxisSize.max,
-      children: bars,
-    );
-
-    return SizedBox(
-      height: chartHeight + 40,
-      child: needsScroll
-          ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: chart,
-            )
-          : chart,
+        );
+      },
     );
   }
 
@@ -348,13 +375,16 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               children: [
-                Icon(_typeIcon(type),
-                    color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  _typeIcon(type),
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(height: 4),
-                Text('$count回',
-                    style: Theme.of(context).textTheme.titleMedium),
-                Text(_typeLabel(type),
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text('$count回', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  _typeLabel(type),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
@@ -368,14 +398,15 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
     final ranking = _plantRanking(plants);
     final isTruncated =
         !_showAllRanking && ranking.length > _rankingCollapsedCount;
-    final visible =
-        isTruncated ? ranking.take(_rankingCollapsedCount).toList() : ranking;
+    final visible = isTruncated
+        ? ranking.take(_rankingCollapsedCount).toList()
+        : ranking;
 
     final heading = ranking.isEmpty
         ? '植物ごとのケア頻度'
         : isTruncated
-            ? '植物ごとのケア頻度（上位$_rankingCollapsedCount件）'
-            : '植物ごとのケア頻度（全${ranking.length}件）';
+        ? '植物ごとのケア頻度（上位$_rankingCollapsedCount件）'
+        : '植物ごとのケア頻度（全${ranking.length}件）';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,7 +432,9 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
   }
 
   Widget _buildPlantRanking(
-      BuildContext context, List<MapEntry<Plant, int>> ranking) {
+    BuildContext context,
+    List<MapEntry<Plant, int>> ranking,
+  ) {
     if (ranking.isEmpty) {
       return Text('データがありません', style: Theme.of(context).textTheme.bodySmall);
     }
@@ -418,11 +451,12 @@ class _CareStatsScreenState extends State<CareStatsScreen> {
             child: Text('$rank', style: const TextStyle(fontSize: 12)),
           ),
           title: Text(plant.name),
-          trailing: Text('$count回',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          trailing: Text(
+            '$count回',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
         );
       }).toList(),
     );

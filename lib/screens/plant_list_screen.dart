@@ -4,6 +4,7 @@ import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
+import '../models/log_entry.dart';
 import '../models/plant.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
@@ -30,6 +31,42 @@ class _PlantListScreenState extends State<PlantListScreen> {
   /// 選択中の置き場所フィルタ。null = すべて表示（Issue #180）
   String? _selectedLocationId;
 
+  /// 名前検索の入力中かどうか（Issue #327）。
+  ///
+  /// 鉢数が少ないうちは検索欄が場所を取るだけなので、AppBar のアイコンから
+  /// 開く方式にして、普段はリストの領域を削らない。
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// 名前・品種名・置き場所名で植物を絞り込む（Issue #327）。
+  List<Plant> _applySearchFilter(BuildContext context, List<Plant> plants) {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return plants;
+
+    final locations = context.read<LocationProvider>().locations;
+    String locationName(String? id) {
+      if (id == null) return '';
+      return locations.where((l) => l.id == id).firstOrNull?.name ?? '';
+    }
+
+    return plants.where((plant) {
+      final haystack = [
+        plant.name,
+        plant.nameReading ?? '',
+        plant.variety ?? '',
+        locationName(plant.locationId),
+      ].join('\n').toLowerCase();
+      return haystack.contains(query);
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -52,8 +89,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
         if (locations.isEmpty) return const SizedBox.shrink();
 
         final plants = plantProvider.plants;
-        final unassignedCount =
-            plants.where((p) => p.locationId == null).length;
+        final unassignedCount = plants
+            .where((p) => p.locationId == null)
+            .length;
 
         Widget chip(String label, int count, String? value) {
           final selected = _selectedLocationId == value;
@@ -88,9 +126,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
                 icon: const Icon(Icons.home_outlined),
                 tooltip: '置き場所を編集',
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const LocationListScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const LocationListScreen()),
                 ),
               ),
             ],
@@ -116,16 +152,19 @@ class _PlantListScreenState extends State<PlantListScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 16, color: scheme.onSurfaceVariant),
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'カスタム並び替え中は置き場所で絞り込めません',
                     maxLines: 2,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: scheme.onSurfaceVariant),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -149,11 +188,36 @@ class _PlantListScreenState extends State<PlantListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('植物一覧'),
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: '植物名・品種・置き場所で検索',
+                  border: InputBorder.none,
+                ),
+                onChanged: (value) => setState(() => _searchQuery = value),
+              )
+            : const Text('植物一覧'),
         actions: [
           // 置き場所での絞り込みは AppBar のメニューから一覧上のチップ行へ移した
           // （Issue #294。従来の判断は Issue #251）
 
+          // 名前検索。常設のバーにするとリスト領域を常に削るため、
+          // 必要なときだけ開く方式にする（Issue #327）
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            tooltip: _isSearching ? '検索を閉じる' : '植物を検索',
+            onPressed: () {
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                  _searchQuery = '';
+                }
+              });
+            },
+          ),
           // グリッド/リスト表示切り替えボタン
           IconButton(
             icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
@@ -175,7 +239,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
                 },
                 itemBuilder: (context) {
                   final currentOrder = settingsForMenu.plantSortOrder;
-                  
+
                   return PlantSortOrder.values.map((order) {
                     return PopupMenuItem<PlantSortOrder>(
                       value: order,
@@ -184,20 +248,22 @@ class _PlantListScreenState extends State<PlantListScreen> {
                           Icon(
                             _getSortOrderIcon(order),
                             size: 20,
-                            color: currentOrder == order 
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
+                            color: currentOrder == order
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               _getSortOrderName(order),
                               style: currentOrder == order
-                                ? TextStyle(
-                                    color: Theme.of(context).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  )
-                                : null,
+                                  ? TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      fontWeight: FontWeight.bold,
+                                    )
+                                  : null,
                             ),
                           ),
                           if (currentOrder == order)
@@ -219,9 +285,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
             tooltip: '設定',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const SettingsScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
               );
             },
           ),
@@ -256,10 +320,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
                             Icon(
                               Icons.eco_outlined,
                               size: 64,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .primary
-                                  .withValues(alpha: 0.5),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.5),
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -269,13 +332,13 @@ class _PlantListScreenState extends State<PlantListScreen> {
                             const SizedBox(height: 8),
                             Text(
                               '右下のボタンから植物を追加しましょう',
-                              style:
-                                  Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.6),
-                                      ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
                             ),
                           ],
                         ),
@@ -288,17 +351,42 @@ class _PlantListScreenState extends State<PlantListScreen> {
                     );
 
                     // カスタムソート中は全体順序を保つためフィルタを適用しない
-                    final displayedPlants =
-                        isCustomSort ? sortedPlants : _applyLocationFilter(sortedPlants);
+                    final displayedPlants = isCustomSort
+                        ? sortedPlants
+                        : _applyLocationFilter(sortedPlants);
+                    // 名前検索はカスタム並び替え中も使えるようにする（Issue #327）。
+                    // 検索結果の並びは元の順序をそのまま保つため、絞り込みだけを行う。
+                    final searchedPlants = _applySearchFilter(
+                      context,
+                      displayedPlants,
+                    );
+
+                    if (_searchQuery.trim().isNotEmpty &&
+                        searchedPlants.isEmpty) {
+                      return Center(
+                        child: Text(
+                          '「$_searchQuery」に一致する植物はありません',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      );
+                    }
 
                     // グリッド表示（カスタムソート時はリスト優先）
                     if (_isGridView && !isCustomSort) {
-                      return _buildGridView(displayedPlants);
+                      return _buildGridView(searchedPlants);
                     }
 
-                    return isCustomSort
-                        ? _buildReorderableListView(context, sortedPlants, settings)
-                        : _buildListView(displayedPlants);
+                    // 検索中は並び替えのドラッグを無効にする。絞り込まれた並びで
+                    // 入れ替えると、非表示の株との相対順序が壊れるため。
+                    final canReorder =
+                        isCustomSort && _searchQuery.trim().isEmpty;
+                    return canReorder
+                        ? _buildReorderableListView(
+                            context,
+                            sortedPlants,
+                            settings,
+                          )
+                        : _buildListView(searchedPlants);
                   },
                 ),
               ),
@@ -332,9 +420,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
             tooltip: '植物を追加',
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const AddPlantScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const AddPlantScreen()),
               );
             },
             child: const Icon(Icons.add),
@@ -429,6 +515,9 @@ class _PlantListScreenState extends State<PlantListScreen> {
     final rows = <Widget>[
       if (plant.variety != null) Text(plant.variety!),
       _WateringStatusText(plant: plant),
+      // 「置き場所ごとに並べたい」のがカスタム並び替えの主な動機なので、
+      // 並び替え中も置き場所が見えるようにする（Issue #334）
+      _LocationBadge(locationId: plant.locationId),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,24 +531,22 @@ class _PlantListScreenState extends State<PlantListScreen> {
     List<Plant> plants,
     int oldIndex,
     int newIndex,
-  SettingsProvider settings,
+    SettingsProvider settings,
   ) {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
-    
+
     final List<String> newOrder = plants.map((p) => p.id).toList();
     final plantId = newOrder.removeAt(oldIndex);
     newOrder.insert(newIndex, plantId);
-    
+
     settings.setCustomSortOrder(newOrder);
   }
 
   void _navigateToDetail(Plant plant) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => PlantDetailScreen(plant: plant),
-      ),
+      MaterialPageRoute(builder: (context) => PlantDetailScreen(plant: plant)),
     );
   }
 
@@ -540,9 +627,7 @@ class _PlantListTile extends StatelessWidget {
 
   void _navigateToDetail(BuildContext context, Plant plant) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => PlantDetailScreen(plant: plant),
-      ),
+      MaterialPageRoute(builder: (context) => PlantDetailScreen(plant: plant)),
     );
   }
 }
@@ -594,7 +679,10 @@ class _PlantGridCard extends StatelessWidget {
             Expanded(
               flex: 2,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -602,8 +690,8 @@ class _PlantGridCard extends StatelessWidget {
                     Text(
                       plant.name,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -612,11 +700,10 @@ class _PlantGridCard extends StatelessWidget {
                       Text(
                         plant.variety!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withValues(alpha: 0.6),
-                            ),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -655,7 +742,9 @@ class _LocationBadge extends StatelessWidget {
     final name = locations.where((l) => l.id == id).firstOrNull?.name;
     if (name == null) return const SizedBox.shrink();
 
-    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6);
+    final color = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.6);
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Row(
@@ -666,10 +755,9 @@ class _LocationBadge extends StatelessWidget {
           Flexible(
             child: Text(
               name,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: color),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: color),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -679,9 +767,10 @@ class _LocationBadge extends StatelessWidget {
   }
 }
 
-/// 水やり予定を過ぎている植物にだけ出す遅れバッジ（Issue #294）。
+/// 予定を過ぎているケアがある植物にだけ出す遅れバッジ（Issue #294）。
 ///
-/// 予定日を算出できない、または遅れていない場合は何も表示しない。
+/// 水やりだけでなく肥料・活力剤の超過も対象にする（Issue #322）。
+/// 遅れているケアが1つも無い場合は何も表示しない。
 class _OverdueBadge extends StatelessWidget {
   final Plant plant;
 
@@ -689,12 +778,10 @@ class _OverdueBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final next = context.read<PlantProvider>().cachedNextWateringDate(plant.id);
-    if (next == null) return const SizedBox.shrink();
-
-    final today = AppDateUtils.getDateOnly(DateTime.now());
-    final nextDay = AppDateUtils.getDateOnly(next);
-    if (nextDay.isAfter(today)) return const SizedBox.shrink();
+    final overdueTypes = context.read<PlantProvider>().overdueCareTypes(
+      plant.id,
+    );
+    if (overdueTypes.isEmpty) return const SizedBox.shrink();
 
     // 遅れの日数は下部の _WateringStatusText が出すため、バッジは
     // 「遅れている」ことだけを示す小さな印にとどめる（Issue #300）。
@@ -703,46 +790,69 @@ class _OverdueBadge extends StatelessWidget {
     return Container(
       width: 26,
       height: 26,
-      decoration: BoxDecoration(
-        color: scheme.error,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: scheme.error, shape: BoxShape.circle),
       child: Icon(Icons.priority_high, size: 18, color: scheme.onError),
     );
   }
 }
 
+/// 一覧行に出すケア状態の行。
+///
+/// 主役は次回水やり日だが、肥料・活力剤が予定日を過ぎたままの場合は
+/// その種別のアイコンも並べる。以前は水やりしか見ていなかったため、
+/// 肥料だけが3ヶ月遅れている株が一覧では無印になり気づけなかった
+/// （Issue #322）。
 class _WateringStatusText extends StatelessWidget {
   final Plant plant;
 
   const _WateringStatusText({required this.plant});
 
+  static const Map<LogType, IconData> _overdueIcons = {
+    LogType.fertilizer: Icons.grass,
+    LogType.vitalizer: Icons.favorite,
+  };
+
   @override
   Widget build(BuildContext context) {
-    // 次回水やり日は loadPlants() 完了後にキャッシュ済みのため read で十分。
-    final next = context.read<PlantProvider>().cachedNextWateringDate(plant.id);
-    if (next == null) return const SizedBox.shrink();
+    // 次回予定日は loadPlants() 完了後にキャッシュ済みのため read で十分。
+    final provider = context.read<PlantProvider>();
+    final next = provider.cachedNextWateringDate(plant.id);
+    final overdueTypes = provider.overdueCareTypes(plant.id);
+    // 水やり以外で遅れている種別（水やりの遅れは日数表示の色で分かる）
+    final otherOverdue = overdueTypes
+        .where((t) => t != LogType.watering)
+        .toList();
 
+    if (next == null && otherOverdue.isEmpty) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
     final today = AppDateUtils.getDateOnly(DateTime.now());
-    final nextDay = AppDateUtils.getDateOnly(next);
-    final isOverdue = !nextDay.isAfter(today);
-    final color = isOverdue
-        ? Theme.of(context).colorScheme.error
-        : Theme.of(context).colorScheme.primary;
+    final isOverdue =
+        next != null && !AppDateUtils.getDateOnly(next).isAfter(today);
+    final color = isOverdue ? scheme.error : scheme.primary;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.water_drop, size: 13, color: color),
-        const SizedBox(width: 2),
-        Flexible(
-          child: Text(
-            AppDateUtils.formatDateDifference(next),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+        if (next != null) ...[
+          Icon(Icons.water_drop, size: 13, color: color),
+          const SizedBox(width: 2),
+          Flexible(
+            child: Text(
+              AppDateUtils.formatDateDifference(next),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: color),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+        ],
+        // 水やり以外の遅れは、日数を並べると行が長くなるためアイコンだけで示す
+        for (final type in otherOverdue) ...[
+          const SizedBox(width: 6),
+          Icon(_overdueIcons[type], size: 13, color: scheme.error),
+        ],
       ],
     );
   }

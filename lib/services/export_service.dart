@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive_io.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -80,10 +80,9 @@ class ExportService {
     await tmpFile.writeAsBytes(zipBytes);
 
     // OS のシェアシート経由で保存先を選ばせる
-    final result = await Share.shareXFiles(
-      [XFile(tmpFile.path, mimeType: 'application/zip')],
-      subject: 'Botanote バックアップ',
-    );
+    final result = await Share.shareXFiles([
+      XFile(tmpFile.path, mimeType: 'application/zip'),
+    ], subject: 'Botanote バックアップ');
 
     if (result.status == ShareResultStatus.dismissed) return null;
     return tmpFile.path;
@@ -159,11 +158,16 @@ class ExportService {
           // 旧形式: ファイルパスの場合はファイルから読み込む（後方互換）
           final imgFile = File(path);
           if (await imgFile.exists()) {
-            final ext = p.extension(path).isNotEmpty ? p.extension(path) : '.jpg';
+            final ext = p.extension(path).isNotEmpty
+                ? p.extension(path)
+                : '.jpg';
             final zipPath = 'images/plants/${plant.id}$ext';
             archive.addFile(
-              ArchiveFile(zipPath, await imgFile.length(),
-                  await imgFile.readAsBytes()),
+              ArchiveFile(
+                zipPath,
+                await imgFile.length(),
+                await imgFile.readAsBytes(),
+              ),
             );
             map['imagePath'] = zipPath; // ZIP 内相対パスに変換
           } else {
@@ -188,8 +192,11 @@ class ExportService {
                 : '.jpg';
             final zipPath = 'images/notes/${note.id}_$i$ext';
             archive.addFile(
-              ArchiveFile(zipPath, await imgFile.length(),
-                  await imgFile.readAsBytes()),
+              ArchiveFile(
+                zipPath,
+                await imgFile.length(),
+                await imgFile.readAsBytes(),
+              ),
             );
             zipRelPaths.add(zipPath);
           }
@@ -223,7 +230,9 @@ class ExportService {
       'locations': locations.map((l) => l.toMap()).toList(),
       'settings': settingsMap,
     };
-    final jsonBytes = utf8.encode(const JsonEncoder.withIndent('  ').convert(data));
+    final jsonBytes = utf8.encode(
+      const JsonEncoder.withIndent('  ').convert(data),
+    );
     archive.addFile(ArchiveFile('data.json', jsonBytes.length, jsonBytes));
 
     // ZIP エンコード
@@ -362,6 +371,8 @@ class ExportService {
     // 画像参照の解決状況（Issue #289）
     int imageCount = 0;
     int unresolvedImageCount = 0;
+    // 読み取れずに飛ばしたレコード数（Issue #319）
+    int skippedRecordCount = 0;
 
     // 解決できなかった画像参照を相対パスのまま書き戻すと、ConflictAlgorithm.replace で
     // 既存行が丸ごと置き換わり、有効だった写真が消える。既存値を退避しておき、
@@ -388,10 +399,16 @@ class ExportService {
     final hasLocations = locationsJson != null;
     if (hasLocations) {
       for (final l0 in locationsJson) {
-        locationRows.add(
-          Location.fromMap(Map<String, dynamic>.from(l0 as Map)).toMap(),
-        );
-        locationCount++;
+        try {
+          locationRows.add(
+            Location.fromMap(Map<String, dynamic>.from(l0 as Map)).toMap(),
+          );
+          locationCount++;
+        } catch (e) {
+          // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）
+          skippedRecordCount++;
+          debugPrint('ExportService: 置き場所を1件読み飛ばしました: $e');
+        }
       }
     }
 
@@ -399,6 +416,8 @@ class ExportService {
     final plantsJson = data['plants'] as List<dynamic>? ?? [];
     for (final p0 in plantsJson) {
       final map = Map<String, dynamic>.from(p0 as Map);
+      final imageCountBefore = imageCount;
+      final unresolvedBefore = unresolvedImageCount;
       // 画像パスを絶対パスに解決
       if (map['imagePath'] != null) {
         final rel = map['imagePath'] as String;
@@ -417,14 +436,29 @@ class ExportService {
       if (!hasLocations) {
         map['locationId'] = null;
       }
-      plantRows.add(Plant.fromMap(map).toMap());
-      plantCount++;
+      try {
+        plantRows.add(Plant.fromMap(map).toMap());
+        plantCount++;
+      } catch (e) {
+        // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）。
+        // 読み飛ばす植物の画像は数えないよう、加算分を巻き戻す。
+        imageCount = imageCountBefore;
+        unresolvedImageCount = unresolvedBefore;
+        skippedRecordCount++;
+        debugPrint('ExportService: 植物を1件読み飛ばしました: $e');
+      }
     }
 
-    // ログをインポート
+    // ログをインポート。
+    // 未知の種別名（新しいバージョンで追加された種別など）を含む1件のために
+    // バックアップ全体の復元が失敗しないよう、読めない行だけを飛ばす（Issue #319）。
     final logsJson = data['logs'] as List<dynamic>? ?? [];
     for (final l in logsJson) {
-      final log = LogEntry.fromMap(Map<String, dynamic>.from(l as Map));
+      final log = LogEntry.tryFromMap(Map<String, dynamic>.from(l as Map));
+      if (log == null) {
+        skippedRecordCount++;
+        continue;
+      }
       logRows.add(log.toMap());
       logCount++;
     }
@@ -459,17 +493,29 @@ class ExportService {
           map['imagePaths'] = absPaths.join('|');
         }
       }
-      noteRows.add(Note.fromMap(map).toMap());
-      noteCount++;
+      try {
+        noteRows.add(Note.fromMap(map).toMap());
+        noteCount++;
+      } catch (e) {
+        // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）
+        skippedRecordCount++;
+        debugPrint('ExportService: ノートを1件読み飛ばしました: $e');
+      }
     }
 
     // センサーログをインポート
     int sensorLogCount = 0;
     final sensorLogsJson = data['sensorLogs'] as List<dynamic>? ?? [];
     for (final s in sensorLogsJson) {
-      final log = SensorLog.fromMap(Map<String, dynamic>.from(s as Map));
-      sensorLogRows.add(log.toMap());
-      sensorLogCount++;
+      try {
+        final log = SensorLog.fromMap(Map<String, dynamic>.from(s as Map));
+        sensorLogRows.add(log.toMap());
+        sensorLogCount++;
+      } catch (e) {
+        // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）
+        skippedRecordCount++;
+        debugPrint('ExportService: センサーログを1件読み飛ばしました: $e');
+      }
     }
 
     // アプリ設定を復元する（version 5 以降のバックアップにのみ含まれる。Issue #239）。
@@ -479,8 +525,10 @@ class ExportService {
       try {
         final current = await _settingsService.loadSettings();
         final merged = Map<String, dynamic>.from(current.toMap())
-          ..addAll(Map<String, dynamic>.from(settingsJson)
-            ..removeWhere((key, _) => _secretSettingKeys.contains(key)));
+          ..addAll(
+            Map<String, dynamic>.from(settingsJson)
+              ..removeWhere((key, _) => _secretSettingKeys.contains(key)),
+          );
         await _settingsService.saveSettings(AppSettings.fromMap(merged));
         settingsRestored = true;
       } catch (e) {
@@ -507,6 +555,7 @@ class ExportService {
       settingsRestored: settingsRestored,
       imageCount: imageCount,
       unresolvedImageCount: unresolvedImageCount,
+      skippedRecordCount: skippedRecordCount,
     );
   }
 }
@@ -532,6 +581,12 @@ class ImportResult {
   /// これらの参照は復元されず、既存の写真がそのまま維持される。
   final int unresolvedImageCount;
 
+  /// 読み取れずに飛ばしたレコードの件数（Issue #319）。
+  ///
+  /// 未対応のログ種別を含む行など、1件だけ壊れているケースで加算される。
+  /// バックアップ全体の復元を失敗させず、件数だけを利用者に伝える。
+  final int skippedRecordCount;
+
   const ImportResult({
     required this.plantCount,
     required this.logCount,
@@ -541,18 +596,26 @@ class ImportResult {
     this.settingsRestored = false,
     this.imageCount = 0,
     this.unresolvedImageCount = 0,
+    this.skippedRecordCount = 0,
   });
 
   /// 解決できなかった画像参照があるかどうか。
   bool get hasUnresolvedImages => unresolvedImageCount > 0;
 
+  /// 読み取れずに飛ばしたレコードがあるかどうか（Issue #319）。
+  bool get hasSkippedRecords => skippedRecordCount > 0;
+
+  /// 読み飛ばしたレコードがある場合に表示する警告文。問題がなければ null。
+  String? get skippedWarning {
+    if (!hasSkippedRecords) return null;
+    return 'このバックアップに含まれる$skippedRecordCount件のデータは、'
+        'このバージョンでは読み取れなかったため復元されませんでした。\n'
+        'それ以外のデータは正常に復元しています。';
+  }
+
   @override
   String toString() {
-    final parts = [
-      '植物: $plantCount件',
-      'ログ: $logCount件',
-      'ノート: $noteCount件',
-    ];
+    final parts = ['植物: $plantCount件', 'ログ: $logCount件', 'ノート: $noteCount件'];
     if (sensorLogCount > 0) parts.add('センサーログ: $sensorLogCount件');
     if (locationCount > 0) parts.add('置き場所: $locationCount件');
     // 画像は0件でも「入っていなかった」ことが分かるよう常に出す（Issue #289）

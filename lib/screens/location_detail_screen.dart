@@ -25,9 +25,9 @@ class LocationDetailScreen extends StatelessWidget {
     final plants = plantProvider.plants;
 
     if (plants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('植物が登録されていません')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('植物が登録されていません')));
       return;
     }
 
@@ -78,9 +78,9 @@ class LocationDetailScreen extends StatelessWidget {
         ),
       );
       if (goToSettings == true && context.mounted) {
-        await Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const IotSettingsScreen()),
-        );
+        await Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const IotSettingsScreen()));
       }
       return;
     }
@@ -102,11 +102,12 @@ class LocationDetailScreen extends StatelessWidget {
               itemBuilder: (_, i) {
                 final mapping = mappings[i];
                 final isSelected = selectedIds.contains(mapping.deviceId);
-                final otherLocationName = mapping.locationId != null &&
+                final otherLocationName =
+                    mapping.locationId != null &&
                         mapping.locationId != location.id
-                    ? ctx
-                        .read<LocationProvider>()
-                        .getLocationName(mapping.locationId)
+                    ? ctx.read<LocationProvider>().getLocationName(
+                        mapping.locationId,
+                      )
                     : null;
                 return CheckboxListTile(
                   title: Text(mapping.deviceName),
@@ -175,8 +176,9 @@ class LocationDetailScreen extends StatelessWidget {
   Widget _buildPlantsCard(BuildContext context) {
     return Consumer<PlantProvider>(
       builder: (context, plantProvider, _) {
-        final plants =
-            plantProvider.plants.where((p) => p.locationId == location.id).toList();
+        final plants = plantProvider.plants
+            .where((p) => p.locationId == location.id)
+            .toList();
 
         return Card(
           child: Padding(
@@ -189,9 +191,8 @@ class LocationDetailScreen extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'この場所の植物',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
                     OutlinedButton.icon(
@@ -209,18 +210,22 @@ class LocationDetailScreen extends StatelessWidget {
                   )
                 else
                   // 行から植物詳細へ入れるようにする（Issue #292）
-                  ...plants.map((plant) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.eco_outlined),
-                        title: Text(plant.name),
-                        subtitle: plant.variety != null ? Text(plant.variety!) : null,
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => PlantDetailScreen(plant: plant),
-                          ),
+                  ...plants.map(
+                    (plant) => ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.eco_outlined),
+                      title: Text(plant.name),
+                      subtitle: plant.variety != null
+                          ? Text(plant.variety!)
+                          : null,
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => PlantDetailScreen(plant: plant),
                         ),
-                      )),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -233,7 +238,8 @@ class LocationDetailScreen extends StatelessWidget {
     return Consumer2<SettingsProvider, SensorLogProvider>(
       builder: (context, settingsProvider, sensorLogProvider, _) {
         final List<SensorDeviceMapping> mappings = settingsProvider
-            .settings.sensorDeviceMappings
+            .settings
+            .sensorDeviceMappings
             .where((m) => m.locationId == location.id)
             .toList();
         final latestByDevice = sensorLogProvider.latestLogPerDevice;
@@ -249,9 +255,8 @@ class LocationDetailScreen extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'この場所のセンサー',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                     ),
                     OutlinedButton.icon(

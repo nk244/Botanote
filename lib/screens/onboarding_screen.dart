@@ -34,19 +34,22 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _OnboardingPage(
       icon: Icons.eco,
       title: 'まずは植物を登録しましょう',
-      description: '育てている植物を登録すると、水やり・肥料・活力剤の記録を\n'
+      description:
+          '育てている植物を登録すると、水やり・肥料・活力剤の記録を\n'
           '1鉢ずつ管理できます。写真や購入日も残せます。',
     ),
     _OnboardingPage(
       icon: Icons.water_drop,
       title: '水やりの間隔を決めます',
-      description: '「3日ごと」のように間隔を設定すると、次の水やり予定日を\n'
+      description:
+          '「3日ごと」のように間隔を設定すると、次の水やり予定日を\n'
           'アプリが計算します。冬は間隔を自動で延ばすこともできます。',
     ),
     _OnboardingPage(
       icon: Icons.notifications_active,
       title: '予定日にお知らせします',
-      description: '水やり予定がある日だけ、決めた時刻に通知でお知らせします。\n'
+      description:
+          '水やり予定がある日だけ、決めた時刻に通知でお知らせします。\n'
           '通知から直接その日の水やりを記録することもできます。\n\n'
           'このあと通知の許可を確認します。',
     ),
@@ -125,15 +128,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
       setState(() => _isRestoring = false);
 
-      final imageWarning = result.imageWarning;
+      // 写真の未復元（Issue #289）と、読み取れず飛ばしたレコード（Issue #319）は
+      // 成功メッセージに紛れないよう警告として並べる。
+      final warnings = [
+        if (result.skippedWarning != null) result.skippedWarning!,
+        if (result.imageWarning != null) result.imageWarning!,
+      ];
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('復元しました'),
           content: Text(
-            imageWarning == null
+            warnings.isEmpty
                 ? '以下のデータを復元しました。\n\n$result'
-                : '以下のデータを復元しました。\n\n$result\n\n⚠ $imageWarning',
+                : '以下のデータを復元しました。\n\n$result\n\n'
+                      '${warnings.map((w) => '⚠ $w').join('\n\n')}',
           ),
           actions: [
             FilledButton(
@@ -156,9 +165,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('復元できませんでした'),
-          content: const Text('バックアップファイルが壊れているか、このバージョンでは'
-              '対応していない形式の可能性があります。\n\n'
-              'あとから 設定 → データ管理 でもう一度お試しください。'),
+          content: const Text(
+            'バックアップファイルが壊れているか、このバージョンでは'
+            '対応していない形式の可能性があります。\n\n'
+            'あとから 設定 → データ管理 でもう一度お試しください。',
+          ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(),
@@ -181,8 +192,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed:
-                    _isBusy ? null : () => _finish(requestPermission: false),
+                onPressed: _isBusy
+                    ? null
+                    : () => _finish(requestPermission: false),
                 child: const Text('スキップ'),
               ),
             ),

@@ -13,6 +13,8 @@ import 'light_meter_screen.dart';
 import 'care_stats_screen.dart';
 import 'location_list_screen.dart';
 import '../utils/error_utils.dart';
+import '../services/weather_service.dart';
+import '../utils/weather_locations.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -30,7 +32,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _appVersion;
 
   /// 一括変更の結果 SnackBar。設定画面を離れるときに閉じるため保持する（Issue #286）。
-  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _bulkResultSnackBar;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>?
+  _bulkResultSnackBar;
 
   @override
   void initState() {
@@ -70,13 +73,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('設定'),
-      ),
+      appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
           const SizedBox(height: 8),
-          
+
           // Theme settings
           _buildSectionHeader(context, 'テーマ'),
           Consumer<SettingsProvider>(
@@ -213,11 +214,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('ケア統計'),
             subtitle: const Text('月別のケア件数・植物ごとの頻度を振り返る'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const CareStatsScreen(),
-              ),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const CareStatsScreen())),
           ),
           const Divider(),
 
@@ -229,9 +228,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('リビング・ベランダ等の置き場所を登録・編集'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const LocationListScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const LocationListScreen()),
             ),
           ),
           const Divider(),
@@ -263,18 +260,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
-                  if (settings.settings.weatherAlertsEnabled)
+                  if (settings.settings.weatherAlertsEnabled) ...[
                     ListTile(
                       leading: const Icon(Icons.place_outlined),
                       title: const Text('観測地点'),
                       subtitle: Text(
                         hasLocation
-                            ? '緯度 ${lat.toStringAsFixed(4)} / 経度 ${lon.toStringAsFixed(4)}'
+                            ? '${findNearestWeatherPreset(lat, lon)?.name ?? '座標を直接指定'}'
+                                  '（緯度 ${lat.toStringAsFixed(4)} / 経度 ${lon.toStringAsFixed(4)}）'
                             : '未設定',
                       ),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _showWeatherLocationDialog(context, settings),
+                      onTap: () =>
+                          _showWeatherLocationDialog(context, settings),
                     ),
+                    // 取得できているのか分からないと不調に気づけないため、
+                    // その場で確かめられる導線を置く（Issue #333）
+                    if (hasLocation)
+                      ListTile(
+                        leading: const Icon(Icons.wifi_tethering),
+                        title: const Text('いま天気を確認'),
+                        subtitle: const Text('予報を取得できるかその場で確かめます'),
+                        onTap: () => _checkWeatherNow(context, lat, lon),
+                      ),
+                  ],
                 ],
               );
             },
@@ -289,9 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: const Text('Nature Remo / SwitchBot の APIキーを管理'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const IotSettingsScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const IotSettingsScreen()),
             ),
           ),
           const Divider(),
@@ -303,11 +310,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: const Text('光量メーター'),
             subtitle: const Text('カメラで置き場所の明るさの目安を測定'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const LightMeterScreen(),
-              ),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const LightMeterScreen())),
           ),
           const Divider(),
 
@@ -342,7 +347,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-
   /// 水やり間隔を一括設定するダイアログ
   /// 天気連動ケアアラートの観測地点（緯度・経度）を入力するダイアログ（Issue #176）。
   Future<void> _showWeatherLocationDialog(
@@ -356,67 +360,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: settings.settings.weatherLongitude?.toString() ?? '',
     );
     final formKey = GlobalKey<FormState>();
+    // 保存済みの座標に近いプリセットがあれば初期選択にする（Issue #332）
+    var selectedPreset = findNearestWeatherPreset(
+      settings.settings.weatherLatitude,
+      settings.settings.weatherLongitude,
+    );
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('観測地点を設定'),
-        content: Form(
-          key: formKey,
-          // 入力を修正した時点でエラー表示を再評価し、赤枠・エラーメッセージを残さない
-          autovalidateMode: AutovalidateMode.onUserInteraction,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Googleマップ等で自宅の座標を調べて入力してください。'),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: latController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true, signed: true),
-                decoration: const InputDecoration(
-                  labelText: '緯度',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < -90 || n > 90) return '-90〜90の数値を入力してください';
-                  return null;
-                },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('観測地点を設定'),
+          content: Form(
+            key: formKey,
+            // 入力を修正した時点でエラー表示を再評価し、赤枠・エラーメッセージを残さない
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 緯度経度の手入力だけだと設定にたどり着けない利用者が多いため、
+                  // 都道府県から選べるようにする（Issue #332）。判定は市区町村
+                  // レベルの精度で足りるので県庁所在地の座標で十分。
+                  const Text('お住まいの地域を選ぶか、座標を直接入力してください。'),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<WeatherLocationPreset>(
+                    initialValue: selectedPreset,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: '地域から選ぶ',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final preset in kWeatherLocationPresets)
+                        DropdownMenuItem(
+                          value: preset,
+                          child: Text(
+                            preset.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (preset) {
+                      if (preset == null) return;
+                      setDialogState(() {
+                        selectedPreset = preset;
+                        latController.text = preset.latitude.toString();
+                        lonController.text = preset.longitude.toString();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('座標を直接入力する場合'),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: latController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: '緯度',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n < -90 || n > 90)
+                        return '-90〜90の数値を入力してください';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: lonController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: '経度',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) {
+                      final n = double.tryParse(v ?? '');
+                      if (n == null || n < -180 || n > 180)
+                        return '-180〜180の数値を入力してください';
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: lonController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true, signed: true),
-                decoration: const InputDecoration(
-                  labelText: '経度',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final n = double.tryParse(v ?? '');
-                  if (n == null || n < -180 || n > 180) return '-180〜180の数値を入力してください';
-                  return null;
-                },
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(ctx).pop(true);
+                }
+              },
+              child: const Text('保存'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.of(ctx).pop(true);
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
 
@@ -428,6 +479,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
       latitude: lat,
       longitude: lon,
     );
+
+    // 設定しても本当に取得できているのか分からなかったため、保存直後に
+    // 一度だけ取りにいって結果を伝える（Issue #333）。
+    if (!context.mounted) return;
+    await _checkWeatherNow(context, lat, lon);
+  }
+
+  /// 天気予報を1回だけ取得し、成否を SnackBar で知らせる（Issue #333）。
+  Future<void> _checkWeatherNow(
+    BuildContext context,
+    double latitude,
+    double longitude,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('天気予報を確認しています…')));
+    try {
+      final alerts = await WeatherService.fetchTomorrowAlerts(
+        latitude: latitude,
+        longitude: longitude,
+      );
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            alerts.isEmpty
+                ? '天気予報を取得しました。明日は注意が必要な天候はありません'
+                : '天気予報を取得しました。明日の注意: ${alerts.join('・')}',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '天気予報を取得できませんでした。'
+            '通信環境を確認してください（${describeError(e)}）',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _showBulkSetIntervalDialog(BuildContext context) async {
@@ -487,8 +579,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // 誤タップで全植物の間隔が書き換わらないよう、対象件数を示して確認する（Issue #274）
     final plantProvider = context.read<PlantProvider>();
-    final targetCount =
-        plantProvider.countBulkIntervalTargets(onlyWithInterval: false);
+    final targetCount = plantProvider.countBulkIntervalTargets(
+      onlyWithInterval: false,
+    );
     final applied = await _confirmBulkIntervalChange(
       context,
       title: '水やり間隔を一括設定',
@@ -506,9 +599,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')));
     }
   }
 
@@ -626,8 +719,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final label = delta > 0 ? '+$delta' : '$delta';
     // 誤タップ対策の確認ダイアログ（Issue #274）
     final plantProvider = context.read<PlantProvider>();
-    final targetCount =
-        plantProvider.countBulkIntervalTargets(onlyWithInterval: true);
+    final targetCount = plantProvider.countBulkIntervalTargets(
+      onlyWithInterval: true,
+    );
     final applied = await _confirmBulkIntervalChange(
       context,
       title: '水やり間隔を一括調整',
@@ -645,9 +739,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('更新に失敗しました: ${describeError(e)}')));
     }
   }
 
@@ -701,9 +795,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (!context.mounted) return;
         // ユーザーがキャンセル
         if (path == null) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('バックアップファイルを共有しました')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('バックアップファイルを共有しました')));
       }
     } catch (e) {
       if (!context.mounted) return;
@@ -766,13 +860,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _isImporting = false);
       // 復元結果は見逃すと影響が大きいため、SnackBar ではなくダイアログで示す（Issue #225）
       // 画像を復元できなかった場合は、成功メッセージに紛れないよう警告として出す（Issue #289）
-      final imageWarning = result.imageWarning;
+      // 読み取れず飛ばしたレコードも同様に警告として示す（Issue #319）
+      final warnings = [
+        if (result.skippedWarning != null) result.skippedWarning!,
+        if (result.imageWarning != null) result.imageWarning!,
+      ];
       await _showImportResultDialog(
         context,
-        title: imageWarning == null ? 'インポートが完了しました' : 'インポートが完了しました（一部の写真は未復元）',
-        message: imageWarning == null
+        title: warnings.isEmpty ? 'インポートが完了しました' : 'インポートが完了しました（一部は未復元）',
+        message: warnings.isEmpty
             ? '以下のデータを復元しました。\n\n$result'
-            : '以下のデータを復元しました。\n\n$result\n\n⚠ $imageWarning',
+            : '以下のデータを復元しました。\n\n$result\n\n'
+                  '${warnings.map((w) => '⚠ $w').join('\n\n')}',
       );
     } catch (e) {
       debugPrint('インポートに失敗: $e');
@@ -781,7 +880,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _showImportResultDialog(
         context,
         title: 'インポートできませんでした',
-        message: 'バックアップファイルが壊れているか、このバージョンでは'
+        message:
+            'バックアップファイルが壊れているか、このバージョンでは'
             '対応していない形式の可能性があります。\n\n'
             '既存のデータは変更されていません。'
             '別のバックアップファイルでお試しください。',

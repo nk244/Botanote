@@ -1,34 +1,22 @@
 import 'sensor_device_mapping.dart';
 
-enum ViewMode {
-  list,
-  card,
-}
+enum ViewMode { list, card }
 
-enum AppTheme {
-  green,
-  blue,
-  purple,
-  orange,
-}
+enum AppTheme { green, blue, purple, orange }
 
-enum ThemePreference {
-  system,
-  light,
-  dark,
-}
+enum ThemePreference { system, light, dark }
 
 enum PlantSortOrder {
-  nameAsc,           // 名前昇順
-  nameDesc,          // 名前降順
-  purchaseDateDesc,  // 購入日が新しい順
-  purchaseDateAsc,   // 購入日が古い順
-  createdAtDesc,     // 登録日が新しい順
-  createdAtAsc,      // 登録日が古い順
-  custom,            // ユーザー指定
-  varietyAsc,        // 品種名昇順
-  varietyDesc,       // 品種名降順
-  nextWateringAsc,   // 次の水やり予定が近い順（予定超過を先頭に、Issue #271）
+  nameAsc, // 名前昇順
+  nameDesc, // 名前降順
+  purchaseDateDesc, // 購入日が新しい順
+  purchaseDateAsc, // 購入日が古い順
+  createdAtDesc, // 登録日が新しい順
+  createdAtAsc, // 登録日が古い順
+  custom, // ユーザー指定
+  varietyAsc, // 品種名昇順
+  varietyDesc, // 品種名降順
+  nextWateringAsc, // 次の水やり予定が近い順（予定超過を先頭に、Issue #271）
 }
 
 class LogTypeColors {
@@ -40,12 +28,12 @@ class LogTypeColors {
   final int vitalizerFg;
 
   LogTypeColors({
-    this.wateringBg = 0xFFBBDEFB,    // Colors.blue.shade100
-    this.wateringFg = 0xFF0D47A1,    // Colors.blue.shade900
-    this.fertilizerBg = 0xFFC8E6C9,  // Colors.green.shade100
-    this.fertilizerFg = 0xFF1B5E20,  // Colors.green.shade900
-    this.vitalizerBg = 0xFFFFECB3,   // Colors.amber.shade100
-    this.vitalizerFg = 0xFFFF6F00,   // Colors.amber.shade900
+    this.wateringBg = 0xFFBBDEFB, // Colors.blue.shade100
+    this.wateringFg = 0xFF0D47A1, // Colors.blue.shade900
+    this.fertilizerBg = 0xFFC8E6C9, // Colors.green.shade100
+    this.fertilizerFg = 0xFF1B5E20, // Colors.green.shade900
+    this.vitalizerBg = 0xFFFFECB3, // Colors.amber.shade100
+    this.vitalizerFg = 0xFFFF6F00, // Colors.amber.shade900
   });
 
   Map<String, dynamic> toMap() {
@@ -166,8 +154,9 @@ class AppSettings {
       'natureRemoToken': natureRemoToken,
       'switchBotToken': switchBotToken,
       'switchBotSecret': switchBotSecret,
-      'sensorDeviceMappings':
-          sensorDeviceMappings.map((m) => m.toMap()).toList(),
+      'sensorDeviceMappings': sensorDeviceMappings
+          .map((m) => m.toMap())
+          .toList(),
       'sensorFetchIntervalHours': sensorFetchIntervalHours,
       'lastSensorFetchAt': lastSensorFetchAt,
       'weatherAlertsEnabled': weatherAlertsEnabled,
@@ -211,11 +200,13 @@ class AppSettings {
       switchBotSecret: map['switchBotSecret'] as String? ?? '',
       sensorDeviceMappings:
           (map['sensorDeviceMappings'] as List<dynamic>? ?? [])
-              .map((m) => SensorDeviceMapping.fromMap(
-                  Map<String, dynamic>.from(m as Map)))
+              .map(
+                (m) => SensorDeviceMapping.fromMap(
+                  Map<String, dynamic>.from(m as Map),
+                ),
+              )
               .toList(),
-      sensorFetchIntervalHours:
-          map['sensorFetchIntervalHours'] as int? ?? 0,
+      sensorFetchIntervalHours: map['sensorFetchIntervalHours'] as int? ?? 0,
       lastSensorFetchAt: map['lastSensorFetchAt'] as String?,
       weatherAlertsEnabled: map['weatherAlertsEnabled'] as bool? ?? false,
       weatherLatitude: (map['weatherLatitude'] as num?)?.toDouble(),

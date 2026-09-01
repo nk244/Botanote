@@ -56,7 +56,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
 
     // 植物フィルタ
     if (_filterPlantId != null) {
-      result = result.where((n) => n.plantIds.contains(_filterPlantId)).toList();
+      result = result
+          .where((n) => n.plantIds.contains(_filterPlantId))
+          .toList();
     }
 
     // タグフィルタ（Issue #278）
@@ -89,7 +91,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
     final d = DateTime(dt.year, dt.month, dt.day);
 
     if (d == today) return '今日  ${DateFormat('MM月dd日 (E)', 'ja').format(dt)}';
-    if (d == yesterday) return '昨日  ${DateFormat('MM月dd日 (E)', 'ja').format(dt)}';
+    if (d == yesterday)
+      return '昨日  ${DateFormat('MM月dd日 (E)', 'ja').format(dt)}';
     return DateFormat('yyyy年MM月dd日 (E)', 'ja').format(dt);
   }
 
@@ -103,8 +106,10 @@ class _NotesListScreenState extends State<NotesListScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('植物で絞り込む',
-                  style: Theme.of(context).textTheme.titleMedium),
+              child: Text(
+                '植物で絞り込む',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
             Flexible(
               child: ListView(
@@ -114,26 +119,32 @@ class _NotesListScreenState extends State<NotesListScreen> {
                     leading: const Icon(Icons.all_inclusive),
                     title: const Text('すべて'),
                     trailing: _filterPlantId == null
-                        ? Icon(Icons.check,
-                            color: Theme.of(context).colorScheme.primary)
+                        ? Icon(
+                            Icons.check,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
                         : null,
                     onTap: () {
                       setState(() => _filterPlantId = null);
                       Navigator.of(ctx).pop();
                     },
                   ),
-                  ...plants.map((p) => ListTile(
-                        leading: const Icon(Icons.eco),
-                        title: Text(p.name),
-                        trailing: _filterPlantId == p.id
-                            ? Icon(Icons.check,
-                                color: Theme.of(context).colorScheme.primary)
-                            : null,
-                        onTap: () {
-                          setState(() => _filterPlantId = p.id);
-                          Navigator.of(ctx).pop();
-                        },
-                      )),
+                  ...plants.map(
+                    (p) => ListTile(
+                      leading: const Icon(Icons.eco),
+                      title: Text(p.name),
+                      trailing: _filterPlantId == p.id
+                          ? Icon(
+                              Icons.check,
+                              color: Theme.of(context).colorScheme.primary,
+                            )
+                          : null,
+                      onTap: () {
+                        setState(() => _filterPlantId = p.id);
+                        Navigator.of(ctx).pop();
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -176,11 +187,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: '設定',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const SettingsScreen(),
-              ),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
           ),
         ],
       ),
@@ -194,7 +203,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
           final filteredNotes = _applyFilters(noteProvider.notes);
 
           // 絞り込み中のフィルタバー
-          final isFiltering = _searchQuery.isNotEmpty ||
+          final isFiltering =
+              _searchQuery.isNotEmpty ||
               _filterPlantId != null ||
               _filterTag != null;
           // 登録済みタグ（Issue #278）
@@ -205,15 +215,23 @@ class _NotesListScreenState extends State<NotesListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.menu_book_outlined,
-                      size: 72,
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.menu_book_outlined,
+                    size: 72,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.4),
+                  ),
                   const SizedBox(height: 16),
-                  Text('まだノートがありません',
-                      style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'まだノートがありません',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 8),
-                  Text('右下のボタンから記録しましょう',
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    '右下のボタンから記録しましょう',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             );
@@ -247,19 +265,29 @@ class _NotesListScreenState extends State<NotesListScreen> {
               if (isFiltering)
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   color: Theme.of(context).colorScheme.secondaryContainer,
                   child: Row(
                     children: [
-                      Icon(Icons.filter_alt,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.onSecondaryContainer),
+                      Icon(
+                        Icons.filter_alt,
+                        size: 16,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSecondaryContainer,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           _buildFilterLabel(plantProvider.plants),
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSecondaryContainer,
                               ),
                         ),
                       ),
@@ -270,9 +298,13 @@ class _NotesListScreenState extends State<NotesListScreen> {
                           _filterPlantId = null;
                           _filterTag = null;
                         }),
-                        child: Icon(Icons.close,
-                            size: 16,
-                            color: Theme.of(context).colorScheme.onSecondaryContainer),
+                        child: Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSecondaryContainer,
+                        ),
                       ),
                     ],
                   ),
@@ -297,12 +329,17 @@ class _NotesListScreenState extends State<NotesListScreen> {
                       ),
                       ...allTags.map(
                         (tag) => Padding(
-                          padding: const EdgeInsets.only(left: 6, top: 6, bottom: 6),
+                          padding: const EdgeInsets.only(
+                            left: 6,
+                            top: 6,
+                            bottom: 6,
+                          ),
                           child: FilterChip(
                             label: Text('#$tag'),
                             selected: _filterTag == tag,
                             onSelected: (selected) => setState(
-                                () => _filterTag = selected ? tag : null),
+                              () => _filterTag = selected ? tag : null,
+                            ),
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
@@ -318,19 +355,26 @@ class _NotesListScreenState extends State<NotesListScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.search_off,
-                                size: 56,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.4)),
+                            Icon(
+                              Icons.search_off,
+                              size: 56,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.4),
+                            ),
                             const SizedBox(height: 16),
-                            Text('該当するノートがありません',
-                                style: Theme.of(context).textTheme.titleMedium),
+                            Text(
+                              '該当するノートがありません',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
                           ],
                         ),
                       )
-                    : _buildNoteList(filteredNotes, plantProvider.plants, noteProvider),
+                    : _buildNoteList(
+                        filteredNotes,
+                        plantProvider.plants,
+                        noteProvider,
+                      ),
               ),
             ],
           );
@@ -341,7 +385,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
         onPressed: () {
           final noteProvider = context.read<NoteProvider>();
           Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => const AddEditNoteScreen()))
+              .push(
+                MaterialPageRoute(builder: (_) => const AddEditNoteScreen()),
+              )
               .then((_) => noteProvider.loadNotes());
         },
         child: const Icon(Icons.edit_outlined),
@@ -364,7 +410,10 @@ class _NotesListScreenState extends State<NotesListScreen> {
   }
 
   Widget _buildNoteList(
-      List<Note> notes, List<Plant> plants, NoteProvider noteProvider) {
+    List<Note> notes,
+    List<Plant> plants,
+    NoteProvider noteProvider,
+  ) {
     final grouped = _groupByDate(notes);
     final dateKeys = grouped.keys.toList();
 
@@ -384,8 +433,10 @@ class _NotesListScreenState extends State<NotesListScreen> {
               child: Row(
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(20),
@@ -393,17 +444,16 @@ class _NotesListScreenState extends State<NotesListScreen> {
                     child: Text(
                       _formatDateHeader(key),
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Divider(
-                        color: Theme.of(context).colorScheme.outlineVariant),
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
                 ],
               ),
@@ -441,9 +491,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
                               child: Center(
                                 child: Container(
                                   width: 2,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .outlineVariant,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.outlineVariant,
                                 ),
                               ),
                             ),
@@ -463,9 +513,12 @@ class _NotesListScreenState extends State<NotesListScreen> {
                             borderRadius: BorderRadius.circular(12),
                             onTap: () {
                               Navigator.of(context)
-                                  .push(MaterialPageRoute(
-                                    builder: (_) => NoteDetailScreen(note: note),
-                                  ))
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          NoteDetailScreen(note: note),
+                                    ),
+                                  )
                                   .then((_) => noteProvider.loadNotes());
                             },
                             child: Padding(
@@ -475,10 +528,13 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                 children: [
                                   // 時刻 + タイトル
                                   Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        DateFormat('HH:mm').format(note.createdAt),
+                                        DateFormat(
+                                          'HH:mm',
+                                        ).format(note.createdAt),
                                         style: Theme.of(context)
                                             .textTheme
                                             .labelSmall
@@ -497,7 +553,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                               .textTheme
                                               .titleSmall
                                               ?.copyWith(
-                                                  fontWeight: FontWeight.bold),
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                         ),
                                       ),
                                     ],
@@ -511,8 +568,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                       note.content!,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
                                     ),
                                   ],
 
@@ -523,20 +581,24 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                       spacing: 4,
                                       runSpacing: 2,
                                       children: plantNames
-                                          .map((name) => Chip(
-                                                label: Text(name),
-                                                avatar: const Icon(Icons.eco,
-                                                    size: 12),
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding: EdgeInsets.zero,
-                                                labelStyle: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall,
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                              ))
+                                          .map(
+                                            (name) => Chip(
+                                              label: Text(name),
+                                              avatar: const Icon(
+                                                Icons.eco,
+                                                size: 12,
+                                              ),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              labelStyle: Theme.of(
+                                                context,
+                                              ).textTheme.labelSmall,
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                          )
                                           .toList(),
                                     ),
                                   ],
@@ -548,20 +610,23 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                       spacing: 4,
                                       runSpacing: 2,
                                       children: note.tags
-                                          .map((tag) => ActionChip(
-                                                label: Text('#$tag'),
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding: EdgeInsets.zero,
-                                                labelStyle: Theme.of(context)
-                                                    .textTheme
-                                                    .labelSmall,
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                                onPressed: () => setState(
-                                                    () => _filterTag = tag),
-                                              ))
+                                          .map(
+                                            (tag) => ActionChip(
+                                              label: Text('#$tag'),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              padding: EdgeInsets.zero,
+                                              labelStyle: Theme.of(
+                                                context,
+                                              ).textTheme.labelSmall,
+                                              materialTapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              onPressed: () => setState(
+                                                () => _filterTag = tag,
+                                              ),
+                                            ),
+                                          )
                                           .toList(),
                                     ),
                                   ],
@@ -571,12 +636,14 @@ class _NotesListScreenState extends State<NotesListScreen> {
                                     const SizedBox(height: 6),
                                     Row(
                                       children: [
-                                        Icon(Icons.photo_library_outlined,
-                                            size: 14,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface
-                                                .withValues(alpha: 0.5)),
+                                        Icon(
+                                          Icons.photo_library_outlined,
+                                          size: 14,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withValues(alpha: 0.5),
+                                        ),
                                         const SizedBox(width: 4),
                                         Text(
                                           '${note.imagePaths.length} 枚',

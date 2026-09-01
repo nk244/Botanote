@@ -36,7 +36,10 @@ class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return ColoredBox(
       color: Theme.of(context).colorScheme.surface,
       child: tabBar,
@@ -50,6 +53,7 @@ class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
 
 class PlantDetailScreen extends StatefulWidget {
   final Plant plant;
+
   /// 初期表示タブインデックス（0:詳細, 1:ログ, 2:ノート）
   final int initialTabIndex;
 
@@ -63,8 +67,41 @@ class PlantDetailScreen extends StatefulWidget {
   State<PlantDetailScreen> createState() => _PlantDetailScreenState();
 }
 
-class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTickerProviderStateMixin {
+/// ログタブの種別フィルタ（Issue #325）。
+enum _LogTabFilter {
+  all,
+  watering,
+  fertilizer,
+  vitalizer,
+
+  /// 植え替え・剪定・葉水・掃除（記録専用のケア種別）
+  other;
+
+  /// この絞り込みが [type] を含むかどうか。
+  bool matches(LogType type) {
+    switch (this) {
+      case _LogTabFilter.all:
+        return true;
+      case _LogTabFilter.watering:
+        return type == LogType.watering;
+      case _LogTabFilter.fertilizer:
+        return type == LogType.fertilizer;
+      case _LogTabFilter.vitalizer:
+        return type == LogType.vitalizer;
+      case _LogTabFilter.other:
+        return type != LogType.watering &&
+            type != LogType.fertilizer &&
+            type != LogType.vitalizer;
+    }
+  }
+}
+
+class _PlantDetailScreenState extends State<PlantDetailScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  /// ログタブで選択中の種別フィルタ（Issue #325）
+  _LogTabFilter _logFilter = _LogTabFilter.all;
 
   /// 表示中の植物。編集画面から戻った際に最新の内容へ差し替える（Issue #243）。
   late Plant _plant;
@@ -114,8 +151,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   Future<void> _loadSensorLogs() async {
-    final logs = await context.read<SensorLogProvider>()
-        .getLogsForPlant(_plant.id);
+    final logs = await context.read<SensorLogProvider>().getLogsForPlant(
+      _plant.id,
+    );
     if (mounted) {
       setState(() {
         _sensorLogs = logs;
@@ -182,7 +220,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   ///
   /// [tooltip] はスクリーンリーダーの読み上げにも使われるため必須とする（Issue #282）。
   Widget _buildImageOverlayAction(
-      IconData icon, String tooltip, VoidCallback onPressed) {
+    IconData icon,
+    String tooltip,
+    VoidCallback onPressed,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: DecoratedBox(
@@ -212,9 +253,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       builder: (context) => AlertDialog(
         title: const Text('削除の確認'),
         // ノートは削除せず紐付けを解除するだけなので、実挙動どおりに説明する（Issue #224）
-        content: Text('「${_plant.name}」を削除してもよろしいですか？\n'
-            'すべてのケアログも削除されます。\n'
-            'ノートは残りますが、この植物との紐付けは解除されます。'),
+        content: Text(
+          '「${_plant.name}」を削除してもよろしいですか？\n'
+          'すべてのケアログも削除されます。\n'
+          'ノートは残りますが、この植物との紐付けは解除されます。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -262,8 +305,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             forceElevated: innerBoxIsScrolled,
             actions: [
               if (_plant.imagePath != null)
-                _buildImageOverlayAction(Icons.auto_awesome_motion, '成長タイムライン',
-                    _navigateToGrowthTimeline)
+                _buildImageOverlayAction(
+                  Icons.auto_awesome_motion,
+                  '成長タイムライン',
+                  _navigateToGrowthTimeline,
+                )
               else
                 IconButton(
                   icon: const Icon(Icons.auto_awesome_motion),
@@ -300,8 +346,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   child: Text(
                     _plant.name,
                     style: const TextStyle(color: Colors.white),
@@ -403,10 +451,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     }
 
     if (File(path).existsSync()) {
-      return Image.file(
-        File(path),
-        fit: BoxFit.cover,
-      );
+      return Image.file(File(path), fit: BoxFit.cover);
     } else {
       return _buildBrokenImageIcon(context);
     }
@@ -425,9 +470,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
   Future<void> _navigateToEdit() async {
     final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (context) => AddPlantScreen(plant: _plant),
-      ),
+      MaterialPageRoute(builder: (context) => AddPlantScreen(plant: _plant)),
     );
     if (!mounted) return;
     // キャンセル時は何もしない（この画面に留まる）
@@ -461,10 +504,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       padding: const EdgeInsets.all(16),
       children: [
         // まず「次に何をすればよいか」を出す（Issue #294）
-        if (nextCareCard != null) ...[
-          nextCareCard,
-          const SizedBox(height: 16),
-        ],
+        if (nextCareCard != null) ...[nextCareCard, const SizedBox(height: 16)],
         _buildBasicInfoCard(),
         // 水やり間隔も次回予定も無い場合は見出しだけの空カードになるため表示しない
         if (_plant.wateringIntervalDays != null ||
@@ -490,7 +530,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   Widget? _buildNextCareCard() {
     final entries = <(LogType, DateTime)>[
       if (_nextWateringDate != null) (LogType.watering, _nextWateringDate!),
-      if (_nextFertilizerDate != null) (LogType.fertilizer, _nextFertilizerDate!),
+      if (_nextFertilizerDate != null)
+        (LogType.fertilizer, _nextFertilizerDate!),
       if (_nextVitalizerDate != null) (LogType.vitalizer, _nextVitalizerDate!),
     ]..sort((a, b) => a.$2.compareTo(b.$2));
 
@@ -522,13 +563,17 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isOverdue ? scheme.errorContainer : scheme.surfaceContainerHighest,
+              color: isOverdue
+                  ? scheme.errorContainer
+                  : scheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               _getLogTypeIcon(logType),
               size: 22,
-              color: isOverdue ? scheme.onErrorContainer : scheme.onSurfaceVariant,
+              color: isOverdue
+                  ? scheme.onErrorContainer
+                  : scheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(width: 12),
@@ -539,9 +584,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 Text(
                   '${_getLogTypeName(logType)} ${AppDateUtils.formatDateDifference(nextDate)}',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: isOverdue ? scheme.error : null,
-                        fontWeight: isOverdue ? FontWeight.bold : null,
-                      ),
+                    color: isOverdue ? scheme.error : null,
+                    fontWeight: isOverdue ? FontWeight.bold : null,
+                  ),
                 ),
                 Text(
                   '予定 ${DateFormat('M月d日（E）', 'ja').format(nextDate)}',
@@ -583,7 +628,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     final plantProvider = context.read<PlantProvider>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await plantProvider.bulkRecordLogs([_plant.id], [logType], DateTime.now());
+      await plantProvider.bulkRecordLogs(
+        [_plant.id],
+        [logType],
+        DateTime.now(),
+      );
       if (!mounted) return;
       await _loadData();
       messenger.showSnackBar(
@@ -669,16 +718,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             value: isExtended ? '$effective日ごと' : '$base日ごと',
           ),
         if (isExtended)
-          _InfoRow(
-            label: '季節調整',
-            value: '休眠期のため $base日 → $effective日',
-          ),
+          _InfoRow(label: '季節調整', value: '休眠期のため $base日 → $effective日'),
         // 現在延長中でなくても設定内容が分かるようにする（Issue #279）
         if (!isExtended)
-          _InfoRow(
-            label: '冬季の延長',
-            value: _seasonalAdjustmentDescription(base),
-          ),
+          _InfoRow(label: '冬季の延長', value: _seasonalAdjustmentDescription(base)),
         if (_nextWateringDate != null)
           _InfoRow(
             label: '次回予定',
@@ -704,8 +747,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     final monthsLabel = months.contains(12) && months.contains(1)
         ? '12〜${months.where((m) => m != 12).reduce((a, b) => a > b ? a : b)}月'
         : '${months.join('・')}月';
-    final multiplierLabel =
-        multiplier == multiplier.roundToDouble() ? '${multiplier.round()}' : '$multiplier';
+    final multiplierLabel = multiplier == multiplier.roundToDouble()
+        ? '${multiplier.round()}'
+        : '$multiplier';
 
     if (baseIntervalDays == null) {
       return '$monthsLabel は間隔を$multiplierLabel倍にする';
@@ -729,18 +773,53 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           _InfoRow(
             label: '肥料間隔',
             value: intervalText(
-                _plant.fertilizerIntervalDays,
-                _plant.fertilizerEveryNWaterings),
+              _plant.fertilizerIntervalDays,
+              _plant.fertilizerEveryNWaterings,
+            ),
           ),
         if (_plant.vitalizerIntervalDays != null ||
             _plant.vitalizerEveryNWaterings != null)
           _InfoRow(
             label: '活力剤間隔',
             value: intervalText(
-                _plant.vitalizerIntervalDays,
-                _plant.vitalizerEveryNWaterings),
+              _plant.vitalizerIntervalDays,
+              _plant.vitalizerEveryNWaterings,
+            ),
           ),
       ],
+    );
+  }
+
+  /// ログタブの種別フィルタ（Issue #325）。
+  ///
+  /// 2年以上使うと1鉢あたり200件を超え、件数の大半を占める水やりに
+  /// 埋もれて「去年の植え替えはいつか」を探せなくなるため。
+  Widget _buildLogTypeFilterChips() {
+    Widget chip(String label, _LogTabFilter value) {
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ChoiceChip(
+          label: Text(label),
+          selected: _logFilter == value,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) => setState(() => _logFilter = value),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        children: [
+          chip('すべて', _LogTabFilter.all),
+          chip('水やり', _LogTabFilter.watering),
+          chip('肥料', _LogTabFilter.fertilizer),
+          chip('活力剤', _LogTabFilter.vitalizer),
+          chip('その他', _LogTabFilter.other),
+        ],
+      ),
     );
   }
 
@@ -777,7 +856,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   Icon(
                     Icons.history,
                     size: 64,
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -800,24 +881,90 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       );
     }
 
+    // 種別で絞り込む（Issue #325）
+    final filteredLogs = allLogs
+        .where((log) => _logFilter.matches(log.type))
+        .toList();
+
     // 同日のログをグループ化（日付降順）
     final groupedByDate = <DateTime, List<LogEntry>>{};
-    for (final log in allLogs) {
+    for (final log in filteredLogs) {
       final day = DateTime(log.date.year, log.date.month, log.date.day);
       groupedByDate.putIfAbsent(day, () => []).add(log);
     }
     final sortedDays = groupedByDate.keys.toList()
       ..sort((a, b) => b.compareTo(a));
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: sortedDays.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) return recordCareButton;
-        final day = sortedDays[index - 1];
-        final logs = groupedByDate[day]!;
-        return _buildGroupedLogRow(day, logs);
-      },
+    // 年月の見出しを挟んで、長いログでも時期の当たりを付けられるようにする
+    // （Issue #325）。日付行だけを何百件も並べると遡りようがない。
+    final rows = <Widget>[];
+    DateTime? currentMonth;
+    for (final day in sortedDays) {
+      final month = DateTime(day.year, day.month);
+      if (currentMonth != month) {
+        currentMonth = month;
+        rows.add(_buildLogMonthHeader(month, groupedByDate, sortedDays));
+      }
+      rows.add(_buildGroupedLogRow(day, groupedByDate[day]!));
+    }
+
+    return Column(
+      children: [
+        recordCareButton,
+        _buildLogTypeFilterChips(),
+        if (rows.isEmpty)
+          Expanded(
+            child: Center(
+              child: Text(
+                'この種別の記録はありません',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8),
+              itemCount: rows.length,
+              itemBuilder: (context, index) => rows[index],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// ログタブの年月見出し（Issue #325）。その月の件数も添える。
+  Widget _buildLogMonthHeader(
+    DateTime month,
+    Map<DateTime, List<LogEntry>> groupedByDate,
+    List<DateTime> sortedDays,
+  ) {
+    final count = sortedDays
+        .where((d) => d.year == month.year && d.month == month.month)
+        .fold<int>(0, (sum, d) => sum + groupedByDate[d]!.length);
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+      child: Row(
+        children: [
+          Text(
+            '${month.year}年${month.month}月',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: scheme.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$count件',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(color: scheme.outlineVariant)),
+        ],
+      ),
     );
   }
 
@@ -852,10 +999,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   Widget _buildNoteTab() {
     return Consumer<NoteProvider>(
       builder: (context, noteProvider, _) {
-        final plantNotes = noteProvider.notes
-            .where((n) => n.plantIds.contains(_plant.id))
-            .toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        final plantNotes =
+            noteProvider.notes
+                .where((n) => n.plantIds.contains(_plant.id))
+                .toList()
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
         if (plantNotes.isEmpty) {
           return Center(
@@ -865,7 +1013,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 Icon(
                   Icons.note_outlined,
                   size: 64,
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.5),
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -874,15 +1024,17 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 ),
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => AddEditNoteScreen(
-                        initialPlantId: _plant.id,
-                      ),
-                    ),
-                  ).then((_) {
-                    if (context.mounted) context.read<NoteProvider>().loadNotes();
-                  }),
+                  onPressed: () => Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AddEditNoteScreen(initialPlantId: _plant.id),
+                        ),
+                      )
+                      .then((_) {
+                        if (context.mounted)
+                          context.read<NoteProvider>().loadNotes();
+                      }),
                   icon: const Icon(Icons.add),
                   label: const Text('ノートを追加'),
                 ),
@@ -905,13 +1057,16 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   DateFormat('yyyy年MM月dd日').format(note.updatedAt),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => NoteDetailScreen(note: note),
-                  ),
-                ).then((_) {
-                  if (context.mounted) context.read<NoteProvider>().loadNotes();
-                }),
+                onTap: () => Navigator.of(context)
+                    .push(
+                      MaterialPageRoute(
+                        builder: (_) => NoteDetailScreen(note: note),
+                      ),
+                    )
+                    .then((_) {
+                      if (context.mounted)
+                        context.read<NoteProvider>().loadNotes();
+                    }),
               ),
             );
           },
@@ -925,11 +1080,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   Widget _buildEnvironmentTab() {
     return Consumer<SettingsProvider>(
       builder: (context, settings, _) {
-        final hasNatureRemo =
-            settings.settings.natureRemoToken.isNotEmpty;
+        final hasNatureRemo = settings.settings.natureRemoToken.isNotEmpty;
         final hasSwitchBot =
             settings.settings.switchBotToken.isNotEmpty &&
-                settings.settings.switchBotSecret.isNotEmpty;
+            settings.settings.switchBotSecret.isNotEmpty;
         final hasAnyIot = hasNatureRemo || hasSwitchBot;
 
         return ListView(
@@ -943,9 +1097,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
               padding: const EdgeInsets.only(bottom: 16),
               child: OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const LightMeterScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const LightMeterScreen()),
                 ),
                 icon: const Icon(Icons.wb_sunny_outlined),
                 label: const Text('置き場所の明るさを測る'),
@@ -999,10 +1151,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                       Icon(
                         Icons.thermostat_outlined,
                         size: 48,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.4),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.4),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -1016,10 +1167,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             else ...[
               Text(
                 '記録履歴',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               ..._sensorLogs.map(_buildSensorLogTile),
@@ -1043,10 +1193,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
           children: [
             Text(
               '最新の環境データ',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
@@ -1054,8 +1203,11 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 Expanded(
                   child: Column(
                     children: [
-                      Icon(Icons.thermostat, size: 36,
-                          color: colorScheme.primary),
+                      Icon(
+                        Icons.thermostat,
+                        size: 36,
+                        color: colorScheme.primary,
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         latest?.temperature != null
@@ -1063,16 +1215,18 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                             : '--',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
-                      Text('気温',
-                          style: Theme.of(context).textTheme.bodySmall),
+                      Text('気温', style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
                 ),
                 Expanded(
                   child: Column(
                     children: [
-                      Icon(Icons.water_drop, size: 36,
-                          color: colorScheme.primary),
+                      Icon(
+                        Icons.water_drop,
+                        size: 36,
+                        color: colorScheme.primary,
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         latest?.humidity != null
@@ -1080,8 +1234,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                             : '--',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
-                      Text('湿度',
-                          style: Theme.of(context).textTheme.bodySmall),
+                      Text('湿度', style: Theme.of(context).textTheme.bodySmall),
                     ],
                   ),
                 ),
@@ -1093,8 +1246,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 '${latest.deviceName}  '
                 '${DateFormat('MM月dd日 HH:mm').format(latest.recordedAt)}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                  color: colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
             ],
           ],
@@ -1113,7 +1266,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             Icon(
               Icons.sensors_off,
               size: 48,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 12),
             Text(
@@ -1123,9 +1278,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const IotSettingsScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const IotSettingsScreen()),
               ),
               icon: const Icon(Icons.settings),
               label: const Text('センサー設定を開く'),
@@ -1139,13 +1292,12 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   /// センサーログ1件のリストタイル
   Widget _buildSensorLogTile(SensorLog log) {
     final parts = [
-      if (log.temperature != null)
-        '${log.temperature!.toStringAsFixed(1)} ℃',
-      if (log.humidity != null)
-        '${log.humidity!.toStringAsFixed(0)} %',
+      if (log.temperature != null) '${log.temperature!.toStringAsFixed(1)} ℃',
+      if (log.humidity != null) '${log.humidity!.toStringAsFixed(0)} %',
     ];
-    final sourceLabel =
-        log.source == SensorSource.natureRemo ? 'Nature Remo' : 'SwitchBot';
+    final sourceLabel = log.source == SensorSource.natureRemo
+        ? 'Nature Remo'
+        : 'SwitchBot';
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 2),
@@ -1193,7 +1345,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
     if (confirm != true) return;
 
-    await context.read<SensorLogProvider>().deleteSensorLog(log.id); // ignore: use_build_context_synchronously
+    await context.read<SensorLogProvider>().deleteSensorLog(
+      log.id,
+    ); // ignore: use_build_context_synchronously
     await _loadSensorLogs();
   }
 
@@ -1212,35 +1366,37 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
 
     try {
       // マッピング設定でこの植物に紐づくデバイスを検索
-      final mappedDevice = settings.sensorDeviceMappings.where(
-        (m) => m.source == source && m.plantIds.contains(_plant.id),
-      ).firstOrNull;
+      final mappedDevice = settings.sensorDeviceMappings
+          .where((m) => m.source == source && m.plantIds.contains(_plant.id))
+          .firstOrNull;
 
       final List<SensorData> devices;
       if (source == SensorSource.natureRemo) {
         devices = await sensorProvider.fetchNatureRemoData(
-            settings.natureRemoToken);
+          settings.natureRemoToken,
+        );
       } else {
         devices = await sensorProvider.fetchSwitchBotData(
-            settings.switchBotToken, settings.switchBotSecret);
+          settings.switchBotToken,
+          settings.switchBotSecret,
+        );
       }
 
       if (!mounted) return;
 
       if (devices.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('センサーデバイスが見つかりませんでした')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('センサーデバイスが見つかりませんでした')));
         return;
       }
 
       // マッピング済みデバイスがある場合は自動選択
       final SensorData selected;
       if (mappedDevice != null) {
-        final found = devices.where(
-          (d) => d.deviceId == mappedDevice.deviceId,
-        ).firstOrNull;
+        final found = devices
+            .where((d) => d.deviceId == mappedDevice.deviceId)
+            .firstOrNull;
         if (found != null) {
           selected = found;
         } else {
@@ -1261,7 +1417,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
         selected = picked;
       }
 
-      await sensorProvider.saveSensorLog( // ignore: use_build_context_synchronously
+      await sensorProvider.saveSensorLog(
+        // ignore: use_build_context_synchronously
         data: selected,
         source: source,
         plantId: _plant.id,
@@ -1270,14 +1427,15 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       if (!mounted) return;
       await _loadSensorLogs();
 
-      ScaffoldMessenger.of(context).showSnackBar( // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        // ignore: use_build_context_synchronously
         SnackBar(content: Text('${selected.deviceName} のデータを記録しました')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('取得エラー: ${describeError(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('取得エラー: ${describeError(e)}')));
     } finally {
       if (mounted) {
         setState(() {
@@ -1288,8 +1446,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   }
 
   /// 複数デバイスがある場合の選択ダイアログ
-  Future<SensorData?> _showDevicePickerDialog(
-      List<SensorData> devices) async {
+  Future<SensorData?> _showDevicePickerDialog(List<SensorData> devices) async {
     return showDialog<SensorData>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1301,12 +1458,14 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 .map(
                   (d) => ListTile(
                     title: Text(d.deviceName),
-                    subtitle: Text([
-                      if (d.temperature != null)
-                        '${d.temperature!.toStringAsFixed(1)} ℃',
-                      if (d.humidity != null)
-                        '${d.humidity!.toStringAsFixed(0)} %',
-                    ].join('   ')),
+                    subtitle: Text(
+                      [
+                        if (d.temperature != null)
+                          '${d.temperature!.toStringAsFixed(1)} ℃',
+                        if (d.humidity != null)
+                          '${d.humidity!.toStringAsFixed(0)} %',
+                      ].join('   '),
+                    ),
                     onTap: () => Navigator.of(ctx).pop(d),
                   ),
                 )
@@ -1326,8 +1485,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
   Widget _buildGroupedLogRow(DateTime day, List<LogEntry> logs) {
     final theme = Theme.of(context);
     // メモ付きのログは本文としても表示する（Issue #267）
-    final logsWithNote =
-        logs.where((log) => (log.note ?? '').trim().isNotEmpty).toList();
+    final logsWithNote = logs
+        .where((log) => (log.note ?? '').trim().isNotEmpty)
+        .toList();
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -1347,14 +1507,18 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 4,
-                    children:
-                        logs.map((log) => _buildLogTypeChip(log)).toList(),
+                    children: logs
+                        .map((log) => _buildLogTypeChip(log))
+                        .toList(),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, size: 20),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   tooltip: '${DateFormat('M月d日').format(day)}の記録をすべて削除',
                   onPressed: () => _deleteLogsForDay(day, logs),
                 ),
@@ -1386,8 +1550,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       ),
       label: Text(
         typeName,
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.primary),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.primary,
+        ),
       ),
       visualDensity: VisualDensity.compact,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1421,8 +1586,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
                 '${_getLogTypeName(log.type)}: ${log.note!.trim()}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -1437,9 +1603,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('${_getLogTypeName(log.type)}のメモ'),
-        content: SingleChildScrollView(
-          child: SelectableText(log.note ?? ''),
-        ),
+        content: SingleChildScrollView(child: SelectableText(log.note ?? '')),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -1461,7 +1625,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       builder: (context) => AlertDialog(
         title: const Text('記録を削除'),
         content: Text(
-            '${DateFormat('yyyy年MM月dd日').format(log.date)}の「$typeName」の記録を削除しますか？'),
+          '${DateFormat('yyyy年MM月dd日').format(log.date)}の「$typeName」の記録を削除しますか？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1490,7 +1655,8 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
       builder: (context) => AlertDialog(
         title: const Text('記録を削除'),
         content: Text(
-            '${DateFormat('yyyy年MM月dd日').format(day)}の記録（${logs.length}件）を削除しますか？'),
+          '${DateFormat('yyyy年MM月dd日').format(day)}の記録（${logs.length}件）を削除しますか？',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1508,7 +1674,9 @@ class _PlantDetailScreenState extends State<PlantDetailScreen> with SingleTicker
     );
     if (confirm == true) {
       for (final log in logs) {
-        await context.read<PlantProvider>().deleteLog(log.id); // ignore: use_build_context_synchronously
+        await context.read<PlantProvider>().deleteLog(
+          log.id,
+        ); // ignore: use_build_context_synchronously
       }
       await _loadData();
       // ログ削除後は前の画面にデータ変更を通知（pop は行わない）
@@ -1631,13 +1799,15 @@ class _RecordCareDialogState extends State<_RecordCareDialog> {
         ),
         FilledButton(
           onPressed: () {
-            Navigator.of(context).pop(_CareLogResult(
-              type: _selectedType,
-              date: _selectedDate,
-              note: _noteController.text.trim().isEmpty
-                  ? null
-                  : _noteController.text.trim(),
-            ));
+            Navigator.of(context).pop(
+              _CareLogResult(
+                type: _selectedType,
+                date: _selectedDate,
+                note: _noteController.text.trim().isEmpty
+                    ? null
+                    : _noteController.text.trim(),
+              ),
+            );
           },
           child: const Text('記録'),
         ),
@@ -1662,9 +1832,9 @@ class _InfoCard extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             ...children,
@@ -1680,11 +1850,7 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
+  const _InfoRow({required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -1698,20 +1864,18 @@ class _InfoRow extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.6),
-                  ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: valueColor),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: valueColor),
             ),
           ),
         ],
@@ -1719,4 +1883,3 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
-

@@ -26,12 +26,12 @@ class SensorDeviceMapping {
   });
 
   Map<String, dynamic> toMap() => {
-        'deviceId': deviceId,
-        'deviceName': deviceName,
-        'source': source.name,
-        'plantIds': plantIds,
-        'locationId': locationId,
-      };
+    'deviceId': deviceId,
+    'deviceName': deviceName,
+    'source': source.name,
+    'plantIds': plantIds,
+    'locationId': locationId,
+  };
 
   factory SensorDeviceMapping.fromMap(Map<String, dynamic> map) =>
       SensorDeviceMapping(
@@ -56,7 +56,9 @@ class SensorDeviceMapping {
       deviceName: deviceName,
       source: source,
       plantIds: plantIds ?? this.plantIds,
-      locationId: locationId == _sentinel ? this.locationId : locationId as String?,
+      locationId: locationId == _sentinel
+          ? this.locationId
+          : locationId as String?,
     );
   }
 }

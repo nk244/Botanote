@@ -35,17 +35,14 @@ class Location {
       id: map['id'] as String,
       name: map['name'] as String,
       isOutdoor: (map['isOutdoor'] as int?) == 1,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      // UTC 表記（末尾 Z）でも日付がずれないようローカル時刻へ揃える（Issue #338）
+      createdAt: DateTime.parse(map['createdAt'] as String).toLocal(),
+      updatedAt: DateTime.parse(map['updatedAt'] as String).toLocal(),
     );
   }
 
   /// フィールドを部分的に更新した新しい Location を返す。
-  Location copyWith({
-    String? name,
-    bool? isOutdoor,
-    DateTime? updatedAt,
-  }) {
+  Location copyWith({String? name, bool? isOutdoor, DateTime? updatedAt}) {
     return Location(
       id: id,
       name: name ?? this.name,

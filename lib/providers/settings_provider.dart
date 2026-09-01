@@ -36,15 +36,16 @@ class SettingsProvider with ChangeNotifier {
     _settings = await _settingsService.loadSettings();
     _isLoaded = true;
     notifyListeners();
-    // アプリ起動時に通知設定が有効ならスマートスケジュールを実行する
-    // （OSが再起動するとスケジュール済み通知が消えるため）
-    if (_settings.notificationEnabled) {
-      await NotificationService.scheduleSmartWateringReminder(
-        hour: _settings.notificationHour,
-        minute: _settings.notificationMinute,
-      );
-    }
-    // 天気連動ケアアラートが有効なら起動時に再スケジュールする（Issue #176）
+    // 水やりリマインダーの張り直しはここでは行わない（Issue #339）。
+    // OS再起動でスケジュール済み通知が消えるケースを含め、アプリ起動時は
+    // PlantProvider.loadPlants() が必ず走り、その中で
+    // NotificationService.scheduleSmartWateringReminder() を呼んでいる。
+    // 通知時刻は NotificationService が SharedPreferences から読むため、
+    // ここで hour/minute を渡す必要もない。両方から呼ぶと起動のたびに
+    // 同じDBクエリとアラーム登録が二重に走る。
+    //
+    // 天気連動ケアアラートが有効なら起動時に再スケジュールする（Issue #176）。
+    // こちらは他に起動時の呼び出し元がないため残す。
     if (_settings.weatherAlertsEnabled) {
       await NotificationService.scheduleWeatherAlert(
         enabled: true,
@@ -163,8 +164,7 @@ class SettingsProvider with ChangeNotifier {
   }
 
   /// デバイス-植物マッピングを更新する。
-  Future<void> updateDeviceMappings(
-      List<SensorDeviceMapping> mappings) async {
+  Future<void> updateDeviceMappings(List<SensorDeviceMapping> mappings) async {
     _settings = _settings.copyWith(sensorDeviceMappings: mappings);
     await _settingsService.saveSettings(_settings);
     notifyListeners();
@@ -179,9 +179,7 @@ class SettingsProvider with ChangeNotifier {
 
   /// センサー最終自動取得日時を更新する。null でクリアする。
   Future<void> updateLastSensorFetchAt(DateTime? time) async {
-    _settings = _settings.copyWith(
-      lastSensorFetchAt: time?.toIso8601String(),
-    );
+    _settings = _settings.copyWith(lastSensorFetchAt: time?.toIso8601String());
     await _settingsService.saveSettings(_settings);
     notifyListeners();
   }
@@ -191,7 +189,9 @@ class SettingsProvider with ChangeNotifier {
   /// [deviceIds] に含まれるデバイスは [locationId] を設定し、現在この場所に
   /// 紐づいているが [deviceIds] に含まれないデバイスは紐づけを解除する。
   Future<void> assignSensorsToLocation(
-      String locationId, Set<String> deviceIds) async {
+    String locationId,
+    Set<String> deviceIds,
+  ) async {
     final updated = _settings.sensorDeviceMappings.map((mapping) {
       final shouldBelong = deviceIds.contains(mapping.deviceId);
       final currentlyBelongs = mapping.locationId == locationId;
@@ -211,8 +211,9 @@ class SettingsProvider with ChangeNotifier {
   /// 管理場所削除時に、その場所を参照しているセンサーマッピングの
   /// locationId をクリアする。
   Future<void> clearLocationFromSensorMappings(String locationId) async {
-    final hasReference =
-        _settings.sensorDeviceMappings.any((m) => m.locationId == locationId);
+    final hasReference = _settings.sensorDeviceMappings.any(
+      (m) => m.locationId == locationId,
+    );
     if (!hasReference) return;
 
     final updated = _settings.sensorDeviceMappings.map((mapping) {

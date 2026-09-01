@@ -108,9 +108,11 @@ class _PlantPickerDialogState extends State<PlantPickerDialog> {
     final query = _searchQuery.trim().toLowerCase();
     if (query.isEmpty) return plants;
     return plants
-        .where((plant) =>
-            plant.name.toLowerCase().contains(query) ||
-            (plant.variety?.toLowerCase().contains(query) ?? false))
+        .where(
+          (plant) =>
+              plant.name.toLowerCase().contains(query) ||
+              (plant.variety?.toLowerCase().contains(query) ?? false),
+        )
         .toList();
   }
 
@@ -129,7 +131,8 @@ class _PlantPickerDialogState extends State<PlantPickerDialog> {
   Widget build(BuildContext context) {
     final candidates = _sortedCandidates(context);
     final filtered = _filter(candidates);
-    final allSelected = filtered.isNotEmpty &&
+    final allSelected =
+        filtered.isNotEmpty &&
         filtered.every((plant) => _selectedIds.contains(plant.id));
 
     return AlertDialog(
