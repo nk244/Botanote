@@ -363,10 +363,6 @@ class ExportService {
     Map<String, dynamic> data,
     Map<String, String> pathMap,
   ) async {
-    int plantCount = 0;
-    int logCount = 0;
-    int noteCount = 0;
-    int locationCount = 0;
     bool settingsRestored = false;
     // 画像参照の解決状況（Issue #289）
     int imageCount = 0;
@@ -403,7 +399,6 @@ class ExportService {
           locationRows.add(
             Location.fromMap(Map<String, dynamic>.from(l0 as Map)).toMap(),
           );
-          locationCount++;
         } catch (e) {
           // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）
           skippedRecordCount++;
@@ -438,7 +433,6 @@ class ExportService {
       }
       try {
         plantRows.add(Plant.fromMap(map).toMap());
-        plantCount++;
       } catch (e) {
         // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）。
         // 読み飛ばす植物の画像は数えないよう、加算分を巻き戻す。
@@ -460,7 +454,6 @@ class ExportService {
         continue;
       }
       logRows.add(log.toMap());
-      logCount++;
     }
 
     // ノートをインポート
@@ -495,7 +488,6 @@ class ExportService {
       }
       try {
         noteRows.add(Note.fromMap(map).toMap());
-        noteCount++;
       } catch (e) {
         // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）
         skippedRecordCount++;
@@ -504,13 +496,11 @@ class ExportService {
     }
 
     // センサーログをインポート
-    int sensorLogCount = 0;
     final sensorLogsJson = data['sensorLogs'] as List<dynamic>? ?? [];
     for (final s in sensorLogsJson) {
       try {
         final log = SensorLog.fromMap(Map<String, dynamic>.from(s as Map));
         sensorLogRows.add(log.toMap());
-        sensorLogCount++;
       } catch (e) {
         // 1件が壊れていてもバックアップ全体を失わせない（Issue #319）
         skippedRecordCount++;
@@ -537,25 +527,45 @@ class ExportService {
       }
     }
 
+    // ID が重複する行は upsert で1件に集約されるため、投入前に後勝ちでまとめる。
+    // まとめずに読み取り件数を報告すると、実際の保存件数より多い数字が出る（Issue #347）。
+    var mergedRecordCount = 0;
+    List<Map<String, dynamic>> dedupe(List<Map<String, dynamic>> rows) {
+      final byId = <Object?, Map<String, dynamic>>{};
+      for (final row in rows) {
+        if (byId.containsKey(row['id'])) mergedRecordCount++;
+        byId[row['id']] = row;
+      }
+      return byId.values.toList();
+    }
+
+    final uniqueLocationRows = dedupe(locationRows);
+    final uniquePlantRows = dedupe(plantRows);
+    final uniqueLogRows = dedupe(logRows);
+    final uniqueNoteRows = dedupe(noteRows);
+    final uniqueSensorLogRows = dedupe(sensorLogRows);
+
     // 参照先（locations → plants）を先に投入する順序で一括コミットする
     await _db.insertRowsInBatch({
-      'locations': locationRows,
-      'plants': plantRows,
-      'logs': logRows,
-      'notes': noteRows,
-      'sensor_logs': sensorLogRows,
+      'locations': uniqueLocationRows,
+      'plants': uniquePlantRows,
+      'logs': uniqueLogRows,
+      'notes': uniqueNoteRows,
+      'sensor_logs': uniqueSensorLogRows,
     });
 
+    // 報告する件数は「実際に保存された件数」に揃える（Issue #347）
     return ImportResult(
-      plantCount: plantCount,
-      logCount: logCount,
-      noteCount: noteCount,
-      sensorLogCount: sensorLogCount,
-      locationCount: locationCount,
+      plantCount: uniquePlantRows.length,
+      logCount: uniqueLogRows.length,
+      noteCount: uniqueNoteRows.length,
+      sensorLogCount: uniqueSensorLogRows.length,
+      locationCount: uniqueLocationRows.length,
       settingsRestored: settingsRestored,
       imageCount: imageCount,
       unresolvedImageCount: unresolvedImageCount,
       skippedRecordCount: skippedRecordCount,
+      mergedRecordCount: mergedRecordCount,
     );
   }
 }
@@ -587,6 +597,12 @@ class ImportResult {
   /// バックアップ全体の復元を失敗させず、件数だけを利用者に伝える。
   final int skippedRecordCount;
 
+  /// ID が重複していたため1件にまとめたレコードの件数（Issue #347）。
+  ///
+  /// アプリが書き出したバックアップは UUID v4 のため通常は 0 件。手編集した
+  /// JSON などで同じ ID が複数あると、upsert で1件に集約されるため加算される。
+  final int mergedRecordCount;
+
   const ImportResult({
     required this.plantCount,
     required this.logCount,
@@ -597,6 +613,7 @@ class ImportResult {
     this.imageCount = 0,
     this.unresolvedImageCount = 0,
     this.skippedRecordCount = 0,
+    this.mergedRecordCount = 0,
   });
 
   /// 解決できなかった画像参照があるかどうか。
@@ -611,6 +628,15 @@ class ImportResult {
     return 'このバックアップに含まれる$skippedRecordCount件のデータは、'
         'このバージョンでは読み取れなかったため復元されませんでした。\n'
         'それ以外のデータは正常に復元しています。';
+  }
+
+  /// ID が重複していた場合の案内文（Issue #347）。問題がなければ null。
+  ///
+  /// 失敗ではなく「まとめた」ことの通知なので、警告とは分けて扱う。
+  String? get mergedNotice {
+    if (mergedRecordCount <= 0) return null;
+    return 'このバックアップには同じIDのデータが$mergedRecordCount件含まれていたため、'
+        'それぞれ1件にまとめて復元しました。';
   }
 
   @override

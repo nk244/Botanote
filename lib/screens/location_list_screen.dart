@@ -4,85 +4,35 @@ import '../models/location.dart';
 import '../providers/location_provider.dart';
 import '../providers/plant_provider.dart';
 import '../providers/settings_provider.dart';
+import '../widgets/location_edit_dialog.dart';
 import 'location_detail_screen.dart';
 
 /// 置き場所（Location）の一覧・追加・編集・削除画面（Issue #180）。
 class LocationListScreen extends StatelessWidget {
   const LocationListScreen({super.key});
 
+  /// 置き場所の追加・編集ダイアログを表示して保存する。
+  ///
+  /// ダイアログと TextEditingController の所有権は [LocationEditDialog] にある
+  /// （Issue #341 で植物追加画面と共通化）。
   Future<void> _showEditDialog(
     BuildContext context, {
     Location? location,
   }) async {
-    final nameController = TextEditingController(text: location?.name ?? '');
-    bool isOutdoor = location?.isOutdoor ?? false;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text(location == null ? '置き場所を追加' : '置き場所を編集'),
-          // 名前欄を自動フォーカスするとIMEのフローティングツールバーが「屋外」
-          // スイッチに重なり、タップしても切り替わらなくなる（Issue #268）。
-          // 自動フォーカスをやめ、内容もスクロール可能にして退避できるようにする。
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: '場所名',
-                    border: OutlineInputBorder(),
-                    hintText: '例: リビング、ベランダ',
-                  ),
-                  // 保存ボタンの活性状態を即座に反映するため、入力のたびに再描画する
-                  onChanged: (_) => setState(() {}),
-                  // 入力確定でキーボードを閉じ、下のスイッチを操作できるようにする
-                  onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('屋外'),
-                  subtitle: const Text('天気連動ケアアラートの対象になります'),
-                  value: isOutdoor,
-                  onChanged: (value) {
-                    // スイッチ操作時にキーボードが出ていれば閉じる
-                    FocusScope.of(context).unfocus();
-                    setState(() => isOutdoor = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: nameController.text.trim().isEmpty
-                  ? null
-                  : () => Navigator.of(context).pop(true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
+    final result = await LocationEditDialog.show(
+      context,
+      title: location == null ? '置き場所を追加' : '置き場所を編集',
+      initialName: location?.name ?? '',
+      initialIsOutdoor: location?.isOutdoor ?? false,
     );
-
-    if (result != true || !context.mounted) return;
-    final name = nameController.text.trim();
-    if (name.isEmpty) return;
+    if (result == null || !context.mounted) return;
 
     final locationProvider = context.read<LocationProvider>();
     if (location == null) {
-      await locationProvider.addLocation(name, isOutdoor);
+      await locationProvider.addLocation(result.name, result.isOutdoor);
     } else {
       await locationProvider.updateLocation(
-        location.copyWith(name: name, isOutdoor: isOutdoor),
+        location.copyWith(name: result.name, isOutdoor: result.isOutdoor),
       );
     }
   }

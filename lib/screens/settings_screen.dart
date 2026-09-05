@@ -865,13 +865,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         if (result.skippedWarning != null) result.skippedWarning!,
         if (result.imageWarning != null) result.imageWarning!,
       ];
+      // ID重複のまとめは失敗ではないので、警告とは分けて案内する（Issue #347）
+      final notices = [if (result.mergedNotice != null) result.mergedNotice!];
+      final details = [
+        ...notices.map((n) => 'ℹ $n'),
+        ...warnings.map((w) => '⚠ $w'),
+      ];
       await _showImportResultDialog(
         context,
         title: warnings.isEmpty ? 'インポートが完了しました' : 'インポートが完了しました（一部は未復元）',
-        message: warnings.isEmpty
+        message: details.isEmpty
             ? '以下のデータを復元しました。\n\n$result'
             : '以下のデータを復元しました。\n\n$result\n\n'
-                  '${warnings.map((w) => '⚠ $w').join('\n\n')}',
+                  '${details.join('\n\n')}',
       );
     } catch (e) {
       debugPrint('インポートに失敗: $e');

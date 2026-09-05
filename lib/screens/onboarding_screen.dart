@@ -134,15 +134,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (result.skippedWarning != null) result.skippedWarning!,
         if (result.imageWarning != null) result.imageWarning!,
       ];
+      // ID重複のまとめは失敗ではないので、警告とは分けて案内する（Issue #347）
+      final notices = [if (result.mergedNotice != null) result.mergedNotice!];
+      final details = [
+        ...notices.map((n) => 'ℹ $n'),
+        ...warnings.map((w) => '⚠ $w'),
+      ];
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('復元しました'),
           content: Text(
-            warnings.isEmpty
+            details.isEmpty
                 ? '以下のデータを復元しました。\n\n$result'
                 : '以下のデータを復元しました。\n\n$result\n\n'
-                      '${warnings.map((w) => '⚠ $w').join('\n\n')}',
+                      '${details.join('\n\n')}',
           ),
           actions: [
             FilledButton(
