@@ -396,6 +396,19 @@ class DatabaseService {
     return _mapLogRows(maps);
   }
 
+  /// 指定植物のケアログ件数を取得する（Issue #345）。
+  ///
+  /// 削除確認で「何件消えるのか」を示すためだけに使うので、
+  /// 行そのものは読まずに COUNT で数える。
+  Future<int> countLogsByPlant(String plantId) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) FROM logs WHERE plantId = ?',
+      [plantId],
+    );
+    return Sqflite.firstIntValue(rows) ?? 0;
+  }
+
   /// 指定植物かつ種別のログを取得する。
   Future<List<LogEntry>> getLogsByPlantAndType(
     String plantId,

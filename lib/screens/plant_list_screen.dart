@@ -88,10 +88,17 @@ class _PlantListScreenState extends State<PlantListScreen> {
         final locations = locationProvider.locations;
         if (locations.isEmpty) return const SizedBox.shrink();
 
-        final plants = plantProvider.plants;
+        // 名前検索中は検索結果に対する件数を出す（Issue #346）。
+        // リストが4件に絞られているのに「すべて 12」と出ていると、
+        // 絞り込みが効いているのか判断できないため。
+        final allPlants = plantProvider.plants;
+        final plants = _applySearchFilter(context, allPlants);
+        // チップの並び自体は検索で変えない（入力のたびに未設定チップが
+        // 出入りすると押したい位置がずれるため）。件数だけを検索結果に合わせる。
         final unassignedCount = plants
             .where((p) => p.locationId == null)
             .length;
+        final hasUnassigned = allPlants.any((p) => p.locationId == null);
 
         Widget chip(String label, int count, String? value) {
           final selected = _selectedLocationId == value;
@@ -118,7 +125,7 @@ class _PlantListScreenState extends State<PlantListScreen> {
                   plants.where((p) => p.locationId == location.id).length,
                   location.id,
                 ),
-              if (unassignedCount > 0)
+              if (hasUnassigned)
                 chip('未設定', unassignedCount, _unassignedLocationFilter),
               // 置き場所の管理画面は設定の奥にあるため、ここからも開けるようにする
               // （Issue #248 の導線をチップ行へ引き継ぐ）

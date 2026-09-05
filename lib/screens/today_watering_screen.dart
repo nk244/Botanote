@@ -2047,7 +2047,7 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
       if (selectedLogTypes != null && selectedLogTypes.isNotEmpty && mounted) {
         // 選択した全植物 × 全ログ種別を一括登録する
         final plantIds = selectedPlants.map((p) => p.id).toList();
-        await plantProvider.bulkRecordLogs(
+        final created = await plantProvider.bulkRecordLogs(
           plantIds,
           selectedLogTypes.toList(),
           _selectedDate,
@@ -2060,7 +2060,17 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
         final plantLabel = selectedPlants.length == 1
             ? selectedPlants.first.name
             : '${selectedPlants.length}件の植物';
-        _showSuccessMessage('$plantLabelに$logTypeNamesを記録しました');
+        // 「全選択」で鉢数ぶんのログが一度に入るため、予定分の一括記録と同じく
+        // SnackBar からまとめて取り消せるようにする（Issue #342 / #328 の対応漏れ）
+        _showSuccessMessage(
+          '$plantLabelに$logTypeNamesを記録しました',
+          onUndo: () async {
+            await plantProvider.deleteLogs(created);
+            await _refreshAfterLogChange();
+            if (!mounted) return;
+            _showSuccessMessage('${created.length}件の登録を取り消しました');
+          },
+        );
       }
     }
   }

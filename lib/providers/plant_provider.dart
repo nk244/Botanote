@@ -917,6 +917,11 @@ class PlantProvider with ChangeNotifier {
     return _db.getLogsByPlantAndType(plantId, logType);
   }
 
+  /// 指定植物のケアログ件数を返す（削除確認の件数表示用、Issue #345）。
+  Future<int> countLogsForPlant(String plantId) async {
+    return _db.countLogsByPlant(plantId);
+  }
+
   /// 指定植物の全種別ログを1クエリで取得する（水やりログ画面の高速化用）。
   Future<List<LogEntry>> getAllLogsForPlant(String plantId) async {
     return _db.getLogsByPlant(plantId);

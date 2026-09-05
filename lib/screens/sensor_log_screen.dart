@@ -100,13 +100,22 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
         (settings.switchBotToken.isNotEmpty &&
             settings.switchBotSecret.isNotEmpty);
 
-    // APIトークン未設定
+    // APIトークン未設定。
+    // APIキーはセキュリティ上バックアップに含めないため、機種変更後の復元直後は
+    // 必ずこの状態になる。蓄積済みのセンサーログまで見えなくなると、データが
+    // 残っているのかどうかも分からないので、履歴がある場合は表示する（Issue #343）。
     if (!hasToken) {
-      return _buildEmptyState(
-        icon: Icons.sensors_off,
-        message: 'センサーが設定されていません',
-        action: _buildIotSettingsButton(),
-      );
+      if (sensorProvider.isLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (sensorProvider.logs.isEmpty) {
+        return _buildEmptyState(
+          icon: Icons.sensors_off,
+          message: 'センサーが設定されていません',
+          action: _buildIotSettingsButton(),
+        );
+      }
+      return _buildStoredLogsView(sensorProvider, mappings);
     }
 
     // マッピング未設定
@@ -146,6 +155,89 @@ class _SensorLogScreenState extends State<SensorLogScreen> {
               ],
             ),
           ),
+      ],
+    );
+  }
+
+  /// APIキーが無い状態で、保存済みのセンサーログを見せるビュー（Issue #343）。
+  ///
+  /// バックアップから復元した直後はこの状態になる。デバイス設定（マッピング）が
+  /// 残っていないこともあるため、カードはログ自身のデバイス情報から組み立てる。
+  Widget _buildStoredLogsView(
+    SensorLogProvider sensorProvider,
+    List<SensorDeviceMapping> mappings,
+  ) {
+    final logs = sensorProvider.logs;
+    final latestLogs = sensorProvider.latestLogPerDevice;
+    final mappingByDeviceId = {for (final m in mappings) m.deviceId: m};
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Card(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.key_off,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'APIキーが未設定です',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'APIキーは安全のためバックアップに含めていません。'
+                  'IoT設定で再入力すると、新しいデータの取得を再開できます。\n'
+                  '記録済みの${logs.length}件の環境データはそのまま残っています。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildIotSettingsButton(),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildSectionLabel('記録が残っているデバイス'),
+        for (final entry in latestLogs.entries)
+          _buildDeviceCard(
+            mappingByDeviceId[entry.key] ??
+                SensorDeviceMapping(
+                  deviceId: entry.key,
+                  deviceName: entry.value.deviceName,
+                  source: entry.value.source,
+                  plantIds: const [],
+                ),
+            entry.value,
+          ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            '植物ごとの環境履歴は、植物詳細の「環境」タブで見られます。',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+        ),
       ],
     );
   }

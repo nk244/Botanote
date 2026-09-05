@@ -248,6 +248,10 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
     final plantProvider = context.read<PlantProvider>();
     final navigator = Navigator.of(context);
 
+    // 取り消せない操作なので、何件のログが消えるのかを先に数えて示す（Issue #345）
+    final logCount = await plantProvider.countLogsForPlant(_plant.id);
+    if (!mounted) return;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -255,7 +259,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
         // ノートは削除せず紐付けを解除するだけなので、実挙動どおりに説明する（Issue #224）
         content: Text(
           '「${_plant.name}」を削除してもよろしいですか？\n'
-          'すべてのケアログも削除されます。\n'
+          '${logCount > 0 ? '$logCount件のケアログも削除されます。' : 'ケアログはまだありません。'}\n'
           'ノートは残りますが、この植物との紐付けは解除されます。',
         ),
         actions: [
@@ -1256,15 +1260,19 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
     );
   }
 
-  /// センサー未設定時の案内カード
+  /// センサー未設定時の案内カード。
+  ///
+  /// 復元済みの記録が下に並んでいる場合は「設定されていません」だと実態と
+  /// 食い違うため、APIキーだけが無い状態だと分かる文言にする（Issue #343）。
   Widget _buildIotSetupPrompt() {
+    final hasStoredLogs = _sensorLogs.isNotEmpty;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             Icon(
-              Icons.sensors_off,
+              hasStoredLogs ? Icons.key_off : Icons.sensors_off,
               size: 48,
               color: Theme.of(
                 context,
@@ -1272,7 +1280,12 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              'センサーが設定されていません',
+              hasStoredLogs
+                  ? 'APIキーが未設定です。\n'
+                        '再入力すると、この植物の環境データの取得を再開できます。\n'
+                        '記録済みの履歴は下に表示されています。'
+                  : 'センサーが設定されていません',
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),

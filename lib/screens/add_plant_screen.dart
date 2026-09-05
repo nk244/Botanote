@@ -7,6 +7,8 @@ import '../providers/location_provider.dart';
 import '../models/plant.dart';
 import '../services/claude_share_service.dart';
 import '../widgets/claude_share_hint_dialog.dart';
+import '../widgets/location_edit_dialog.dart';
+import '../widgets/interval_preset_chips.dart';
 import '../widgets/plant_image_widget.dart';
 import '../utils/error_utils.dart';
 
@@ -288,69 +290,18 @@ class _AddPlantScreenState extends State<AddPlantScreen> {
   ///
   /// 置き場所が未登録のまま植物登録に入った利用者が、登録を中断せずに
   /// その場で置き場所を用意できるようにする（Issue #291）。
+  ///
+  /// ダイアログと TextEditingController の所有権は [LocationEditDialog] にある。
+  /// ここで controller を破棄すると、退場アニメーション中の TextField が
+  /// 破棄済みの controller を参照し、入力中の植物情報ごと画面が落ちる（Issue #341）。
   Future<void> _createLocationAndSelect() async {
-    final nameController = TextEditingController();
-    var isOutdoor = false;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('置き場所を追加'),
-          // 置き場所一覧の追加ダイアログと同じ理由で自動フォーカスしない（Issue #268）
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(
-                    labelText: '場所名',
-                    border: OutlineInputBorder(),
-                    hintText: '例: リビング、ベランダ',
-                  ),
-                  onChanged: (_) => setDialogState(() {}),
-                  onSubmitted: (_) => FocusScope.of(ctx).unfocus(),
-                ),
-                const SizedBox(height: 16),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('屋外'),
-                  subtitle: const Text('天気連動ケアアラートの対象になります'),
-                  value: isOutdoor,
-                  onChanged: (value) {
-                    FocusScope.of(ctx).unfocus();
-                    setDialogState(() => isOutdoor = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: nameController.text.trim().isEmpty
-                  ? null
-                  : () => Navigator.of(ctx).pop(true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final name = nameController.text.trim();
-    nameController.dispose();
-    if (confirmed != true || name.isEmpty || !mounted) return;
+    final result = await LocationEditDialog.show(context, title: '置き場所を追加');
+    if (result == null || !mounted) return;
 
     try {
       final created = await context.read<LocationProvider>().addLocation(
-        name,
-        isOutdoor,
+        result.name,
+        result.isOutdoor,
       );
       if (!mounted) return;
       setState(() => _locationId = created.id);
@@ -851,6 +802,14 @@ class _WateringIntervalDialogState extends State<_WateringIntervalDialog> {
             label: '$_days日',
             onChanged: (value) => _setDays(value.toInt()),
           ),
+          const SizedBox(height: 4),
+          // ±1日とスライダーだけでは 30日・60日に合わせにくいため、
+          // まとめて登録画面と同じプリセットをここでも出す（Issue #344 / #330）
+          buildIntervalPresetChips(
+            context,
+            current: _days,
+            onSelected: _setDays,
+          ),
         ],
       ),
       actions: [
@@ -1001,6 +960,14 @@ class _LogIntervalDialogState extends State<_LogIntervalDialog> {
               divisions: _maxDays - _minDays,
               label: '$_days日',
               onChanged: (v) => setState(() => _days = v.toInt()),
+            ),
+            const SizedBox(height: 4),
+            // まとめて登録の間隔ダイアログと操作を揃える（Issue #344 / #330）
+            buildIntervalPresetChips(
+              context,
+              current: _days,
+              onSelected: (v) =>
+                  setState(() => _days = v.clamp(_minDays, _maxDays)),
             ),
           ] else ...[
             _buildStepper(
