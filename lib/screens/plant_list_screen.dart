@@ -6,6 +6,7 @@ import '../providers/location_provider.dart';
 import '../models/app_settings.dart';
 import '../models/log_entry.dart';
 import '../models/plant.dart';
+import '../utils/care_text_utils.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
 import 'add_plant_screen.dart';
@@ -837,6 +838,13 @@ class _WateringStatusText extends StatelessWidget {
     final isOverdue =
         next != null && !AppDateUtils.getDateOnly(next).isAfter(today);
     final color = isOverdue ? scheme.error : scheme.primary;
+    // 一度も水やりを記録していない株は日数ではなく「最初の水やり」と出す
+    // （購入日が過去だと「90日前」と表示されていた。Issue #349）
+    final label = next == null
+        ? ''
+        : (isOverdue && provider.isFirstCare(plant.id, LogType.watering)
+              ? firstCareShortLabel(LogType.watering)
+              : AppDateUtils.formatDateDifference(next));
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -846,7 +854,7 @@ class _WateringStatusText extends StatelessWidget {
           const SizedBox(width: 2),
           Flexible(
             child: Text(
-              AppDateUtils.formatDateDifference(next),
+              label,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: color),
