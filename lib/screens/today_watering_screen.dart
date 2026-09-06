@@ -10,6 +10,7 @@ import '../models/plant.dart';
 import '../models/log_entry.dart';
 import '../models/daily_log_status.dart';
 import '../models/app_settings.dart';
+import '../utils/care_text_utils.dart';
 import '../utils/date_utils.dart';
 import '../widgets/plant_image_widget.dart';
 import '../utils/log_type_color_utils.dart';
@@ -2293,6 +2294,18 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     // 出てしまうため、今日以外はまとめて出さない（Issue #301）。
     final isViewingToday = AppDateUtils.isSameDay(selectedDay, today);
 
+    // まだ1件も記録が無い種別は、日数ではなく「最初の水やり」と出す。
+    // 購入日が過去の株を登録しただけで「90日前（予定超過）」となり、
+    // 一度も記録していないのに遅れているように見えていた（Issue #349）。
+    final plantProvider = context.read<PlantProvider>();
+    String scheduleLabel(LogType type, DateTime date) {
+      final isDue = !AppDateUtils.getDateOnly(date).isAfter(today);
+      if (isDue && plantProvider.isFirstCare(plant.id, type)) {
+        return firstCareShortLabel(type);
+      }
+      return AppDateUtils.formatDateDifference(date);
+    }
+
     // 水やり・肥料・活力剤の予定を横並び1行でまとめて表示する (#125)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2310,21 +2323,21 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
               if (nextWateringDate != null)
                 _buildScheduleChip(
                   icon: Icons.water_drop,
-                  label: AppDateUtils.formatDateDifference(nextWateringDate),
+                  label: scheduleLabel(LogType.watering, nextWateringDate),
                   isOverdue: isDatePastDue(nextWateringDate),
                   normalColor: Theme.of(context).colorScheme.primary,
                 ),
               if (nextFertilizerDate != null)
                 _buildScheduleChip(
                   icon: Icons.grass,
-                  label: AppDateUtils.formatDateDifference(nextFertilizerDate),
+                  label: scheduleLabel(LogType.fertilizer, nextFertilizerDate),
                   isOverdue: isDatePastDue(nextFertilizerDate),
                   normalColor: Theme.of(context).colorScheme.secondary,
                 ),
               if (nextVitalizerDate != null)
                 _buildScheduleChip(
                   icon: Icons.favorite,
-                  label: AppDateUtils.formatDateDifference(nextVitalizerDate),
+                  label: scheduleLabel(LogType.vitalizer, nextVitalizerDate),
                   isOverdue: isDatePastDue(nextVitalizerDate),
                   normalColor: Theme.of(context).colorScheme.tertiary,
                 ),

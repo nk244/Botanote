@@ -43,6 +43,12 @@ class PlantProvider with ChangeNotifier {
   /// カレンダー表示用：ログが存在する日付のセット（時刻なし）
   Set<DateTime> _logDatesCache = {};
 
+  /// まだ1件も記録が無いケア種別のキャッシュ（Issue #349）。
+  ///
+  /// 「予定超過」ではなく「これから最初に行うケア」として案内するために、
+  /// 画面側が種別ごとの初回判定を同期的に引けるようにする。
+  final Map<String, Set<LogType>> _firstCareTypesCache = {};
+
   List<Plant> get plants => _plants;
   bool get isLoading => _isLoading;
 
@@ -87,7 +93,25 @@ class PlantProvider with ChangeNotifier {
     ];
   }
 
+  /// 指定した植物・種別のログがまだ1件も無い場合 true を返す（Issue #349）。
+  ///
+  /// [loadPlants] 完了後に有効。初回のケアは「◯日前（予定超過）」ではなく
+  /// 「最初の水やりをしましょう」と案内するための判定に使う。
+  bool isFirstCare(String plantId, LogType type) =>
+      _firstCareTypesCache[plantId]?.contains(type) ?? false;
+
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// 初回ケアの予定日が過去になる場合、今日まで繰り上げる（Issue #349）。
+  ///
+  /// 記録が1件も無い間の予定日は購入日・登録日からの推定でしかないため、
+  /// 過去の購入日を入力しただけで「90日前（予定超過）」と出てしまっていた。
+  /// 一度も記録していないケアに遅れ日数を出すのは実態に合わないので、
+  /// 予定日は今日（＝これから行う日）に丸める。
+  DateTime _clampFirstCareDate(DateTime date, {DateTime? now}) {
+    final today = _dateOnly(now ?? DateTime.now());
+    return _dateOnly(date).isBefore(today) ? today : date;
+  }
 
   /// 未来を含む「いずれかの植物の次回水やり予定日」の集合を返す（時刻なし）。
   ///
@@ -152,6 +176,7 @@ class PlantProvider with ChangeNotifier {
       _nextWateringCache.clear();
       _nextFertilizerCache.clear();
       _nextVitalizerCache.clear();
+      _firstCareTypesCache.clear();
       for (final plant in _plants) {
         final logs = logsByPlant[plant.id] ?? const <LogEntry>[];
         final wateringLogs = logs
@@ -163,6 +188,13 @@ class PlantProvider with ChangeNotifier {
         final vitalizerLogs = logs
             .where((l) => l.type == LogType.vitalizer)
             .toList();
+
+        // まだ記録が無い種別を控えておく（Issue #349）
+        _firstCareTypesCache[plant.id] = {
+          if (wateringLogs.isEmpty) LogType.watering,
+          if (fertilizerLogs.isEmpty) LogType.fertilizer,
+          if (vitalizerLogs.isEmpty) LogType.vitalizer,
+        };
 
         final nextWatering = calcNextWateringDateFromLogs(plant, wateringLogs);
         _nextWateringCache[plant.id] = nextWatering;
@@ -584,11 +616,18 @@ class PlantProvider with ChangeNotifier {
     );
 
     if (wateringLogs.isEmpty) {
-      // ログなしの場合は購入日または登録日から計算
+      // ログなしの場合は購入日または登録日から計算し、
+      // 過去になる場合は今日へ繰り上げる（Issue #349）
       final baseDate = plant.purchaseDate ?? plant.createdAt;
-      return baseDate.add(
-        Duration(
-          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate),
+      return _clampFirstCareDate(
+        baseDate.add(
+          Duration(
+            days: _adjustedInterval(
+              plant,
+              plant.wateringIntervalDays!,
+              baseDate,
+            ),
+          ),
         ),
       );
     }
@@ -935,18 +974,28 @@ class PlantProvider with ChangeNotifier {
   /// ログリストから次回水やり日を計算する（DBアクセスなし・同期的）。
   ///
   /// [plant] の [wateringIntervalDays] が null の場合は null を返す。
+  /// [now] は初回予定日の繰り上げ基準日（省略時は現在日時。テスト用）。
   DateTime? calcNextWateringDateFromLogs(
     Plant plant,
-    List<LogEntry> wateringLogs,
-  ) {
+    List<LogEntry> wateringLogs, {
+    DateTime? now,
+  }) {
     if (plant.wateringIntervalDays == null) return null;
     if (wateringLogs.isEmpty) {
-      // ログなしの場合は購入日または登録日から計算
+      // ログなしの場合は購入日または登録日から計算し、
+      // 過去になる場合は今日へ繰り上げる（Issue #349）
       final baseDate = plant.purchaseDate ?? plant.createdAt;
-      return baseDate.add(
-        Duration(
-          days: _adjustedInterval(plant, plant.wateringIntervalDays!, baseDate),
+      return _clampFirstCareDate(
+        baseDate.add(
+          Duration(
+            days: _adjustedInterval(
+              plant,
+              plant.wateringIntervalDays!,
+              baseDate,
+            ),
+          ),
         ),
+        now: now,
       );
     }
     final sorted = [...wateringLogs]..sort((a, b) => b.date.compareTo(a.date));
