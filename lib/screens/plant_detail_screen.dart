@@ -12,6 +12,7 @@ import '../providers/note_provider.dart';
 import '../providers/sensor_log_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/iot_service.dart';
+import '../utils/care_text_utils.dart';
 import '../utils/date_utils.dart';
 import '../utils/seasonal_interval_utils.dart';
 import 'add_plant_screen.dart';
@@ -197,24 +198,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
     }
   }
 
-  String _getLogTypeName(LogType type) {
-    switch (type) {
-      case LogType.watering:
-        return '水やり';
-      case LogType.fertilizer:
-        return '肥料';
-      case LogType.vitalizer:
-        return '活力剤';
-      case LogType.repotting:
-        return '植え替え';
-      case LogType.pruning:
-        return '剪定';
-      case LogType.misting:
-        return '葉水';
-      case LogType.cleaning:
-        return '掃除';
-    }
-  }
+  String _getLogTypeName(LogType type) => careTypeLabel(type);
 
   /// 画像背景上でも見やすいアクションボタンを生成する（半透明の丸背景付き）
   ///
@@ -558,6 +542,13 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
     final due = AppDateUtils.getDateOnly(nextDate);
     final isDue = !due.isAfter(today);
     final isOverdue = due.isBefore(today);
+    // 一度も記録していないケアは日数ではなく案内文を出す（Issue #349）。
+    // 予定日がまだ先の場合は通常どおり「◯日後」を出す。
+    final isFirstCare = _logsForType(logType).isEmpty;
+    final title = isFirstCare && isDue
+        ? firstCareGuideText(logType)
+        : '${_getLogTypeName(logType)} '
+              '${AppDateUtils.formatDateDifference(nextDate)}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -586,7 +577,7 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_getLogTypeName(logType)} ${AppDateUtils.formatDateDifference(nextDate)}',
+                  title,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     color: isOverdue ? scheme.error : null,
                     fontWeight: isOverdue ? FontWeight.bold : null,
@@ -614,6 +605,18 @@ class _PlantDetailScreenState extends State<PlantDetailScreen>
         ],
       ),
     );
+  }
+
+  /// 「次のケア」カードで初回判定に使う、種別ごとの読み込み済みログ。
+  List<LogEntry> _logsForType(LogType type) {
+    switch (type) {
+      case LogType.fertilizer:
+        return _fertilizerLogs;
+      case LogType.vitalizer:
+        return _vitalizerLogs;
+      default:
+        return _wateringLogs;
+    }
   }
 
   IconData _getLogTypeIcon(LogType type) {
