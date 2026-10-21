@@ -261,11 +261,24 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
           nextDay.isBefore(todayDay);
     }
 
-    // 水やり・肥料・活力剤のいずれかが必要な植物
+    // 肥料・活力剤の予定日が選択日ちょうどかを判定するヘルパー
+    bool isCareDueOn(DateTime? nextDate) =>
+        nextDate != null &&
+        AppDateUtils.isSameDay(AppDateUtils.getDateOnly(nextDate), selectedDay);
+
+    // 水やり予定、または肥料・活力剤の予定日ちょうどの植物を対象にする。
+    // 肥料・活力剤を予定日にやり忘れても、翌日以降それだけを理由に表示しない。
+    // 超過分は次の水やり予定日にまとめて与える（水やりの翌日に肥料をやると
+    // 2日連続の水やりになってしまうため）。水やり予定が無い植物は従来どおり。
     final plantsNeedingAction = plants.where((plant) {
-      return isActionNeeded(nextWateringDateCache[plant.id]) ||
-          isActionNeeded(nextFertilizerDateCache[plant.id]) ||
-          isActionNeeded(nextVitalizerDateCache[plant.id]);
+      final nextWatering = nextWateringDateCache[plant.id];
+      if (nextWatering == null) {
+        return isActionNeeded(nextFertilizerDateCache[plant.id]) ||
+            isActionNeeded(nextVitalizerDateCache[plant.id]);
+      }
+      return isActionNeeded(nextWatering) ||
+          isCareDueOn(nextFertilizerDateCache[plant.id]) ||
+          isCareDueOn(nextVitalizerDateCache[plant.id]);
     }).toSet();
 
     final settings = context.read<SettingsProvider>();
