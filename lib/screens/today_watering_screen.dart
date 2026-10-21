@@ -2400,7 +2400,16 @@ class _TodayWateringScreenState extends State<TodayWateringScreen>
     ];
 
     if (chips.isEmpty) {
-      // その日が予定日ではないのに並んでいる＝予定日を過ぎたまま残っているもの
+      // 予定日が今日より前のまま残っているものがあるときだけ「過ぎている」と出す。
+      // 未来日に水やりを記録すると次回予定がその先に再計算され、どの予定日も
+      // 過去ではないのに「予定日を過ぎています」と出ていた（Issue #351）。
+      final today = AppDateUtils.getDateOnly(DateTime.now());
+      bool isPastDue(DateTime? d) =>
+          d != null && AppDateUtils.getDateOnly(d).isBefore(today);
+      final hasPastDue = isPastDue(nextWateringDate) ||
+          isPastDue(nextFertilizerDate) ||
+          isPastDue(nextVitalizerDate);
+      if (!hasPastDue) return const SizedBox.shrink();
       return _buildScheduleChip(
         icon: Icons.priority_high,
         label: '予定日を過ぎています',
